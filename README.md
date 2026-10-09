@@ -60,3 +60,6 @@ Analytics only, not investment advice. Projected premiums are model estimates.
 
 Phase-1 audit, bug fixes and the Dhan Cloud automation assessment:
 [docs/PHASE1_AUDIT.md](docs/PHASE1_AUDIT.md).
+Phase-2 verification of Dhan Cloud, token lifecycle, instruments and open
+decisions: [docs/PHASE2_VERIFICATION.md](docs/PHASE2_VERIFICATION.md).
+`tools/dhan_cloud_probe.py` is a read-only probe for the Dhan Cloud runtime.
