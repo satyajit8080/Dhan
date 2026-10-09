@@ -10,7 +10,7 @@ Pipeline (SKILL.md §0, "refresh"):
   -> refresh_table.build_refresh_table
 
 PURE: every input, including `now`, is passed in. No network, no clock, no
-credentials, no order code.
+credentials, no order logic.
 
 Deliberately NOT decided here (documented as BLOCKED in docs/PHASE4_PORT_PLAN.md):
   * which strikes form "ATM±2" — callers pass `strikes` explicitly;

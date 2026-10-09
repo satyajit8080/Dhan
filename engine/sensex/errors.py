@@ -1,4 +1,4 @@
-"""Typed errors mirroring server/src/errors.ts (only those the ported code raises)."""
+"""Typed errors mirroring server/src/errors.ts (only those the port raises)."""
 
 
 class Bull50Error(Exception):

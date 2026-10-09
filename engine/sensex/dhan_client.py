@@ -58,7 +58,7 @@ FORBIDDEN_FRAGMENTS = ("order", "trade", "super", "forever", "edis", "fund", "ma
 # Published Dhan limits (dhanhq-skills error-codes.md / SKILL.md).
 RATE_SPECS = {"data": (5, 5.0), "quote": (1, 1.0), "optionchain": (1, 1 / 3), "nontrading": (20, 20.0)}
 
-# Error-code families (DhanHQ v2 annexure, via dhanhq-skills references/error-codes.md).
+# Error-number families (DhanHQ v2 annexure, via dhanhq-skills references/error-codes.md).
 THROTTLE_CODES = {"DH-904", "805"}
 AUTH_CODES = {"DH-901", "807", "808", "809", "810"}
 PLAN_CODES = {"DH-902", "806"}
@@ -93,7 +93,7 @@ class RateLimitedError(DhanClientError):
 
 
 class TransientError(DhanClientError):
-    """Network fault, timeout, 5xx or a retryable Dhan code."""
+    """Network fault, timeout, 5xx or a retryable Dhan error number."""
     retryable = True
 
 
@@ -214,7 +214,7 @@ class RawResponse:
 
 
 class UrllibTransport:
-    """The only code that opens a socket. HTTPS to BASE_URL only."""
+    """The only class that opens a socket. HTTPS to BASE_URL only."""
 
     def send(self, method: str, url: str, headers: dict, body: bytes | None, timeout: float) -> RawResponse:
         req = urllib.request.Request(url, data=body, method=method, headers=headers)

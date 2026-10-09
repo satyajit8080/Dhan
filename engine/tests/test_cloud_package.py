@@ -186,7 +186,9 @@ FORBIDDEN_MODULES = ("subprocess", "socket", "importlib", "pickle", "marshal", "
 BLOCKED_TEXT = [r"\bpathlib\b", r"compile\(", r"os\.environ", r"\bbase64\b", r"sys\.exit\(", r"\\x",
                 r"getattr\(", r"os\.getenv", r"os\.path", r"(?<![A-Za-z_.])open\(", r"\\u[0-9a-fA-F]{4}",
                 # second Cloud scan (9 Oct 2026 22:17): chr( and bytearray( blocked; "import code" suspected = `types`
-                r"(?<![A-Za-z_.])chr\(", r"bytearray\(", r"^\s*import types\b", r"^\s*from types\b"]   # Dhan Cloud scanner: "querying host platform/OS details is not allowed" (9 Oct 2026)
+                r"(?<![A-Za-z_.])chr\(", r"bytearray\(", r"^\s*import types\b", r"^\s*from types\b",
+                # fifth scan (22:25): still "import code" -> the bare word anywhere, strings included
+                r"(?i)\bcode\b"]   # Dhan Cloud scanner: "querying host platform/OS details is not allowed" (9 Oct 2026)
 HOST_QUERIES = {("sys", "platform"), ("sys", "implementation"), ("sys", "executable"), ("sys", "version"),
                 ("os", "uname"), ("os", "name"), ("os", "listdir"), ("os", "getcwd"), ("os", "cpu_count")}
 

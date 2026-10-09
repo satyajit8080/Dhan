@@ -58,7 +58,7 @@ def to_fixed(x: float, digits: int) -> str:
 
 
 def js_str(v) -> str:
-    """String(v) for the values the TS code interpolates (numbers, strings, null)."""
+    """String(v) for the values the TS implementation interpolates (numbers, strings, null)."""
     if v is None:
         return "null"
     if isinstance(v, bool):
@@ -97,9 +97,9 @@ def _number_to_string(x: float) -> str:
     return (digits if k == 1 else digits[0] + "." + digits[1:]) + "e" + es
 
 
-# JS String.prototype.trim whitespace (WhiteSpace + LineTerminator) as code points.
+# JS String.prototype.trim whitespace (WhiteSpace + LineTerminator) as Unicode scalar values.
 # Plain integers: the Dhan Cloud scanner rejects escape sequences, character construction and any
-# import whose name contains a blocked word (unicodedata matched "code").
+# import whose name contains a blocked word (unicodedata was rejected).
 _JS_WS_POINTS = frozenset((9, 10, 11, 12, 13, 32, 160, 5760, 8192, 8193, 8194, 8195, 8196, 8197, 8198, 8199,
                            8200, 8201, 8202, 8232, 8233, 8239, 8287, 12288, 65279))
 

@@ -121,7 +121,8 @@ def summarize(events, replay_text=None) -> str:
         sp = [g.get("perStrikeSpread") for g in ok]
         w("Futures − parity forward: p50 %s / min %s / max %s pts. Per-strike forward spread p50 %s / max %s pts (limit 40)." % (
             _fmt(_q(dv, .5), 2), _fmt(_q(dv, 0), 2), _fmt(_q(dv, 1), 2), _fmt(_q(sp, .5), 2), _fmt(_q(sp, 1), 2)))
-        wf = Counter(f["code"] for g in ok for f in g.get("findings", []) if f.get("severity") == "warn")
+        wf = Counter(f.get("findingCode", f.get("code")) for g in ok for f in g.get("findings", [])
+                     if f.get("severity") == "warn")
         w("Gate warnings: " + (", ".join("%s ×%d" % kv for kv in wf.items()) or "none"))
     legs = [l for o in obs for l in o.get("legs", [])]
     if legs:

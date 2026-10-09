@@ -2,7 +2,7 @@
 Fast read-only poll between scans (Phase 6b): one /marketfeed/quote call for
 the SENSEX index LTP plus the configured option legs (and any open paper legs),
 fed to the PAPER tracker. Read-only; uses the same allow-listed client and
-rate limiter as the scanner. No order code.
+rate limiter as the scanner. No order logic.
 """
 
 from __future__ import annotations

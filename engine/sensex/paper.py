@@ -4,7 +4,7 @@ premium points (user, 9 Oct 2026), time stop 10 min (RULES.md §6).
 
 OBSERVATION ONLY. Nothing here talks to a broker: it receives prices that the
 read-only scanner already fetched and records what WOULD have happened. There
-is no order, position or account code anywhere in this module.
+is no order, position or account logic anywhere in this module.
 
 Entry event (exploratory, NOT a CE/PE signal; D1-D8 are undecided):
   the SENSEX index CROSSES a refresh-table trigger of a row whose status is OK

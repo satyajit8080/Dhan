@@ -2,14 +2,14 @@
 SENSEX read-only observation scanner for Dhan Cloud (Phase 6).
 
 READ-ONLY. This program contains no order, modify, cancel, exit, position,
-kill-switch, login or token-renewal code. Every Dhan request goes through an
+kill-switch, login or token-renewal logic. Every Dhan request goes through an
 allow-list of 8 market-data/profile endpoints and is refused before any
 network access otherwise. It never makes a CE/PE decision: the direction
 thresholds are not configured (RULES.md §6).
 
 Edit ONLY the CONFIG block below, then run in this order:
   1. MODE = "VALIDATE"    offline self-test on embedded, labelled MOCK data.
-                          No network, no credentials. Proves the code runs
+                          No network, no credentials. Proves the program runs
                           on this runtime and produces a log.
   2. MODE = "LIVE_CHECK"  ONE live read-only scan (4 market-data calls).
   3. MODE = "OBSERVE"     scan every INTERVAL_S seconds until STOP_TIME IST.
@@ -75,7 +75,7 @@ from sensex.session import IST
 from bx_selftest_data import SELFTEST
 
 PROGRAM = "sensex-readonly-observer"
-VERSION = "6.5"
+VERSION = "6.6"
 EXIT_OK, EXIT_CONFIG, EXIT_AUTH, EXIT_SELFTEST = 0, 2, 3, 4
 
 
@@ -86,7 +86,7 @@ def _stdout_logger(redactor):
 def _runtime(log):
     log("info", "runtime", program=PROGRAM, version=VERSION, mode=MODE, python="%d.%d.%d" % tuple(sys.version_info[:3]),
         utc=datetime.now(timezone.utc).isoformat(timespec="seconds"),
-        allowList=sorted("%s %s" % k for k in READ_ONLY_ENDPOINTS), orders="NONE (no order code present)")
+        allowList=sorted("%s %s" % k for k in READ_ONLY_ENDPOINTS), orders="NONE (no order functions exist in this program)")
 
 
 class _FixedTransport:
