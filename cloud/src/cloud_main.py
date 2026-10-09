@@ -15,6 +15,7 @@ Edit ONLY the CONFIG block below, then run in this order:
                           token works; logs plan/validity fields, never ids.
   1c. MODE = "INSTRUMENTS"    reads Dhan's PUBLIC instrument file and prints its
                           header plus the SENSEX futures rows (no credentials).
+  1d. MODE = "CHECKS"         PROFILE_CHECK then INSTRUMENTS in one run.
   2. MODE = "LIVE_CHECK"  ONE live read-only scan (4 market-data calls).
   3. MODE = "OBSERVE"     scan every INTERVAL_S seconds until STOP_TIME IST.
 
@@ -24,7 +25,7 @@ tools/decode_cloud_log.py.
 """
 
 # ============================== CONFIG ======================================
-MODE = "VALIDATE"                 # "VALIDATE" | "PROFILE_CHECK" | "INSTRUMENTS" | "LIVE_CHECK" | "OBSERVE"
+MODE = "VALIDATE"                 # "VALIDATE" | "CHECKS" | "PROFILE_CHECK" | "INSTRUMENTS" | "LIVE_CHECK" | "OBSERVE"
 
 # Strikes shown in the refresh table. Explicit, because the ATM±2 rule is not
 # defined yet (PHASE4_PORT_PLAN P1). Each scan logs atmStrike to help you pick.
@@ -313,11 +314,15 @@ def main() -> int:
         return validate(log)
     if MODE == "PROFILE_CHECK":
         return profile_check(log, redactor)
+    if MODE == "CHECKS":
+        a = profile_check(log, redactor)
+        b = instruments(log)
+        return a or b
     if MODE == "INSTRUMENTS":
         return instruments(log)
     if MODE in ("LIVE_CHECK", "OBSERVE"):
         return live(log, redactor, loop=MODE == "OBSERVE")
-    log("error", "config_blocked", errors=["MODE must be VALIDATE, PROFILE_CHECK, INSTRUMENTS, LIVE_CHECK or OBSERVE"])
+    log("error", "config_blocked", errors=["MODE must be VALIDATE, CHECKS, PROFILE_CHECK, INSTRUMENTS, LIVE_CHECK or OBSERVE"])
     return EXIT_CONFIG
 
 

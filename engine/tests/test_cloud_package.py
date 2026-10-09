@@ -437,6 +437,21 @@ class EndToEnd(unittest.TestCase):
             self.assertEqual((code, ev["header"], ev["sensexFutureRows"], ev["rowsScanned"], t.calls),
                              (0, "COL_A,COL_B,COL_C", ["BSE,123,SENSEX-Oct2026-FUT"], 3, []))
 
+    def test_checks_mode_runs_profile_then_instruments(self):
+        body = json.dumps({"dataPlan": "Active"}).encode()
+
+        class Resp:
+            def __enter__(self):
+                return iter([b"H1,H2\n", b"BSE,1,SENSEX-FUT\n"])
+
+            def __exit__(self, *a):
+                return False
+        with mock.patch("urllib.request.urlopen", lambda req, timeout: Resp()):
+            code, text, t = run_main(load_single(), mode="CHECKS", env=self.env, script={"/profile": [(200, body)]})
+        self.assertEqual((code, [p for _, p in t.calls]), (0, ["/profile"]))
+        self.assertIn('"event": "profile_check"', text)
+        self.assertIn('"sensexFutureRows": ["BSE,1,SENSEX-FUT"]', text)
+
     def test_decoder_refuses_a_log_containing_a_token(self):
         events, records, bad, incomplete, secrets = decode_cloud_log.decode_lines(
             ['BX|{"event": "x", "m": "%s"}' % self.token])
