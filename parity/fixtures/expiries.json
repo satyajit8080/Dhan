@@ -1,0 +1,208 @@
+{
+ "module": "expiries",
+ "generator": "server/test/parity/builder.ts",
+ "cases": [
+  {
+   "id": "isIsoDate",
+   "input": [
+    "2026-10-15",
+    "2028-02-29",
+    "2026-02-29",
+    "2026-02-30",
+    "2026-13-01",
+    "15-10-2026",
+    "2026-10-15 15:30:00",
+    "",
+    "N/A",
+    20261015,
+    null,
+    "0000-01-01",
+    "9999-12-31"
+   ],
+   "expected": [
+    true,
+    true,
+    false,
+    false,
+    false,
+    false,
+    false,
+    false,
+    false,
+    false,
+    false,
+    true,
+    true
+   ]
+  },
+  {
+   "id": "expiries/expiryDay",
+   "input": {
+    "data": [
+     "2026-10-15",
+     "2026-10-08",
+     "2026-10-22"
+    ],
+    "today": "2026-10-08"
+   },
+   "expected": {
+    "list": [
+     "2026-10-08",
+     "2026-10-15",
+     "2026-10-22"
+    ],
+    "nearest": "2026-10-08",
+    "nextAfter": "2026-10-15"
+   }
+  },
+  {
+   "id": "expiries/normalDay",
+   "input": {
+    "data": [
+     "2026-10-15",
+     "2026-10-08",
+     "2026-10-22"
+    ],
+    "today": "2026-10-09"
+   },
+   "expected": {
+    "list": [
+     "2026-10-08",
+     "2026-10-15",
+     "2026-10-22"
+    ],
+    "nearest": "2026-10-15",
+    "nextAfter": "2026-10-15"
+   }
+  },
+  {
+   "id": "expiries/afterAll",
+   "input": {
+    "data": [
+     "2026-10-01",
+     "2026-10-08"
+    ],
+    "today": "2026-10-09"
+   },
+   "expected": {
+    "list": [
+     "2026-10-01",
+     "2026-10-08"
+    ],
+    "nearest": {
+     "$error": {
+      "name": "InstrumentError",
+      "message": "No expiry on or after 2026-10-09 for IDX_I:51. Available: 2026-10-01, 2026-10-08."
+     }
+    },
+    "nextAfter": {
+     "$error": {
+      "name": "InstrumentError",
+      "message": "No expiry after 2026-10-09 for IDX_I:51. Available: 2026-10-01, 2026-10-08."
+     }
+    }
+   }
+  },
+  {
+   "id": "expiries/malformed",
+   "input": {
+    "data": [
+     "2026-10-01",
+     "N/A",
+     "15-10-2026",
+     42,
+     null,
+     "2026-02-30",
+     "2026-10-15"
+    ],
+    "today": "2026-10-09"
+   },
+   "expected": {
+    "list": [
+     "2026-10-01",
+     "2026-10-15"
+    ],
+    "nearest": "2026-10-15",
+    "nextAfter": "2026-10-15"
+   }
+  },
+  {
+   "id": "expiries/allMalformed",
+   "input": {
+    "data": [
+     "N/A"
+    ],
+    "today": "2026-10-09"
+   },
+   "expected": {
+    "list": {
+     "$error": {
+      "name": "InstrumentError",
+      "message": "Dhan returned no expiries for IDX_I:51. Cannot proceed without one."
+     }
+    },
+    "nearest": {
+     "$error": {
+      "name": "InstrumentError",
+      "message": "Dhan returned no expiries for IDX_I:51. Cannot proceed without one."
+     }
+    },
+    "nextAfter": {
+     "$error": {
+      "name": "InstrumentError",
+      "message": "Dhan returned no expiries for IDX_I:51. Cannot proceed without one."
+     }
+    }
+   }
+  },
+  {
+   "id": "expiries/notList",
+   "input": {
+    "data": {
+     "not": "a list"
+    },
+    "today": "2026-10-09"
+   },
+   "expected": {
+    "list": {
+     "$error": {
+      "name": "InstrumentError",
+      "message": "Dhan returned no expiries for IDX_I:51. Cannot proceed without one."
+     }
+    },
+    "nearest": {
+     "$error": {
+      "name": "InstrumentError",
+      "message": "Dhan returned no expiries for IDX_I:51. Cannot proceed without one."
+     }
+    },
+    "nextAfter": {
+     "$error": {
+      "name": "InstrumentError",
+      "message": "Dhan returned no expiries for IDX_I:51. Cannot proceed without one."
+     }
+    }
+   }
+  },
+  {
+   "id": "expiries/futureYears",
+   "input": {
+    "data": [
+     "2027-01-28",
+     "2026-12-31",
+     "2026-10-15"
+    ],
+    "today": "2026-12-01"
+   },
+   "expected": {
+    "list": [
+     "2026-10-15",
+     "2026-12-31",
+     "2027-01-28"
+    ],
+    "nearest": "2026-12-31",
+    "nextAfter": "2026-12-31"
+   }
+  }
+ ]
+}

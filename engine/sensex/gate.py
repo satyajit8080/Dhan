@@ -1,0 +1,141 @@
+"""
+The data-integrity gate. Port of server/src/pricing/gate.ts.
+
+A wrong forward is worse than no forward: when inputs disagree, nothing is
+published. There is deliberately no fallback to the index LTP. PURE.
+"""
+
+from __future__ import annotations
+
+import math
+
+from .jscompat import is_finite, js_str, to_fixed
+
+GATE_DEFAULTS = {
+    "maxFutureDivergence": 75,
+    "maxPerStrikeSpread": 40,
+    "indexDivergenceWarn": 50,
+    "minCarryAnnual": -0.05,
+    "maxCarryAnnual": 0.15,
+    "sameExpiryGapYears": 1.5 / 365,
+}
+
+
+def check_gate(
+    parity_forward: float,
+    listed_future,
+    per_strike_spread: float,
+    index_ltp=None,
+    slope_within_tolerance=None,
+    slope_relative_error=None,
+    future_expiry_gap_years=None,
+    thresholds=None,
+) -> dict:
+    t = dict(GATE_DEFAULTS)
+    t.update(thresholds or {})
+    findings = []
+
+    divergence = None
+    carry = None
+    mode = None
+    if listed_future is None or not is_finite(listed_future):
+        findings.append({
+            "severity": "block",
+            "code": "NO_FUTURES_QUOTE",
+            "message": "No futures quote available for cross-check. The parity forward cannot be "
+                       "validated, and the index LTP is not an acceptable substitute.",
+            "observed": None,
+            "threshold": None,
+        })
+    else:
+        divergence = listed_future - parity_forward
+        ab = abs(divergence)
+        gap = 0 if future_expiry_gap_years is None else future_expiry_gap_years
+        if math.isfinite(gap) and gap > t["sameExpiryGapYears"]:
+            mode = "calendar"
+            carry = (math.log(listed_future / parity_forward) / gap
+                     if parity_forward > 0 and listed_future > 0 else None)
+            if carry is None or not math.isfinite(carry) or carry < t["minCarryAnnual"] or carry > t["maxCarryAnnual"]:
+                findings.append({
+                    "severity": "block",
+                    "code": "FUTURE_CARRY",
+                    "message": (
+                        "Parity forward %s vs listed future %s (%s days later) implies "
+                        "%s annualised carry, outside the %s%%..%s%% band. Wrong contract or stale leg."
+                        % (to_fixed(parity_forward, 4), to_fixed(listed_future, 4), to_fixed(gap * 365, 1),
+                           "no" if carry is None else to_fixed(carry * 100, 2) + "%",
+                           to_fixed(t["minCarryAnnual"] * 100, 0), to_fixed(t["maxCarryAnnual"] * 100, 0))
+                    ),
+                    "observed": carry,
+                    "threshold": t["maxCarryAnnual"],
+                })
+        elif ab > t["maxFutureDivergence"]:
+            mode = "same_expiry"
+            findings.append({
+                "severity": "block",
+                "code": "FUTURE_DIVERGENCE",
+                "message": (
+                    "Parity forward %s diverges from listed future %s by %s points, above the %s-point limit."
+                    % (to_fixed(parity_forward, 4), to_fixed(listed_future, 4), to_fixed(ab, 4),
+                       js_str(t["maxFutureDivergence"]))
+                ),
+                "observed": ab,
+                "threshold": t["maxFutureDivergence"],
+            })
+
+    if per_strike_spread > t["maxPerStrikeSpread"]:
+        findings.append({
+            "severity": "block",
+            "code": "PARITY_SPREAD",
+            "message": (
+                "Per-strike parity spread %s points exceeds the %s-point limit. At least one leg is stale or crossed."
+                % (to_fixed(per_strike_spread, 4), js_str(t["maxPerStrikeSpread"]))
+            ),
+            "observed": per_strike_spread,
+            "threshold": t["maxPerStrikeSpread"],
+        })
+
+    index_div = None
+    if index_ltp is not None and is_finite(index_ltp):
+        index_div = parity_forward - index_ltp
+        if abs(index_div) > t["indexDivergenceWarn"]:
+            annualised = index_div / index_ltp if index_ltp > 0 else 0
+            findings.append({
+                "severity": "warn",
+                "code": "INDEX_CARRY",
+                "message": (
+                    "Index LTP %s sits %s points below the forward (%s%% carry over the remaining life). "
+                    "Do NOT use the index LTP as spot for option maths."
+                    % (to_fixed(index_ltp, 2), to_fixed(index_div, 4), to_fixed(annualised * 100, 2))
+                ),
+                "observed": abs(index_div),
+                "threshold": t["indexDivergenceWarn"],
+            })
+
+    if slope_within_tolerance is False:
+        rel = math.nan if slope_relative_error is None else slope_relative_error
+        findings.append({
+            "severity": "warn",
+            "code": "SLOPE_DIAGNOSTIC",
+            "message": (
+                "Regression slope of (C-P) on K is off by %s%%. This is a DIAGNOSTIC only — over a "
+                "narrow strike band the fit is ill-conditioned, so it does not and must not affect the forward."
+                % to_fixed(rel * 100, 2)
+            ),
+            "observed": slope_relative_error,
+            "threshold": None,
+        })
+
+    blocks = [f for f in findings if f["severity"] == "block"]
+    return {
+        "blocked": len(blocks) > 0,
+        "findings": findings,
+        "reasons": [f["message"] for f in blocks],
+        "warnings": [f["message"] for f in findings if f["severity"] == "warn"],
+        "divergenceVsFuture": divergence,
+        "impliedCarryAnnual": carry,
+        "futureCheckMode": mode if mode is not None else (None if divergence is None else "same_expiry"),
+        "indexDivergence": index_div,
+        "perStrikeSpread": per_strike_spread,
+        "thresholds": t,
+    }

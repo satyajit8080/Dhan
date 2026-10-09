@@ -1,0 +1,114 @@
+"""
+One read-only refresh scan, composed from the ported modules and the EXISTING
+engine/refresh_table.py (reused unchanged, not duplicated).
+
+Pipeline (SKILL.md §0, "refresh"):
+  raw chain + raw futures quote  -> normalize -> attach_pricing (skew rule,
+  parity forward, gate, Black-76 IV)
+  5-minute index candles         -> derive_levels (spot = index LTP;
+  buffer 5, min touches 2, round 5 — the compute_levels defaults)
+  -> refresh_table.build_refresh_table
+
+PURE: every input, including `now`, is passed in. No network, no clock, no
+credentials, no order code.
+
+Deliberately NOT decided here (documented as BLOCKED in docs/PHASE4_PORT_PLAN.md):
+  * which strikes form "ATM±2" — callers pass `strikes` explicitly;
+  * what to show for a leg with no computable IV — it is excluded and listed
+    in `excludedLegs`, never filled with an invented value.
+"""
+
+from __future__ import annotations
+
+import math
+
+from .errors import GateBlockedError, PricingValidationError, SnapshotSkewError
+from .levels import derive_levels
+from .normalize import normalize_chain, normalize_quote
+from .pricing_bridge import attach_pricing
+
+BLANK_TABLE = "| Strike | Type | LTP | Breakout Above |\n|---|---|---|---|\n| — | — | — | — |"
+
+
+def build_scan(*, raw_chain, raw_futures, candles, expiry, strikes,
+               chain_received_ms, futures_received_ms, futures_security_id="FUT",
+               futures_expiry=None, risk_free_rate=0.065, max_snapshot_skew_ms=3000,
+               chain_fetch_id="chain", futures_fetch_id="futures") -> dict:
+    """Return the refresh_table inputs for `strikes`, or a BLOCKED/ERROR result.
+
+    `raw_futures=None` models a failed futures fetch (the gate then blocks).
+    """
+    chain = normalize_chain(raw_chain, "SENSEX", 51, "IDX_I", expiry, chain_fetch_id,
+                            chain_received_ms, "/optionchain")
+    futures = None
+    if raw_futures is not None:
+        futures = normalize_quote(raw_futures, str(futures_security_id), "BSE_FNO", futures_fetch_id,
+                                  futures_received_ms, "/marketfeed/quote")
+    try:
+        p = attach_pricing(chain, futures, risk_free_rate, max_snapshot_skew_ms, futures_expiry=futures_expiry)
+    except GateBlockedError as e:
+        return {"status": "BLOCKED", "reasons": e.reasons}
+    except SnapshotSkewError as e:
+        return {"status": "BLOCKED", "reasons": [e.message]}
+    except PricingValidationError as e:
+        return {"status": "ERROR", "reasons": [e.message]}
+
+    index_ltp = chain["underlyingLtpDoNotUseAsSpot"]
+    spot = index_ltp if index_ltp is not None else math.nan
+    lv = derive_levels(candles, spot, confirmation_buffer=5, min_touches=2, round_to=5)
+
+    by_key = {(l["strike"], l["type"]): l for l in p["legs"]}
+    chain_legs = {s["strike"]: s for s in chain["strikes"]}
+    legs, excluded = [], []
+    for k in strikes:
+        for typ in ("CE", "PE"):
+            priced = by_key.get((k, typ))
+            raw = chain_legs.get(k, {}).get("ce" if typ == "CE" else "pe")
+            if priced is None or priced["ivPct"] is None or raw is None:
+                excluded.append({"strike": k, "type": typ,
+                                 "reason": "no priced leg" if priced is None else
+                                 ("no IV (outside no-arbitrage bounds)" if priced["ivPct"] is None else "no chain leg")})
+                continue
+            legs.append({
+                "strike": k, "isCall": typ == "CE", "ivPct": priced["ivPct"],
+                # Top-of-book straight from the chain; refresh_table treats 0 as "no quote".
+                "bid": raw["topBidPrice"] if raw["topBidPrice"] is not None else 0,
+                "ask": raw["topAskPrice"] if raw["topAskPrice"] is not None else 0,
+                "ltp": raw["lastPrice"],
+            })
+
+    return {
+        "status": "OK",
+        "forward": p["forward"], "T": p["T"], "df": p["discountFactor"],
+        "atmStrike": p["atmStrike"], "candleRefPrice": spot,
+        "resistances": [{"price": l["price"], "touches": l["touches"], "sources": list(l["sources"])}
+                        for l in lv["allResistance"]],
+        "supports": [{"price": l["price"], "touches": l["touches"], "sources": list(l["sources"])}
+                     for l in lv["allSupport"]],
+        "atr": lv["atr14"], "barMinutes": lv["timeframeMinutes"],
+        "legs": legs, "excludedLegs": excluded,
+        "snapshotMs": p["asOfMs"],
+        "candlesMs": candles[-1]["timestampMs"] if candles else None,
+        "gateWarnings": p["gate"]["warnings"],
+    }
+
+
+def run_refresh(scan: dict, now):
+    """Feed a scan into the existing refresh_table. Blank table when the scan
+    is not OK, exactly as RULES.md §5 requires."""
+    if scan.get("status") != "OK" or scan.get("candlesMs") is None:
+        return None, BLANK_TABLE
+    import refresh_table as rt  # the existing, approved engine (engine/ must be on sys.path)
+
+    rows = rt.build_refresh_table(
+        forward=scan["forward"], T=scan["T"], df=scan["df"],
+        candle_ref_price=scan["candleRefPrice"],
+        resistances=[rt.Level(l["price"], l["touches"], l["sources"]) for l in scan["resistances"]],
+        supports=[rt.Level(l["price"], l["touches"], l["sources"]) for l in scan["supports"]],
+        # refresh_table's own rule: atr <= 0 -> 15-minute default time-to-trigger.
+        atr=scan["atr"] if scan["atr"] is not None else 0.0,
+        bar_minutes=int(scan["barMinutes"]) if scan["barMinutes"] else 5,
+        legs=[rt.Leg(l["strike"], l["isCall"], l["ivPct"], l["bid"], l["ask"], l["ltp"]) for l in scan["legs"]],
+        snapshot_ms=scan["snapshotMs"], candles_ms=scan["candlesMs"], now=now,
+    )
+    return rows, rt.to_compact(rows)

@@ -1,0 +1,265 @@
+"""
+JavaScript semantics the TypeScript implementation relies on.
+
+Porting JS arithmetic and formatting to Python looks trivial and isn't: each
+helper below reproduces one JS behaviour that differs from the obvious Python
+spelling, and each difference would surface as a parity mismatch.
+
+  js_round       Math.round rounds .5 UP (toward +inf); Python round() is banker's.
+  to_fixed       Number#toFixed breaks exact binary ties away from zero; '%.nf' is half-even.
+  js_str         String(2.0) is "2" in JS, "2.0" in Python.
+  js_number      Number("") is 0, Number(" 12 ") is 12, Number("nan") is NaN-invalid.
+  is_number      typeof v === 'number': Python bool is an int, JS boolean is not.
+  object_keys    Object.keys order: array-index keys ascending, then insertion order.
+  date_utc       Date.UTC normalises overflow (31 Feb -> 3 Mar); datetime raises.
+  iso_date_of    new Date(ms).toISOString().slice(...) on epoch milliseconds.
+"""
+
+from __future__ import annotations
+
+import math
+from decimal import ROUND_HALF_UP, Decimal
+
+_MS_PER_DAY = 86_400_000
+
+
+def is_number(v) -> bool:
+    return isinstance(v, (int, float)) and not isinstance(v, bool)
+
+
+def is_finite(v) -> bool:
+    """Number.isFinite: a number (not bool) that is not NaN/±Infinity."""
+    return is_number(v) and math.isfinite(v)
+
+
+def js_round(x: float) -> float:
+    """Math.round: nearest integer, exact .5 rounds toward +Infinity."""
+    if not math.isfinite(x):
+        return x
+    if abs(x) >= 2**52:  # already an integer
+        return float(x)
+    # NOT floor(x + 0.5): for 0.49999999999999994 the addition rounds to 1.0.
+    # x - floor(x) is exact for |x| < 2**52, so compare the fraction instead.
+    r = math.floor(x)
+    return float(r + 1) if x - r >= 0.5 else float(r)
+
+
+def to_fixed(x: float, digits: int) -> str:
+    """Number#toFixed for |x| < 1e21."""
+    if math.isnan(x):
+        return "NaN"
+    if math.isinf(x):
+        return "Infinity" if x > 0 else "-Infinity"
+    if x == 0:
+        x = 0.0  # (-0).toFixed(n) is "0.00…", no sign
+    q = Decimal(x).quantize(Decimal(1).scaleb(-digits), rounding=ROUND_HALF_UP)
+    s = format(q, "f")
+    return s
+
+
+def js_str(v) -> str:
+    """String(v) for the values the TS code interpolates (numbers, strings, null)."""
+    if v is None:
+        return "null"
+    if isinstance(v, bool):
+        return "true" if v else "false"
+    if isinstance(v, int):
+        return str(v)
+    if isinstance(v, float):
+        return _number_to_string(v)
+    return str(v)
+
+
+def _number_to_string(x: float) -> str:
+    """ECMAScript Number::toString(x) (radix 10), from the same shortest
+    round-trip digits Python's repr() produces."""
+    if math.isnan(x):
+        return "NaN"
+    if x == 0:
+        return "0"
+    if math.isinf(x):
+        return "Infinity" if x > 0 else "-Infinity"
+    if x < 0:
+        return "-" + _number_to_string(-x)
+    sign_, digits_t, exp = Decimal(repr(x)).as_tuple()
+    digits = "".join(map(str, digits_t)).rstrip("0") or "0"
+    k = len(digits)
+    # value = 0.d1d2…dk × 10^n
+    n = exp + len(digits_t)
+    if k <= n <= 21:
+        return digits + "0" * (n - k)
+    if 0 < n <= 21:
+        return digits[:n] + "." + digits[n:]
+    if -6 < n <= 0:
+        return "0." + "0" * (-n) + digits
+    e = n - 1
+    es = ("+" if e > 0 else "-") + str(abs(e))
+    return (digits if k == 1 else digits[0] + "." + digits[1:]) + "e" + es
+
+
+_JS_WS = " \t\n\r\v\f                 　﻿"
+
+
+def js_number(s: str) -> float:
+    """Number(string). Returns NaN where JS returns NaN."""
+    t = s.strip(_JS_WS)
+    if t == "":
+        return 0.0
+    low = t.lower()
+    if low in ("infinity", "+infinity"):
+        return math.inf if t in ("Infinity", "+Infinity") else math.nan
+    if low == "-infinity":
+        return -math.inf if t == "-Infinity" else math.nan
+    if low.startswith(("0x", "0o", "0b")):
+        base = {"x": 16, "o": 8, "b": 2}[low[1]]
+        try:
+            return float(int(t[2:], base))
+        except ValueError:
+            return math.nan
+    # Python accepts things JS rejects: "nan", "inf", underscores.
+    if "_" in t or low in ("nan", "inf", "+inf", "-inf", "+nan", "-nan"):
+        return math.nan
+    try:
+        return float(t)
+    except ValueError:
+        return math.nan
+
+
+def _is_array_index(k: str) -> bool:
+    if k == "0":
+        return True
+    if not k or k[0] == "0" or not k.isdigit() or not k.isascii():
+        return False
+    return int(k) < 2**32 - 1
+
+
+def object_keys(d: dict) -> list:
+    """Object.keys / Object.entries order for a plain JSON object."""
+    idx = sorted((k for k in d if _is_array_index(k)), key=int)
+    rest = [k for k in d if not _is_array_index(k)]
+    return idx + rest
+
+
+def _days_from_civil(y: int, m: int, d: int) -> int:
+    """Days since 1970-01-01 for proleptic Gregorian y-m-d (m 1..12)."""
+    y -= m <= 2
+    era = y // 400  # floor division already handles negatives (the C original truncates)
+    yoe = y - era * 400
+    doy = (153 * (m + (-3 if m > 2 else 9)) + 2) // 5 + d - 1
+    doe = yoe * 365 + yoe // 4 - yoe // 100 + doy
+    return era * 146097 + doe - 719468
+
+
+def date_utc(year: int, month0: int, day: int, h: int = 0, mi: int = 0, s: int = 0) -> int:
+    """Date.UTC with JS overflow normalisation (month0 is 0-based).
+    Like JS, a year in 0..99 means 1900..1999."""
+    if 0 <= year <= 99:
+        year += 1900
+    return civil_ms(year, month0, day, h, mi, s)
+
+
+def civil_ms(year: int, month0: int, day: int, h: int = 0, mi: int = 0, s: int = 0) -> int:
+    """Epoch ms for a proleptic-Gregorian date, overflow normalised, NO 1900 mapping
+    (what `new Date('YYYY-MM-DDT…Z')` parsing does)."""
+    ym = year + month0 // 12
+    mn = month0 % 12
+    days = _days_from_civil(ym, mn + 1, 1) + (day - 1)
+    return days * _MS_PER_DAY + ((h * 60 + mi) * 60 + s) * 1000
+
+
+def iso_of(epoch_ms: float) -> str:
+    """new Date(ms).toISOString() for an integral-millisecond epoch."""
+    ms = int(epoch_ms)  # TimeClip truncates toward zero
+    days, rem = divmod(ms, _MS_PER_DAY)
+    # civil_from_days
+    z = days + 719468
+    era = z // 146097
+    doe = z - era * 146097
+    yoe = (doe - doe // 1460 + doe // 36524 - doe // 146096) // 365
+    y = yoe + era * 400
+    doy = doe - (365 * yoe + yoe // 4 - yoe // 100)
+    mp = (5 * doy + 2) // 153
+    d = doy - (153 * mp + 2) // 5 + 1
+    m = mp + (3 if mp < 10 else -9)
+    y += m <= 2
+    hh, rem = divmod(rem, 3_600_000)
+    mm, rem = divmod(rem, 60_000)
+    ss, msr = divmod(rem, 1000)
+    return "%04d-%02d-%02dT%02d:%02d:%02d.%03dZ" % (y, m, d, hh, mm, ss, msr)
+
+
+def js_sum(values):
+    """`values.reduce((a, b) => a + b, 0)`: plain left-to-right addition.
+
+    NOT Python's sum(): since 3.12 it uses compensated summation for floats,
+    which differs from JS in the last bits."""
+    t = 0
+    for v in values:
+        t = t + v
+    return t
+
+
+class _Undefined:
+    """JS `undefined`, distinct from `null` (None). JSON.stringify drops
+    object properties whose value is undefined; the parity encoder writes them
+    as {"$undefined": true} so the difference stays visible."""
+
+    _inst = None
+
+    def __new__(cls):
+        if cls._inst is None:
+            cls._inst = super().__new__(cls)
+        return cls._inst
+
+    def __repr__(self):
+        return "undefined"
+
+    def __bool__(self):
+        return False
+
+
+UNDEFINED = _Undefined()
+
+
+def js_truthy(v) -> bool:
+    """JS truthiness: false, 0, -0, NaN, "", null, undefined are falsy; {} and [] are truthy."""
+    if v is None or v is UNDEFINED or v is False:
+        return False
+    if is_number(v):
+        return v == v and v != 0
+    if isinstance(v, str):
+        return v != ""
+    return True
+
+
+def is_js_object(v) -> bool:
+    """typeof v === 'object' && v !== null (arrays included)."""
+    return isinstance(v, (dict, list))
+
+
+def js_get(o, key):
+    """o[key] for a parsed-JSON value: dict lookup, array index, else undefined."""
+    if isinstance(o, dict):
+        return o[key] if key in o else UNDEFINED
+    if isinstance(o, list) and key.isdigit():
+        i = int(key)
+        return o[i] if i < len(o) else UNDEFINED
+    return UNDEFINED
+
+
+def js_max(*xs):
+    """Math.max: NaN if any argument is NaN (Python's max() would ignore it)."""
+    if not xs:
+        return -math.inf
+    if any(isinstance(x, float) and math.isnan(x) for x in xs):
+        return math.nan
+    return max(xs)
+
+
+def js_min(*xs):
+    """Math.min: NaN if any argument is NaN."""
+    if not xs:
+        return math.inf
+    if any(isinstance(x, float) and math.isnan(x) for x in xs):
+        return math.nan
+    return min(xs)

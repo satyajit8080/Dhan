@@ -10,7 +10,7 @@ forward recovery and an internal Black-76 pricing core. Never places orders.
 | Path | What |
 |---|---|
 | `plugin/` | Installable Claude plugin `bull50-dhan` v1.7.0: MCP server bundle, `/dhan-token`, `/sensex-snapshot`, `sensex-scalp` skill |
-| `server/` | TypeScript source of the MCP server + 267 tests |
+| `server/` | TypeScript source of the MCP server + 276 tests |
 | `engine/` | Python `refresh_table.py` (option breakout premiums), `commodity_engine.py` (MCX), sample data |
 | `docs/` | Signal log |
 | `.claude-plugin/marketplace.json` | Lets Claude install the plugin straight from this repo |
@@ -25,7 +25,7 @@ Needs Node 20+. Then each morning: `/dhan-token <token> <client_id>`.
 ```bash
 cd server
 npm ci
-npm test          # 267 tests, offline
+npm test          # 276 tests, offline
 npm run build     # tsc -> dist/
 npm run bundle    # rebuild plugin/server/mcpServer.cjs
 ```
@@ -65,5 +65,10 @@ decisions: [docs/PHASE2_VERIFICATION.md](docs/PHASE2_VERIFICATION.md).
 Phase-3 readiness: [docs/PHASE3_READINESS.md](docs/PHASE3_READINESS.md), the manual
 Dhan Cloud checklist [docs/PHASE3_CLOUD_CHECKLIST.md](docs/PHASE3_CLOUD_CHECKLIST.md)
 and open strategy decisions [docs/PHASE3_STRATEGY_GAPS.md](docs/PHASE3_STRATEGY_GAPS.md).
+Phase-4 Python port of the calculation layer (`engine/sensex/`, TypeScript parity
+verified): [docs/PHASE4_PORT_PLAN.md](docs/PHASE4_PORT_PLAN.md),
+[docs/PHASE4_PARITY_RESULTS.md](docs/PHASE4_PARITY_RESULTS.md).
+Run `cd engine && python3 tests/parity_report.py`; regenerate fixtures with
+`cd server && npx tsx scripts/export-parity-fixtures.ts`.
 `tools/dhan_cloud_probe.py` and `tools/dhan_cloud_probe_extended.py` are read-only,
 credential-free runtime probes (`cd tools && python3 -m unittest test_dhan_cloud_probe`).

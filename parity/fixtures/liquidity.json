@@ -1,0 +1,4369 @@
+{
+ "module": "liquidity",
+ "generator": "server/test/parity/builder.ts",
+ "cases": [
+  {
+   "id": "assessDepth/tightDeep/1",
+   "input": {
+    "raw": {
+     "last_price": 100,
+     "depth": {
+      "buy": [
+       {
+        "price": 99.9,
+        "quantity": 200,
+        "orders": 1
+       },
+       {
+        "price": 99.8,
+        "quantity": 200,
+        "orders": 1
+       }
+      ],
+      "sell": [
+       {
+        "price": 100.1,
+        "quantity": 200,
+        "orders": 1
+       },
+       {
+        "price": 100.2,
+        "quantity": 200,
+        "orders": 1
+       }
+      ]
+     }
+    },
+    "lots": 1,
+    "lotSize": 20
+   },
+   "expected": {
+    "securityId": "900001",
+    "lots": 1,
+    "lotSize": 20,
+    "quantity": 20,
+    "bestBid": 99.9,
+    "bestAsk": 100.1,
+    "midPrice": 100,
+    "quotedSpreadPct": 0.19999999999998863,
+    "effectiveBuy": 100.1,
+    "effectiveSell": 99.9,
+    "roundtripPct": 0.19999999999998863,
+    "slippageMultiple": 1,
+    "grade": "A",
+    "reasons": [
+     "Executable at size with minimal give-up."
+    ],
+    "buyWalk": {
+     "filledQuantity": 20,
+     "shortfall": 0,
+     "vwap": 100.1,
+     "notional": 2002,
+     "levelsConsumed": 1,
+     "incomplete": false
+    },
+    "sellWalk": {
+     "filledQuantity": 20,
+     "shortfall": 0,
+     "vwap": 99.9,
+     "notional": 1998,
+     "levelsConsumed": 1,
+     "incomplete": false
+    }
+   }
+  },
+  {
+   "id": "assessDepth/tightDeep/2",
+   "input": {
+    "raw": {
+     "last_price": 100,
+     "depth": {
+      "buy": [
+       {
+        "price": 99.9,
+        "quantity": 200,
+        "orders": 1
+       },
+       {
+        "price": 99.8,
+        "quantity": 200,
+        "orders": 1
+       }
+      ],
+      "sell": [
+       {
+        "price": 100.1,
+        "quantity": 200,
+        "orders": 1
+       },
+       {
+        "price": 100.2,
+        "quantity": 200,
+        "orders": 1
+       }
+      ]
+     }
+    },
+    "lots": 2,
+    "lotSize": 20
+   },
+   "expected": {
+    "securityId": "900001",
+    "lots": 2,
+    "lotSize": 20,
+    "quantity": 40,
+    "bestBid": 99.9,
+    "bestAsk": 100.1,
+    "midPrice": 100,
+    "quotedSpreadPct": 0.19999999999998863,
+    "effectiveBuy": 100.1,
+    "effectiveSell": 99.9,
+    "roundtripPct": 0.19999999999998863,
+    "slippageMultiple": 1,
+    "grade": "A",
+    "reasons": [
+     "Executable at size with minimal give-up."
+    ],
+    "buyWalk": {
+     "filledQuantity": 40,
+     "shortfall": 0,
+     "vwap": 100.1,
+     "notional": 4004,
+     "levelsConsumed": 1,
+     "incomplete": false
+    },
+    "sellWalk": {
+     "filledQuantity": 40,
+     "shortfall": 0,
+     "vwap": 99.9,
+     "notional": 3996,
+     "levelsConsumed": 1,
+     "incomplete": false
+    }
+   }
+  },
+  {
+   "id": "assessDepth/tightDeep/5",
+   "input": {
+    "raw": {
+     "last_price": 100,
+     "depth": {
+      "buy": [
+       {
+        "price": 99.9,
+        "quantity": 200,
+        "orders": 1
+       },
+       {
+        "price": 99.8,
+        "quantity": 200,
+        "orders": 1
+       }
+      ],
+      "sell": [
+       {
+        "price": 100.1,
+        "quantity": 200,
+        "orders": 1
+       },
+       {
+        "price": 100.2,
+        "quantity": 200,
+        "orders": 1
+       }
+      ]
+     }
+    },
+    "lots": 5,
+    "lotSize": 20
+   },
+   "expected": {
+    "securityId": "900001",
+    "lots": 5,
+    "lotSize": 20,
+    "quantity": 100,
+    "bestBid": 99.9,
+    "bestAsk": 100.1,
+    "midPrice": 100,
+    "quotedSpreadPct": 0.19999999999998863,
+    "effectiveBuy": 100.1,
+    "effectiveSell": 99.9,
+    "roundtripPct": 0.19999999999998863,
+    "slippageMultiple": 1,
+    "grade": "A",
+    "reasons": [
+     "Executable at size with minimal give-up."
+    ],
+    "buyWalk": {
+     "filledQuantity": 100,
+     "shortfall": 0,
+     "vwap": 100.1,
+     "notional": 10010,
+     "levelsConsumed": 1,
+     "incomplete": false
+    },
+    "sellWalk": {
+     "filledQuantity": 100,
+     "shortfall": 0,
+     "vwap": 99.9,
+     "notional": 9990,
+     "levelsConsumed": 1,
+     "incomplete": false
+    }
+   }
+  },
+  {
+   "id": "assessDepth/tightDeep/10",
+   "input": {
+    "raw": {
+     "last_price": 100,
+     "depth": {
+      "buy": [
+       {
+        "price": 99.9,
+        "quantity": 200,
+        "orders": 1
+       },
+       {
+        "price": 99.8,
+        "quantity": 200,
+        "orders": 1
+       }
+      ],
+      "sell": [
+       {
+        "price": 100.1,
+        "quantity": 200,
+        "orders": 1
+       },
+       {
+        "price": 100.2,
+        "quantity": 200,
+        "orders": 1
+       }
+      ]
+     }
+    },
+    "lots": 10,
+    "lotSize": 20
+   },
+   "expected": {
+    "securityId": "900001",
+    "lots": 10,
+    "lotSize": 20,
+    "quantity": 200,
+    "bestBid": 99.9,
+    "bestAsk": 100.1,
+    "midPrice": 100,
+    "quotedSpreadPct": 0.19999999999998863,
+    "effectiveBuy": 100.1,
+    "effectiveSell": 99.9,
+    "roundtripPct": 0.19999999999998863,
+    "slippageMultiple": 1,
+    "grade": "A",
+    "reasons": [
+     "Executable at size with minimal give-up."
+    ],
+    "buyWalk": {
+     "filledQuantity": 200,
+     "shortfall": 0,
+     "vwap": 100.1,
+     "notional": 20020,
+     "levelsConsumed": 1,
+     "incomplete": false
+    },
+    "sellWalk": {
+     "filledQuantity": 200,
+     "shortfall": 0,
+     "vwap": 99.9,
+     "notional": 19980,
+     "levelsConsumed": 1,
+     "incomplete": false
+    }
+   }
+  },
+  {
+   "id": "assessDepth/thin/1",
+   "input": {
+    "raw": {
+     "last_price": 100,
+     "depth": {
+      "buy": [
+       {
+        "price": 99.8,
+        "quantity": 20,
+        "orders": 1
+       },
+       {
+        "price": 99,
+        "quantity": 20,
+        "orders": 1
+       },
+       {
+        "price": 98,
+        "quantity": 20,
+        "orders": 1
+       },
+       {
+        "price": 97,
+        "quantity": 20,
+        "orders": 1
+       },
+       {
+        "price": 96,
+        "quantity": 20,
+        "orders": 1
+       }
+      ],
+      "sell": [
+       {
+        "price": 100.2,
+        "quantity": 20,
+        "orders": 1
+       },
+       {
+        "price": 101,
+        "quantity": 20,
+        "orders": 1
+       },
+       {
+        "price": 102,
+        "quantity": 20,
+        "orders": 1
+       },
+       {
+        "price": 103,
+        "quantity": 20,
+        "orders": 1
+       },
+       {
+        "price": 104,
+        "quantity": 20,
+        "orders": 1
+       }
+      ]
+     }
+    },
+    "lots": 1,
+    "lotSize": 20
+   },
+   "expected": {
+    "securityId": "900001",
+    "lots": 1,
+    "lotSize": 20,
+    "quantity": 20,
+    "bestBid": 99.8,
+    "bestAsk": 100.2,
+    "midPrice": 100,
+    "quotedSpreadPct": 0.40000000000000563,
+    "effectiveBuy": 100.2,
+    "effectiveSell": 99.8,
+    "roundtripPct": 0.40000000000000563,
+    "slippageMultiple": 1,
+    "grade": "A",
+    "reasons": [
+     "Executable at size with minimal give-up."
+    ],
+    "buyWalk": {
+     "filledQuantity": 20,
+     "shortfall": 0,
+     "vwap": 100.2,
+     "notional": 2004,
+     "levelsConsumed": 1,
+     "incomplete": false
+    },
+    "sellWalk": {
+     "filledQuantity": 20,
+     "shortfall": 0,
+     "vwap": 99.8,
+     "notional": 1996,
+     "levelsConsumed": 1,
+     "incomplete": false
+    }
+   }
+  },
+  {
+   "id": "assessDepth/thin/2",
+   "input": {
+    "raw": {
+     "last_price": 100,
+     "depth": {
+      "buy": [
+       {
+        "price": 99.8,
+        "quantity": 20,
+        "orders": 1
+       },
+       {
+        "price": 99,
+        "quantity": 20,
+        "orders": 1
+       },
+       {
+        "price": 98,
+        "quantity": 20,
+        "orders": 1
+       },
+       {
+        "price": 97,
+        "quantity": 20,
+        "orders": 1
+       },
+       {
+        "price": 96,
+        "quantity": 20,
+        "orders": 1
+       }
+      ],
+      "sell": [
+       {
+        "price": 100.2,
+        "quantity": 20,
+        "orders": 1
+       },
+       {
+        "price": 101,
+        "quantity": 20,
+        "orders": 1
+       },
+       {
+        "price": 102,
+        "quantity": 20,
+        "orders": 1
+       },
+       {
+        "price": 103,
+        "quantity": 20,
+        "orders": 1
+       },
+       {
+        "price": 104,
+        "quantity": 20,
+        "orders": 1
+       }
+      ]
+     }
+    },
+    "lots": 2,
+    "lotSize": 20
+   },
+   "expected": {
+    "securityId": "900001",
+    "lots": 2,
+    "lotSize": 20,
+    "quantity": 40,
+    "bestBid": 99.8,
+    "bestAsk": 100.2,
+    "midPrice": 100,
+    "quotedSpreadPct": 0.40000000000000563,
+    "effectiveBuy": 100.6,
+    "effectiveSell": 99.4,
+    "roundtripPct": 1.1999999999999886,
+    "slippageMultiple": 2.9999999999999294,
+    "grade": "B",
+    "reasons": [
+     "Real round-trip is 3.00x the quoted spread at 2 lot(s)."
+    ],
+    "buyWalk": {
+     "filledQuantity": 40,
+     "shortfall": 0,
+     "vwap": 100.6,
+     "notional": 4024,
+     "levelsConsumed": 2,
+     "incomplete": false
+    },
+    "sellWalk": {
+     "filledQuantity": 40,
+     "shortfall": 0,
+     "vwap": 99.4,
+     "notional": 3976,
+     "levelsConsumed": 2,
+     "incomplete": false
+    }
+   }
+  },
+  {
+   "id": "assessDepth/thin/5",
+   "input": {
+    "raw": {
+     "last_price": 100,
+     "depth": {
+      "buy": [
+       {
+        "price": 99.8,
+        "quantity": 20,
+        "orders": 1
+       },
+       {
+        "price": 99,
+        "quantity": 20,
+        "orders": 1
+       },
+       {
+        "price": 98,
+        "quantity": 20,
+        "orders": 1
+       },
+       {
+        "price": 97,
+        "quantity": 20,
+        "orders": 1
+       },
+       {
+        "price": 96,
+        "quantity": 20,
+        "orders": 1
+       }
+      ],
+      "sell": [
+       {
+        "price": 100.2,
+        "quantity": 20,
+        "orders": 1
+       },
+       {
+        "price": 101,
+        "quantity": 20,
+        "orders": 1
+       },
+       {
+        "price": 102,
+        "quantity": 20,
+        "orders": 1
+       },
+       {
+        "price": 103,
+        "quantity": 20,
+        "orders": 1
+       },
+       {
+        "price": 104,
+        "quantity": 20,
+        "orders": 1
+       }
+      ]
+     }
+    },
+    "lots": 5,
+    "lotSize": 20
+   },
+   "expected": {
+    "securityId": "900001",
+    "lots": 5,
+    "lotSize": 20,
+    "quantity": 100,
+    "bestBid": 99.8,
+    "bestAsk": 100.2,
+    "midPrice": 100,
+    "quotedSpreadPct": 0.40000000000000563,
+    "effectiveBuy": 102.04,
+    "effectiveSell": 97.96,
+    "roundtripPct": 4.0800000000000125,
+    "slippageMultiple": 10.199999999999887,
+    "grade": "F",
+    "reasons": [
+     "Real round-trip is 10.20x the quoted spread at 5 lot(s)."
+    ],
+    "buyWalk": {
+     "filledQuantity": 100,
+     "shortfall": 0,
+     "vwap": 102.04,
+     "notional": 10204,
+     "levelsConsumed": 5,
+     "incomplete": false
+    },
+    "sellWalk": {
+     "filledQuantity": 100,
+     "shortfall": 0,
+     "vwap": 97.96,
+     "notional": 9796,
+     "levelsConsumed": 5,
+     "incomplete": false
+    }
+   }
+  },
+  {
+   "id": "assessDepth/thin/10",
+   "input": {
+    "raw": {
+     "last_price": 100,
+     "depth": {
+      "buy": [
+       {
+        "price": 99.8,
+        "quantity": 20,
+        "orders": 1
+       },
+       {
+        "price": 99,
+        "quantity": 20,
+        "orders": 1
+       },
+       {
+        "price": 98,
+        "quantity": 20,
+        "orders": 1
+       },
+       {
+        "price": 97,
+        "quantity": 20,
+        "orders": 1
+       },
+       {
+        "price": 96,
+        "quantity": 20,
+        "orders": 1
+       }
+      ],
+      "sell": [
+       {
+        "price": 100.2,
+        "quantity": 20,
+        "orders": 1
+       },
+       {
+        "price": 101,
+        "quantity": 20,
+        "orders": 1
+       },
+       {
+        "price": 102,
+        "quantity": 20,
+        "orders": 1
+       },
+       {
+        "price": 103,
+        "quantity": 20,
+        "orders": 1
+       },
+       {
+        "price": 104,
+        "quantity": 20,
+        "orders": 1
+       }
+      ]
+     }
+    },
+    "lots": 10,
+    "lotSize": 20
+   },
+   "expected": {
+    "securityId": "900001",
+    "lots": 10,
+    "lotSize": 20,
+    "quantity": 200,
+    "bestBid": 99.8,
+    "bestAsk": 100.2,
+    "midPrice": 100,
+    "quotedSpreadPct": 0.40000000000000563,
+    "effectiveBuy": 102.04,
+    "effectiveSell": 97.96,
+    "roundtripPct": 4.0800000000000125,
+    "slippageMultiple": 10.199999999999887,
+    "grade": "F",
+    "reasons": [
+     "Ask side covers only 100/200 units across 5 visible level(s).",
+     "Bid side covers only 100/200 units across 5 visible level(s).",
+     "Real round-trip is 10.20x the quoted spread at 10 lot(s)."
+    ],
+    "buyWalk": {
+     "filledQuantity": 100,
+     "shortfall": 100,
+     "vwap": 102.04,
+     "notional": 10204,
+     "levelsConsumed": 5,
+     "incomplete": true
+    },
+    "sellWalk": {
+     "filledQuantity": 100,
+     "shortfall": 100,
+     "vwap": 97.96,
+     "notional": 9796,
+     "levelsConsumed": 5,
+     "incomplete": true
+    }
+   }
+  },
+  {
+   "id": "assessDepth/unsorted/1",
+   "input": {
+    "raw": {
+     "last_price": 100,
+     "depth": {
+      "buy": [
+       {
+        "price": 98,
+        "quantity": 20,
+        "orders": 1
+       },
+       {
+        "price": 99.8,
+        "quantity": 20,
+        "orders": 1
+       }
+      ],
+      "sell": [
+       {
+        "price": 101,
+        "quantity": 20,
+        "orders": 1
+       },
+       {
+        "price": 100.2,
+        "quantity": 20,
+        "orders": 1
+       }
+      ]
+     }
+    },
+    "lots": 1,
+    "lotSize": 20
+   },
+   "expected": {
+    "securityId": "900001",
+    "lots": 1,
+    "lotSize": 20,
+    "quantity": 20,
+    "bestBid": 99.8,
+    "bestAsk": 100.2,
+    "midPrice": 100,
+    "quotedSpreadPct": 0.40000000000000563,
+    "effectiveBuy": 100.2,
+    "effectiveSell": 99.8,
+    "roundtripPct": 0.40000000000000563,
+    "slippageMultiple": 1,
+    "grade": "A",
+    "reasons": [
+     "Executable at size with minimal give-up."
+    ],
+    "buyWalk": {
+     "filledQuantity": 20,
+     "shortfall": 0,
+     "vwap": 100.2,
+     "notional": 2004,
+     "levelsConsumed": 1,
+     "incomplete": false
+    },
+    "sellWalk": {
+     "filledQuantity": 20,
+     "shortfall": 0,
+     "vwap": 99.8,
+     "notional": 1996,
+     "levelsConsumed": 1,
+     "incomplete": false
+    }
+   }
+  },
+  {
+   "id": "assessDepth/unsorted/2",
+   "input": {
+    "raw": {
+     "last_price": 100,
+     "depth": {
+      "buy": [
+       {
+        "price": 98,
+        "quantity": 20,
+        "orders": 1
+       },
+       {
+        "price": 99.8,
+        "quantity": 20,
+        "orders": 1
+       }
+      ],
+      "sell": [
+       {
+        "price": 101,
+        "quantity": 20,
+        "orders": 1
+       },
+       {
+        "price": 100.2,
+        "quantity": 20,
+        "orders": 1
+       }
+      ]
+     }
+    },
+    "lots": 2,
+    "lotSize": 20
+   },
+   "expected": {
+    "securityId": "900001",
+    "lots": 2,
+    "lotSize": 20,
+    "quantity": 40,
+    "bestBid": 99.8,
+    "bestAsk": 100.2,
+    "midPrice": 100,
+    "quotedSpreadPct": 0.40000000000000563,
+    "effectiveBuy": 100.6,
+    "effectiveSell": 98.9,
+    "roundtripPct": 1.6999999999999886,
+    "slippageMultiple": 4.249999999999912,
+    "grade": "C",
+    "reasons": [
+     "Real round-trip is 4.25x the quoted spread at 2 lot(s)."
+    ],
+    "buyWalk": {
+     "filledQuantity": 40,
+     "shortfall": 0,
+     "vwap": 100.6,
+     "notional": 4024,
+     "levelsConsumed": 2,
+     "incomplete": false
+    },
+    "sellWalk": {
+     "filledQuantity": 40,
+     "shortfall": 0,
+     "vwap": 98.9,
+     "notional": 3956,
+     "levelsConsumed": 2,
+     "incomplete": false
+    }
+   }
+  },
+  {
+   "id": "assessDepth/unsorted/5",
+   "input": {
+    "raw": {
+     "last_price": 100,
+     "depth": {
+      "buy": [
+       {
+        "price": 98,
+        "quantity": 20,
+        "orders": 1
+       },
+       {
+        "price": 99.8,
+        "quantity": 20,
+        "orders": 1
+       }
+      ],
+      "sell": [
+       {
+        "price": 101,
+        "quantity": 20,
+        "orders": 1
+       },
+       {
+        "price": 100.2,
+        "quantity": 20,
+        "orders": 1
+       }
+      ]
+     }
+    },
+    "lots": 5,
+    "lotSize": 20
+   },
+   "expected": {
+    "securityId": "900001",
+    "lots": 5,
+    "lotSize": 20,
+    "quantity": 100,
+    "bestBid": 99.8,
+    "bestAsk": 100.2,
+    "midPrice": 100,
+    "quotedSpreadPct": 0.40000000000000563,
+    "effectiveBuy": 100.6,
+    "effectiveSell": 98.9,
+    "roundtripPct": 1.6999999999999886,
+    "slippageMultiple": 4.249999999999912,
+    "grade": "F",
+    "reasons": [
+     "Ask side covers only 40/100 units across 2 visible level(s).",
+     "Bid side covers only 40/100 units across 2 visible level(s).",
+     "Real round-trip is 4.25x the quoted spread at 5 lot(s)."
+    ],
+    "buyWalk": {
+     "filledQuantity": 40,
+     "shortfall": 60,
+     "vwap": 100.6,
+     "notional": 4024,
+     "levelsConsumed": 2,
+     "incomplete": true
+    },
+    "sellWalk": {
+     "filledQuantity": 40,
+     "shortfall": 60,
+     "vwap": 98.9,
+     "notional": 3956,
+     "levelsConsumed": 2,
+     "incomplete": true
+    }
+   }
+  },
+  {
+   "id": "assessDepth/unsorted/10",
+   "input": {
+    "raw": {
+     "last_price": 100,
+     "depth": {
+      "buy": [
+       {
+        "price": 98,
+        "quantity": 20,
+        "orders": 1
+       },
+       {
+        "price": 99.8,
+        "quantity": 20,
+        "orders": 1
+       }
+      ],
+      "sell": [
+       {
+        "price": 101,
+        "quantity": 20,
+        "orders": 1
+       },
+       {
+        "price": 100.2,
+        "quantity": 20,
+        "orders": 1
+       }
+      ]
+     }
+    },
+    "lots": 10,
+    "lotSize": 20
+   },
+   "expected": {
+    "securityId": "900001",
+    "lots": 10,
+    "lotSize": 20,
+    "quantity": 200,
+    "bestBid": 99.8,
+    "bestAsk": 100.2,
+    "midPrice": 100,
+    "quotedSpreadPct": 0.40000000000000563,
+    "effectiveBuy": 100.6,
+    "effectiveSell": 98.9,
+    "roundtripPct": 1.6999999999999886,
+    "slippageMultiple": 4.249999999999912,
+    "grade": "F",
+    "reasons": [
+     "Ask side covers only 40/200 units across 2 visible level(s).",
+     "Bid side covers only 40/200 units across 2 visible level(s).",
+     "Real round-trip is 4.25x the quoted spread at 10 lot(s)."
+    ],
+    "buyWalk": {
+     "filledQuantity": 40,
+     "shortfall": 160,
+     "vwap": 100.6,
+     "notional": 4024,
+     "levelsConsumed": 2,
+     "incomplete": true
+    },
+    "sellWalk": {
+     "filledQuantity": 40,
+     "shortfall": 160,
+     "vwap": 98.9,
+     "notional": 3956,
+     "levelsConsumed": 2,
+     "incomplete": true
+    }
+   }
+  },
+  {
+   "id": "assessDepth/oneSided/1",
+   "input": {
+    "raw": {
+     "last_price": 100,
+     "depth": {
+      "buy": [
+       {
+        "price": 99,
+        "quantity": 100,
+        "orders": 1
+       }
+      ],
+      "sell": []
+     }
+    },
+    "lots": 1,
+    "lotSize": 20
+   },
+   "expected": {
+    "securityId": "900001",
+    "lots": 1,
+    "lotSize": 20,
+    "quantity": 20,
+    "bestBid": 99,
+    "bestAsk": null,
+    "midPrice": null,
+    "quotedSpreadPct": null,
+    "effectiveBuy": null,
+    "effectiveSell": 99,
+    "roundtripPct": null,
+    "slippageMultiple": null,
+    "grade": "F",
+    "reasons": [
+     "Ask side covers only 0/20 units across 0 visible level(s)."
+    ],
+    "buyWalk": {
+     "filledQuantity": 0,
+     "shortfall": 20,
+     "vwap": {
+      "$num": "NaN"
+     },
+     "notional": 0,
+     "levelsConsumed": 0,
+     "incomplete": true
+    },
+    "sellWalk": {
+     "filledQuantity": 20,
+     "shortfall": 0,
+     "vwap": 99,
+     "notional": 1980,
+     "levelsConsumed": 1,
+     "incomplete": false
+    }
+   }
+  },
+  {
+   "id": "assessDepth/oneSided/2",
+   "input": {
+    "raw": {
+     "last_price": 100,
+     "depth": {
+      "buy": [
+       {
+        "price": 99,
+        "quantity": 100,
+        "orders": 1
+       }
+      ],
+      "sell": []
+     }
+    },
+    "lots": 2,
+    "lotSize": 20
+   },
+   "expected": {
+    "securityId": "900001",
+    "lots": 2,
+    "lotSize": 20,
+    "quantity": 40,
+    "bestBid": 99,
+    "bestAsk": null,
+    "midPrice": null,
+    "quotedSpreadPct": null,
+    "effectiveBuy": null,
+    "effectiveSell": 99,
+    "roundtripPct": null,
+    "slippageMultiple": null,
+    "grade": "F",
+    "reasons": [
+     "Ask side covers only 0/40 units across 0 visible level(s)."
+    ],
+    "buyWalk": {
+     "filledQuantity": 0,
+     "shortfall": 40,
+     "vwap": {
+      "$num": "NaN"
+     },
+     "notional": 0,
+     "levelsConsumed": 0,
+     "incomplete": true
+    },
+    "sellWalk": {
+     "filledQuantity": 40,
+     "shortfall": 0,
+     "vwap": 99,
+     "notional": 3960,
+     "levelsConsumed": 1,
+     "incomplete": false
+    }
+   }
+  },
+  {
+   "id": "assessDepth/oneSided/5",
+   "input": {
+    "raw": {
+     "last_price": 100,
+     "depth": {
+      "buy": [
+       {
+        "price": 99,
+        "quantity": 100,
+        "orders": 1
+       }
+      ],
+      "sell": []
+     }
+    },
+    "lots": 5,
+    "lotSize": 20
+   },
+   "expected": {
+    "securityId": "900001",
+    "lots": 5,
+    "lotSize": 20,
+    "quantity": 100,
+    "bestBid": 99,
+    "bestAsk": null,
+    "midPrice": null,
+    "quotedSpreadPct": null,
+    "effectiveBuy": null,
+    "effectiveSell": 99,
+    "roundtripPct": null,
+    "slippageMultiple": null,
+    "grade": "F",
+    "reasons": [
+     "Ask side covers only 0/100 units across 0 visible level(s)."
+    ],
+    "buyWalk": {
+     "filledQuantity": 0,
+     "shortfall": 100,
+     "vwap": {
+      "$num": "NaN"
+     },
+     "notional": 0,
+     "levelsConsumed": 0,
+     "incomplete": true
+    },
+    "sellWalk": {
+     "filledQuantity": 100,
+     "shortfall": 0,
+     "vwap": 99,
+     "notional": 9900,
+     "levelsConsumed": 1,
+     "incomplete": false
+    }
+   }
+  },
+  {
+   "id": "assessDepth/oneSided/10",
+   "input": {
+    "raw": {
+     "last_price": 100,
+     "depth": {
+      "buy": [
+       {
+        "price": 99,
+        "quantity": 100,
+        "orders": 1
+       }
+      ],
+      "sell": []
+     }
+    },
+    "lots": 10,
+    "lotSize": 20
+   },
+   "expected": {
+    "securityId": "900001",
+    "lots": 10,
+    "lotSize": 20,
+    "quantity": 200,
+    "bestBid": 99,
+    "bestAsk": null,
+    "midPrice": null,
+    "quotedSpreadPct": null,
+    "effectiveBuy": null,
+    "effectiveSell": 99,
+    "roundtripPct": null,
+    "slippageMultiple": null,
+    "grade": "F",
+    "reasons": [
+     "Ask side covers only 0/200 units across 0 visible level(s).",
+     "Bid side covers only 100/200 units across 1 visible level(s)."
+    ],
+    "buyWalk": {
+     "filledQuantity": 0,
+     "shortfall": 200,
+     "vwap": {
+      "$num": "NaN"
+     },
+     "notional": 0,
+     "levelsConsumed": 0,
+     "incomplete": true
+    },
+    "sellWalk": {
+     "filledQuantity": 100,
+     "shortfall": 100,
+     "vwap": 99,
+     "notional": 9900,
+     "levelsConsumed": 1,
+     "incomplete": true
+    }
+   }
+  },
+  {
+   "id": "assessDepth/noDepth/1",
+   "input": {
+    "raw": {
+     "last_price": 100
+    },
+    "lots": 1,
+    "lotSize": 20
+   },
+   "expected": {
+    "securityId": "900001",
+    "lots": 1,
+    "lotSize": 20,
+    "quantity": 20,
+    "bestBid": null,
+    "bestAsk": null,
+    "midPrice": null,
+    "quotedSpreadPct": null,
+    "effectiveBuy": null,
+    "effectiveSell": null,
+    "roundtripPct": null,
+    "slippageMultiple": null,
+    "grade": "F",
+    "reasons": [
+     "No market depth in the response."
+    ],
+    "buyWalk": null,
+    "sellWalk": null
+   }
+  },
+  {
+   "id": "assessDepth/noDepth/2",
+   "input": {
+    "raw": {
+     "last_price": 100
+    },
+    "lots": 2,
+    "lotSize": 20
+   },
+   "expected": {
+    "securityId": "900001",
+    "lots": 2,
+    "lotSize": 20,
+    "quantity": 40,
+    "bestBid": null,
+    "bestAsk": null,
+    "midPrice": null,
+    "quotedSpreadPct": null,
+    "effectiveBuy": null,
+    "effectiveSell": null,
+    "roundtripPct": null,
+    "slippageMultiple": null,
+    "grade": "F",
+    "reasons": [
+     "No market depth in the response."
+    ],
+    "buyWalk": null,
+    "sellWalk": null
+   }
+  },
+  {
+   "id": "assessDepth/noDepth/5",
+   "input": {
+    "raw": {
+     "last_price": 100
+    },
+    "lots": 5,
+    "lotSize": 20
+   },
+   "expected": {
+    "securityId": "900001",
+    "lots": 5,
+    "lotSize": 20,
+    "quantity": 100,
+    "bestBid": null,
+    "bestAsk": null,
+    "midPrice": null,
+    "quotedSpreadPct": null,
+    "effectiveBuy": null,
+    "effectiveSell": null,
+    "roundtripPct": null,
+    "slippageMultiple": null,
+    "grade": "F",
+    "reasons": [
+     "No market depth in the response."
+    ],
+    "buyWalk": null,
+    "sellWalk": null
+   }
+  },
+  {
+   "id": "assessDepth/noDepth/10",
+   "input": {
+    "raw": {
+     "last_price": 100
+    },
+    "lots": 10,
+    "lotSize": 20
+   },
+   "expected": {
+    "securityId": "900001",
+    "lots": 10,
+    "lotSize": 20,
+    "quantity": 200,
+    "bestBid": null,
+    "bestAsk": null,
+    "midPrice": null,
+    "quotedSpreadPct": null,
+    "effectiveBuy": null,
+    "effectiveSell": null,
+    "roundtripPct": null,
+    "slippageMultiple": null,
+    "grade": "F",
+    "reasons": [
+     "No market depth in the response."
+    ],
+    "buyWalk": null,
+    "sellWalk": null
+   }
+  },
+  {
+   "id": "assessDepth/zerosInBook/1",
+   "input": {
+    "raw": {
+     "last_price": 100,
+     "depth": {
+      "buy": [
+       {
+        "price": 0,
+        "quantity": 10,
+        "orders": 1
+       },
+       {
+        "price": 99,
+        "quantity": 0,
+        "orders": 1
+       },
+       {
+        "price": 98.5,
+        "quantity": 50,
+        "orders": 1
+       }
+      ],
+      "sell": [
+       {
+        "price": 101.5,
+        "quantity": 50,
+        "orders": 1
+       },
+       {
+        "price": 0,
+        "quantity": 0,
+        "orders": 1
+       }
+      ]
+     }
+    },
+    "lots": 1,
+    "lotSize": 20
+   },
+   "expected": {
+    "securityId": "900001",
+    "lots": 1,
+    "lotSize": 20,
+    "quantity": 20,
+    "bestBid": 98.5,
+    "bestAsk": 101.5,
+    "midPrice": 100,
+    "quotedSpreadPct": 3,
+    "effectiveBuy": 101.5,
+    "effectiveSell": 98.5,
+    "roundtripPct": 3,
+    "slippageMultiple": 1,
+    "grade": "F",
+    "reasons": [],
+    "buyWalk": {
+     "filledQuantity": 20,
+     "shortfall": 0,
+     "vwap": 101.5,
+     "notional": 2030,
+     "levelsConsumed": 1,
+     "incomplete": false
+    },
+    "sellWalk": {
+     "filledQuantity": 20,
+     "shortfall": 0,
+     "vwap": 98.5,
+     "notional": 1970,
+     "levelsConsumed": 1,
+     "incomplete": false
+    }
+   }
+  },
+  {
+   "id": "assessDepth/zerosInBook/2",
+   "input": {
+    "raw": {
+     "last_price": 100,
+     "depth": {
+      "buy": [
+       {
+        "price": 0,
+        "quantity": 10,
+        "orders": 1
+       },
+       {
+        "price": 99,
+        "quantity": 0,
+        "orders": 1
+       },
+       {
+        "price": 98.5,
+        "quantity": 50,
+        "orders": 1
+       }
+      ],
+      "sell": [
+       {
+        "price": 101.5,
+        "quantity": 50,
+        "orders": 1
+       },
+       {
+        "price": 0,
+        "quantity": 0,
+        "orders": 1
+       }
+      ]
+     }
+    },
+    "lots": 2,
+    "lotSize": 20
+   },
+   "expected": {
+    "securityId": "900001",
+    "lots": 2,
+    "lotSize": 20,
+    "quantity": 40,
+    "bestBid": 98.5,
+    "bestAsk": 101.5,
+    "midPrice": 100,
+    "quotedSpreadPct": 3,
+    "effectiveBuy": 101.5,
+    "effectiveSell": 98.5,
+    "roundtripPct": 3,
+    "slippageMultiple": 1,
+    "grade": "F",
+    "reasons": [],
+    "buyWalk": {
+     "filledQuantity": 40,
+     "shortfall": 0,
+     "vwap": 101.5,
+     "notional": 4060,
+     "levelsConsumed": 1,
+     "incomplete": false
+    },
+    "sellWalk": {
+     "filledQuantity": 40,
+     "shortfall": 0,
+     "vwap": 98.5,
+     "notional": 3940,
+     "levelsConsumed": 1,
+     "incomplete": false
+    }
+   }
+  },
+  {
+   "id": "assessDepth/zerosInBook/5",
+   "input": {
+    "raw": {
+     "last_price": 100,
+     "depth": {
+      "buy": [
+       {
+        "price": 0,
+        "quantity": 10,
+        "orders": 1
+       },
+       {
+        "price": 99,
+        "quantity": 0,
+        "orders": 1
+       },
+       {
+        "price": 98.5,
+        "quantity": 50,
+        "orders": 1
+       }
+      ],
+      "sell": [
+       {
+        "price": 101.5,
+        "quantity": 50,
+        "orders": 1
+       },
+       {
+        "price": 0,
+        "quantity": 0,
+        "orders": 1
+       }
+      ]
+     }
+    },
+    "lots": 5,
+    "lotSize": 20
+   },
+   "expected": {
+    "securityId": "900001",
+    "lots": 5,
+    "lotSize": 20,
+    "quantity": 100,
+    "bestBid": 98.5,
+    "bestAsk": 101.5,
+    "midPrice": 100,
+    "quotedSpreadPct": 3,
+    "effectiveBuy": 101.5,
+    "effectiveSell": 98.5,
+    "roundtripPct": 3,
+    "slippageMultiple": 1,
+    "grade": "F",
+    "reasons": [
+     "Ask side covers only 50/100 units across 1 visible level(s).",
+     "Bid side covers only 50/100 units across 1 visible level(s)."
+    ],
+    "buyWalk": {
+     "filledQuantity": 50,
+     "shortfall": 50,
+     "vwap": 101.5,
+     "notional": 5075,
+     "levelsConsumed": 1,
+     "incomplete": true
+    },
+    "sellWalk": {
+     "filledQuantity": 50,
+     "shortfall": 50,
+     "vwap": 98.5,
+     "notional": 4925,
+     "levelsConsumed": 1,
+     "incomplete": true
+    }
+   }
+  },
+  {
+   "id": "assessDepth/zerosInBook/10",
+   "input": {
+    "raw": {
+     "last_price": 100,
+     "depth": {
+      "buy": [
+       {
+        "price": 0,
+        "quantity": 10,
+        "orders": 1
+       },
+       {
+        "price": 99,
+        "quantity": 0,
+        "orders": 1
+       },
+       {
+        "price": 98.5,
+        "quantity": 50,
+        "orders": 1
+       }
+      ],
+      "sell": [
+       {
+        "price": 101.5,
+        "quantity": 50,
+        "orders": 1
+       },
+       {
+        "price": 0,
+        "quantity": 0,
+        "orders": 1
+       }
+      ]
+     }
+    },
+    "lots": 10,
+    "lotSize": 20
+   },
+   "expected": {
+    "securityId": "900001",
+    "lots": 10,
+    "lotSize": 20,
+    "quantity": 200,
+    "bestBid": 98.5,
+    "bestAsk": 101.5,
+    "midPrice": 100,
+    "quotedSpreadPct": 3,
+    "effectiveBuy": 101.5,
+    "effectiveSell": 98.5,
+    "roundtripPct": 3,
+    "slippageMultiple": 1,
+    "grade": "F",
+    "reasons": [
+     "Ask side covers only 50/200 units across 1 visible level(s).",
+     "Bid side covers only 50/200 units across 1 visible level(s)."
+    ],
+    "buyWalk": {
+     "filledQuantity": 50,
+     "shortfall": 150,
+     "vwap": 101.5,
+     "notional": 5075,
+     "levelsConsumed": 1,
+     "incomplete": true
+    },
+    "sellWalk": {
+     "filledQuantity": 50,
+     "shortfall": 150,
+     "vwap": 98.5,
+     "notional": 4925,
+     "levelsConsumed": 1,
+     "incomplete": true
+    }
+   }
+  },
+  {
+   "id": "walkBook/basic",
+   "input": null,
+   "expected": [
+    {
+     "filledQuantity": 12,
+     "shortfall": 0,
+     "vwap": 10.583333333333334,
+     "notional": 127,
+     "levelsConsumed": 2,
+     "incomplete": false
+    },
+    {
+     "filledQuantity": 0,
+     "shortfall": 5,
+     "vwap": {
+      "$num": "NaN"
+     },
+     "notional": 0,
+     "levelsConsumed": 0,
+     "incomplete": true
+    },
+    {
+     "filledQuantity": 0,
+     "shortfall": 0,
+     "vwap": {
+      "$num": "NaN"
+     },
+     "notional": 0,
+     "levelsConsumed": 0,
+     "incomplete": false
+    }
+   ]
+  },
+  {
+   "id": "screenChain/gm-default",
+   "input": {
+    "raw": {
+     "last_price": 74294.96,
+     "oc": {
+      "74100.000000": {
+       "ce": {
+        "security_id": 900741,
+        "last_price": 713.6,
+        "top_bid_price": 713.55,
+        "top_ask_price": 713.65,
+        "top_bid_quantity": 40,
+        "top_ask_quantity": 60,
+        "oi": 574100,
+        "previous_oi": 480000,
+        "volume": 2000000,
+        "previous_volume": 1000000,
+        "previous_close_price": 699.328,
+        "average_price": 713.6,
+        "implied_volatility": 16,
+        "greeks": {
+         "delta": 0.5,
+         "gamma": 0.0004,
+         "theta": -40,
+         "vega": 30
+        }
+       },
+       "pe": {
+        "security_id": 910741,
+        "last_price": 208.3,
+        "top_bid_price": 208.25,
+        "top_ask_price": 208.35,
+        "top_bid_quantity": 40,
+        "top_ask_quantity": 60,
+        "oi": 574100,
+        "previous_oi": 480000,
+        "volume": 2000000,
+        "previous_volume": 1000000,
+        "previous_close_price": 204.13400000000001,
+        "average_price": 208.3,
+        "implied_volatility": 8.6,
+        "greeks": {
+         "delta": 0.5,
+         "gamma": 0.0004,
+         "theta": -40,
+         "vega": 30
+        }
+       }
+      },
+      "74200.000000": {
+       "ce": {
+        "security_id": 900742,
+        "last_price": 655,
+        "top_bid_price": 654.95,
+        "top_ask_price": 655.05,
+        "top_bid_quantity": 40,
+        "top_ask_quantity": 60,
+        "oi": 574200,
+        "previous_oi": 480000,
+        "volume": 2000000,
+        "previous_volume": 1000000,
+        "previous_close_price": 641.9,
+        "average_price": 655,
+        "implied_volatility": 16,
+        "greeks": {
+         "delta": 0.5,
+         "gamma": 0.0004,
+         "theta": -40,
+         "vega": 30
+        }
+       },
+       "pe": {
+        "security_id": 910742,
+        "last_price": 236.7,
+        "top_bid_price": 236.65,
+        "top_ask_price": 236.75,
+        "top_bid_quantity": 40,
+        "top_ask_quantity": 60,
+        "oi": 574200,
+        "previous_oi": 480000,
+        "volume": 2000000,
+        "previous_volume": 1000000,
+        "previous_close_price": 231.96599999999998,
+        "average_price": 236.7,
+        "implied_volatility": 8.6,
+        "greeks": {
+         "delta": 0.5,
+         "gamma": 0.0004,
+         "theta": -40,
+         "vega": 30
+        }
+       }
+      },
+      "74300.000000": {
+       "ce": {
+        "security_id": 900743,
+        "last_price": 588,
+        "top_bid_price": 587.95,
+        "top_ask_price": 588.05,
+        "top_bid_quantity": 40,
+        "top_ask_quantity": 60,
+        "oi": 574300,
+        "previous_oi": 480000,
+        "volume": 2000000,
+        "previous_volume": 1000000,
+        "previous_close_price": 576.24,
+        "average_price": 588,
+        "implied_volatility": 16,
+        "greeks": {
+         "delta": 0.5,
+         "gamma": 0.0004,
+         "theta": -40,
+         "vega": 30
+        }
+       },
+       "pe": {
+        "security_id": 910743,
+        "last_price": 270.05,
+        "top_bid_price": 270,
+        "top_ask_price": 270.1,
+        "top_bid_quantity": 40,
+        "top_ask_quantity": 60,
+        "oi": 574300,
+        "previous_oi": 480000,
+        "volume": 2000000,
+        "previous_volume": 1000000,
+        "previous_close_price": 264.649,
+        "average_price": 270.05,
+        "implied_volatility": 8.6,
+        "greeks": {
+         "delta": 0.5,
+         "gamma": 0.0004,
+         "theta": -40,
+         "vega": 30
+        }
+       }
+      },
+      "74400.000000": {
+       "ce": {
+        "security_id": 900744,
+        "last_price": 517.1,
+        "top_bid_price": 517.05,
+        "top_ask_price": 517.15,
+        "top_bid_quantity": 40,
+        "top_ask_quantity": 60,
+        "oi": 574400,
+        "previous_oi": 480000,
+        "volume": 2000000,
+        "previous_volume": 1000000,
+        "previous_close_price": 506.75800000000004,
+        "average_price": 517.1,
+        "implied_volatility": 16,
+        "greeks": {
+         "delta": 0.5,
+         "gamma": 0.0004,
+         "theta": -40,
+         "vega": 30
+        }
+       },
+       "pe": {
+        "security_id": 910744,
+        "last_price": 303.7,
+        "top_bid_price": 303.65,
+        "top_ask_price": 303.75,
+        "top_bid_quantity": 40,
+        "top_ask_quantity": 60,
+        "oi": 574400,
+        "previous_oi": 480000,
+        "volume": 2000000,
+        "previous_volume": 1000000,
+        "previous_close_price": 297.626,
+        "average_price": 303.7,
+        "implied_volatility": 8.6,
+        "greeks": {
+         "delta": 0.5,
+         "gamma": 0.0004,
+         "theta": -40,
+         "vega": 30
+        }
+       }
+      },
+      "74500.000000": {
+       "ce": {
+        "security_id": 900745,
+        "last_price": 461.55,
+        "top_bid_price": 461.5,
+        "top_ask_price": 461.6,
+        "top_bid_quantity": 40,
+        "top_ask_quantity": 60,
+        "oi": 574500,
+        "previous_oi": 480000,
+        "volume": 2000000,
+        "previous_volume": 1000000,
+        "previous_close_price": 452.319,
+        "average_price": 461.55,
+        "implied_volatility": 16,
+        "greeks": {
+         "delta": 0.5,
+         "gamma": 0.0004,
+         "theta": -40,
+         "vega": 30
+        }
+       },
+       "pe": {
+        "security_id": 910745,
+        "last_price": 345.1,
+        "top_bid_price": 345.05,
+        "top_ask_price": 345.15,
+        "top_bid_quantity": 40,
+        "top_ask_quantity": 60,
+        "oi": 574500,
+        "previous_oi": 480000,
+        "volume": 2000000,
+        "previous_volume": 1000000,
+        "previous_close_price": 338.19800000000004,
+        "average_price": 345.1,
+        "implied_volatility": 8.6,
+        "greeks": {
+         "delta": 0.5,
+         "gamma": 0.0004,
+         "theta": -40,
+         "vega": 30
+        }
+       }
+      }
+     }
+    },
+    "opts": {}
+   },
+   "expected": {
+    "all": [
+     {
+      "strike": 74100,
+      "type": "CE",
+      "securityId": "900741",
+      "lastPrice": 713.6,
+      "topBid": 713.55,
+      "topAsk": 713.65,
+      "topBidQty": 40,
+      "topAskQty": 60,
+      "midPrice": 713.5999999999999,
+      "quotedSpreadPct": 0.014013452914801394,
+      "oi": 574100,
+      "volume": 2000000,
+      "candidate": true,
+      "rejectReasons": []
+     },
+     {
+      "strike": 74100,
+      "type": "PE",
+      "securityId": "910741",
+      "lastPrice": 208.3,
+      "topBid": 208.25,
+      "topAsk": 208.35,
+      "topBidQty": 40,
+      "topAskQty": 60,
+      "midPrice": 208.3,
+      "quotedSpreadPct": 0.04800768122899391,
+      "oi": 574100,
+      "volume": 2000000,
+      "candidate": true,
+      "rejectReasons": []
+     },
+     {
+      "strike": 74200,
+      "type": "CE",
+      "securityId": "900742",
+      "lastPrice": 655,
+      "topBid": 654.95,
+      "topAsk": 655.05,
+      "topBidQty": 40,
+      "topAskQty": 60,
+      "midPrice": 655,
+      "quotedSpreadPct": 0.015267175572505199,
+      "oi": 574200,
+      "volume": 2000000,
+      "candidate": true,
+      "rejectReasons": []
+     },
+     {
+      "strike": 74200,
+      "type": "PE",
+      "securityId": "910742",
+      "lastPrice": 236.7,
+      "topBid": 236.65,
+      "topAsk": 236.75,
+      "topBidQty": 40,
+      "topAskQty": 60,
+      "midPrice": 236.7,
+      "quotedSpreadPct": 0.04224757076467863,
+      "oi": 574200,
+      "volume": 2000000,
+      "candidate": true,
+      "rejectReasons": []
+     },
+     {
+      "strike": 74300,
+      "type": "CE",
+      "securityId": "900743",
+      "lastPrice": 588,
+      "topBid": 587.95,
+      "topAsk": 588.05,
+      "topBidQty": 40,
+      "topAskQty": 60,
+      "midPrice": 588,
+      "quotedSpreadPct": 0.017006802721072967,
+      "oi": 574300,
+      "volume": 2000000,
+      "candidate": true,
+      "rejectReasons": []
+     },
+     {
+      "strike": 74300,
+      "type": "PE",
+      "securityId": "910743",
+      "lastPrice": 270.05,
+      "topBid": 270,
+      "topAsk": 270.1,
+      "topBidQty": 40,
+      "topAskQty": 60,
+      "midPrice": 270.05,
+      "quotedSpreadPct": 0.03703017959637946,
+      "oi": 574300,
+      "volume": 2000000,
+      "candidate": true,
+      "rejectReasons": []
+     },
+     {
+      "strike": 74400,
+      "type": "CE",
+      "securityId": "900744",
+      "lastPrice": 517.1,
+      "topBid": 517.05,
+      "topAsk": 517.15,
+      "topBidQty": 40,
+      "topAskQty": 60,
+      "midPrice": 517.0999999999999,
+      "quotedSpreadPct": 0.019338619222591908,
+      "oi": 574400,
+      "volume": 2000000,
+      "candidate": true,
+      "rejectReasons": []
+     },
+     {
+      "strike": 74400,
+      "type": "PE",
+      "securityId": "910744",
+      "lastPrice": 303.7,
+      "topBid": 303.65,
+      "topAsk": 303.75,
+      "topBidQty": 40,
+      "topAskQty": 60,
+      "midPrice": 303.7,
+      "quotedSpreadPct": 0.032927230819895535,
+      "oi": 574400,
+      "volume": 2000000,
+      "candidate": true,
+      "rejectReasons": []
+     },
+     {
+      "strike": 74500,
+      "type": "CE",
+      "securityId": "900745",
+      "lastPrice": 461.55,
+      "topBid": 461.5,
+      "topAsk": 461.6,
+      "topBidQty": 40,
+      "topAskQty": 60,
+      "midPrice": 461.55,
+      "quotedSpreadPct": 0.021666125013546256,
+      "oi": 574500,
+      "volume": 2000000,
+      "candidate": true,
+      "rejectReasons": []
+     },
+     {
+      "strike": 74500,
+      "type": "PE",
+      "securityId": "910745",
+      "lastPrice": 345.1,
+      "topBid": 345.05,
+      "topAsk": 345.15,
+      "topBidQty": 40,
+      "topAskQty": 60,
+      "midPrice": 345.1,
+      "quotedSpreadPct": 0.02897710808460327,
+      "oi": 574500,
+      "volume": 2000000,
+      "candidate": true,
+      "rejectReasons": []
+     }
+    ],
+    "candidates": [
+     {
+      "strike": 74100,
+      "type": "CE",
+      "securityId": "900741",
+      "lastPrice": 713.6,
+      "topBid": 713.55,
+      "topAsk": 713.65,
+      "topBidQty": 40,
+      "topAskQty": 60,
+      "midPrice": 713.5999999999999,
+      "quotedSpreadPct": 0.014013452914801394,
+      "oi": 574100,
+      "volume": 2000000,
+      "candidate": true,
+      "rejectReasons": []
+     },
+     {
+      "strike": 74200,
+      "type": "CE",
+      "securityId": "900742",
+      "lastPrice": 655,
+      "topBid": 654.95,
+      "topAsk": 655.05,
+      "topBidQty": 40,
+      "topAskQty": 60,
+      "midPrice": 655,
+      "quotedSpreadPct": 0.015267175572505199,
+      "oi": 574200,
+      "volume": 2000000,
+      "candidate": true,
+      "rejectReasons": []
+     },
+     {
+      "strike": 74300,
+      "type": "CE",
+      "securityId": "900743",
+      "lastPrice": 588,
+      "topBid": 587.95,
+      "topAsk": 588.05,
+      "topBidQty": 40,
+      "topAskQty": 60,
+      "midPrice": 588,
+      "quotedSpreadPct": 0.017006802721072967,
+      "oi": 574300,
+      "volume": 2000000,
+      "candidate": true,
+      "rejectReasons": []
+     },
+     {
+      "strike": 74400,
+      "type": "CE",
+      "securityId": "900744",
+      "lastPrice": 517.1,
+      "topBid": 517.05,
+      "topAsk": 517.15,
+      "topBidQty": 40,
+      "topAskQty": 60,
+      "midPrice": 517.0999999999999,
+      "quotedSpreadPct": 0.019338619222591908,
+      "oi": 574400,
+      "volume": 2000000,
+      "candidate": true,
+      "rejectReasons": []
+     },
+     {
+      "strike": 74500,
+      "type": "CE",
+      "securityId": "900745",
+      "lastPrice": 461.55,
+      "topBid": 461.5,
+      "topAsk": 461.6,
+      "topBidQty": 40,
+      "topAskQty": 60,
+      "midPrice": 461.55,
+      "quotedSpreadPct": 0.021666125013546256,
+      "oi": 574500,
+      "volume": 2000000,
+      "candidate": true,
+      "rejectReasons": []
+     },
+     {
+      "strike": 74500,
+      "type": "PE",
+      "securityId": "910745",
+      "lastPrice": 345.1,
+      "topBid": 345.05,
+      "topAsk": 345.15,
+      "topBidQty": 40,
+      "topAskQty": 60,
+      "midPrice": 345.1,
+      "quotedSpreadPct": 0.02897710808460327,
+      "oi": 574500,
+      "volume": 2000000,
+      "candidate": true,
+      "rejectReasons": []
+     },
+     {
+      "strike": 74400,
+      "type": "PE",
+      "securityId": "910744",
+      "lastPrice": 303.7,
+      "topBid": 303.65,
+      "topAsk": 303.75,
+      "topBidQty": 40,
+      "topAskQty": 60,
+      "midPrice": 303.7,
+      "quotedSpreadPct": 0.032927230819895535,
+      "oi": 574400,
+      "volume": 2000000,
+      "candidate": true,
+      "rejectReasons": []
+     },
+     {
+      "strike": 74300,
+      "type": "PE",
+      "securityId": "910743",
+      "lastPrice": 270.05,
+      "topBid": 270,
+      "topAsk": 270.1,
+      "topBidQty": 40,
+      "topAskQty": 60,
+      "midPrice": 270.05,
+      "quotedSpreadPct": 0.03703017959637946,
+      "oi": 574300,
+      "volume": 2000000,
+      "candidate": true,
+      "rejectReasons": []
+     },
+     {
+      "strike": 74200,
+      "type": "PE",
+      "securityId": "910742",
+      "lastPrice": 236.7,
+      "topBid": 236.65,
+      "topAsk": 236.75,
+      "topBidQty": 40,
+      "topAskQty": 60,
+      "midPrice": 236.7,
+      "quotedSpreadPct": 0.04224757076467863,
+      "oi": 574200,
+      "volume": 2000000,
+      "candidate": true,
+      "rejectReasons": []
+     },
+     {
+      "strike": 74100,
+      "type": "PE",
+      "securityId": "910741",
+      "lastPrice": 208.3,
+      "topBid": 208.25,
+      "topAsk": 208.35,
+      "topBidQty": 40,
+      "topAskQty": 60,
+      "midPrice": 208.3,
+      "quotedSpreadPct": 0.04800768122899391,
+      "oi": 574100,
+      "volume": 2000000,
+      "candidate": true,
+      "rejectReasons": []
+     }
+    ]
+   }
+  },
+  {
+   "id": "screenChain/gm-band",
+   "input": {
+    "raw": {
+     "last_price": 74294.96,
+     "oc": {
+      "74100.000000": {
+       "ce": {
+        "security_id": 900741,
+        "last_price": 713.6,
+        "top_bid_price": 713.55,
+        "top_ask_price": 713.65,
+        "top_bid_quantity": 40,
+        "top_ask_quantity": 60,
+        "oi": 574100,
+        "previous_oi": 480000,
+        "volume": 2000000,
+        "previous_volume": 1000000,
+        "previous_close_price": 699.328,
+        "average_price": 713.6,
+        "implied_volatility": 16,
+        "greeks": {
+         "delta": 0.5,
+         "gamma": 0.0004,
+         "theta": -40,
+         "vega": 30
+        }
+       },
+       "pe": {
+        "security_id": 910741,
+        "last_price": 208.3,
+        "top_bid_price": 208.25,
+        "top_ask_price": 208.35,
+        "top_bid_quantity": 40,
+        "top_ask_quantity": 60,
+        "oi": 574100,
+        "previous_oi": 480000,
+        "volume": 2000000,
+        "previous_volume": 1000000,
+        "previous_close_price": 204.13400000000001,
+        "average_price": 208.3,
+        "implied_volatility": 8.6,
+        "greeks": {
+         "delta": 0.5,
+         "gamma": 0.0004,
+         "theta": -40,
+         "vega": 30
+        }
+       }
+      },
+      "74200.000000": {
+       "ce": {
+        "security_id": 900742,
+        "last_price": 655,
+        "top_bid_price": 654.95,
+        "top_ask_price": 655.05,
+        "top_bid_quantity": 40,
+        "top_ask_quantity": 60,
+        "oi": 574200,
+        "previous_oi": 480000,
+        "volume": 2000000,
+        "previous_volume": 1000000,
+        "previous_close_price": 641.9,
+        "average_price": 655,
+        "implied_volatility": 16,
+        "greeks": {
+         "delta": 0.5,
+         "gamma": 0.0004,
+         "theta": -40,
+         "vega": 30
+        }
+       },
+       "pe": {
+        "security_id": 910742,
+        "last_price": 236.7,
+        "top_bid_price": 236.65,
+        "top_ask_price": 236.75,
+        "top_bid_quantity": 40,
+        "top_ask_quantity": 60,
+        "oi": 574200,
+        "previous_oi": 480000,
+        "volume": 2000000,
+        "previous_volume": 1000000,
+        "previous_close_price": 231.96599999999998,
+        "average_price": 236.7,
+        "implied_volatility": 8.6,
+        "greeks": {
+         "delta": 0.5,
+         "gamma": 0.0004,
+         "theta": -40,
+         "vega": 30
+        }
+       }
+      },
+      "74300.000000": {
+       "ce": {
+        "security_id": 900743,
+        "last_price": 588,
+        "top_bid_price": 587.95,
+        "top_ask_price": 588.05,
+        "top_bid_quantity": 40,
+        "top_ask_quantity": 60,
+        "oi": 574300,
+        "previous_oi": 480000,
+        "volume": 2000000,
+        "previous_volume": 1000000,
+        "previous_close_price": 576.24,
+        "average_price": 588,
+        "implied_volatility": 16,
+        "greeks": {
+         "delta": 0.5,
+         "gamma": 0.0004,
+         "theta": -40,
+         "vega": 30
+        }
+       },
+       "pe": {
+        "security_id": 910743,
+        "last_price": 270.05,
+        "top_bid_price": 270,
+        "top_ask_price": 270.1,
+        "top_bid_quantity": 40,
+        "top_ask_quantity": 60,
+        "oi": 574300,
+        "previous_oi": 480000,
+        "volume": 2000000,
+        "previous_volume": 1000000,
+        "previous_close_price": 264.649,
+        "average_price": 270.05,
+        "implied_volatility": 8.6,
+        "greeks": {
+         "delta": 0.5,
+         "gamma": 0.0004,
+         "theta": -40,
+         "vega": 30
+        }
+       }
+      },
+      "74400.000000": {
+       "ce": {
+        "security_id": 900744,
+        "last_price": 517.1,
+        "top_bid_price": 517.05,
+        "top_ask_price": 517.15,
+        "top_bid_quantity": 40,
+        "top_ask_quantity": 60,
+        "oi": 574400,
+        "previous_oi": 480000,
+        "volume": 2000000,
+        "previous_volume": 1000000,
+        "previous_close_price": 506.75800000000004,
+        "average_price": 517.1,
+        "implied_volatility": 16,
+        "greeks": {
+         "delta": 0.5,
+         "gamma": 0.0004,
+         "theta": -40,
+         "vega": 30
+        }
+       },
+       "pe": {
+        "security_id": 910744,
+        "last_price": 303.7,
+        "top_bid_price": 303.65,
+        "top_ask_price": 303.75,
+        "top_bid_quantity": 40,
+        "top_ask_quantity": 60,
+        "oi": 574400,
+        "previous_oi": 480000,
+        "volume": 2000000,
+        "previous_volume": 1000000,
+        "previous_close_price": 297.626,
+        "average_price": 303.7,
+        "implied_volatility": 8.6,
+        "greeks": {
+         "delta": 0.5,
+         "gamma": 0.0004,
+         "theta": -40,
+         "vega": 30
+        }
+       }
+      },
+      "74500.000000": {
+       "ce": {
+        "security_id": 900745,
+        "last_price": 461.55,
+        "top_bid_price": 461.5,
+        "top_ask_price": 461.6,
+        "top_bid_quantity": 40,
+        "top_ask_quantity": 60,
+        "oi": 574500,
+        "previous_oi": 480000,
+        "volume": 2000000,
+        "previous_volume": 1000000,
+        "previous_close_price": 452.319,
+        "average_price": 461.55,
+        "implied_volatility": 16,
+        "greeks": {
+         "delta": 0.5,
+         "gamma": 0.0004,
+         "theta": -40,
+         "vega": 30
+        }
+       },
+       "pe": {
+        "security_id": 910745,
+        "last_price": 345.1,
+        "top_bid_price": 345.05,
+        "top_ask_price": 345.15,
+        "top_bid_quantity": 40,
+        "top_ask_quantity": 60,
+        "oi": 574500,
+        "previous_oi": 480000,
+        "volume": 2000000,
+        "previous_volume": 1000000,
+        "previous_close_price": 338.19800000000004,
+        "average_price": 345.1,
+        "implied_volatility": 8.6,
+        "greeks": {
+         "delta": 0.5,
+         "gamma": 0.0004,
+         "theta": -40,
+         "vega": 30
+        }
+       }
+      }
+     }
+    },
+    "opts": {
+     "reference": 74616.5745,
+     "bandPct": 0.002
+    }
+   },
+   "expected": {
+    "all": [
+     {
+      "strike": 74500,
+      "type": "CE",
+      "securityId": "900745",
+      "lastPrice": 461.55,
+      "topBid": 461.5,
+      "topAsk": 461.6,
+      "topBidQty": 40,
+      "topAskQty": 60,
+      "midPrice": 461.55,
+      "quotedSpreadPct": 0.021666125013546256,
+      "oi": 574500,
+      "volume": 2000000,
+      "candidate": true,
+      "rejectReasons": []
+     },
+     {
+      "strike": 74500,
+      "type": "PE",
+      "securityId": "910745",
+      "lastPrice": 345.1,
+      "topBid": 345.05,
+      "topAsk": 345.15,
+      "topBidQty": 40,
+      "topAskQty": 60,
+      "midPrice": 345.1,
+      "quotedSpreadPct": 0.02897710808460327,
+      "oi": 574500,
+      "volume": 2000000,
+      "candidate": true,
+      "rejectReasons": []
+     }
+    ],
+    "candidates": [
+     {
+      "strike": 74500,
+      "type": "CE",
+      "securityId": "900745",
+      "lastPrice": 461.55,
+      "topBid": 461.5,
+      "topAsk": 461.6,
+      "topBidQty": 40,
+      "topAskQty": 60,
+      "midPrice": 461.55,
+      "quotedSpreadPct": 0.021666125013546256,
+      "oi": 574500,
+      "volume": 2000000,
+      "candidate": true,
+      "rejectReasons": []
+     },
+     {
+      "strike": 74500,
+      "type": "PE",
+      "securityId": "910745",
+      "lastPrice": 345.1,
+      "topBid": 345.05,
+      "topAsk": 345.15,
+      "topBidQty": 40,
+      "topAskQty": 60,
+      "midPrice": 345.1,
+      "quotedSpreadPct": 0.02897710808460327,
+      "oi": 574500,
+      "volume": 2000000,
+      "candidate": true,
+      "rejectReasons": []
+     }
+    ]
+   }
+  },
+  {
+   "id": "screenChain/gm-wide",
+   "input": {
+    "raw": {
+     "last_price": 74294.96,
+     "oc": {
+      "74100.000000": {
+       "ce": {
+        "security_id": 900741,
+        "last_price": 713.6,
+        "top_bid_price": 673.6,
+        "top_ask_price": 753.6,
+        "top_bid_quantity": 40,
+        "top_ask_quantity": 60,
+        "oi": 574100,
+        "previous_oi": 480000,
+        "volume": 2000000,
+        "previous_volume": 1000000,
+        "previous_close_price": 699.328,
+        "average_price": 713.6,
+        "implied_volatility": 16,
+        "greeks": {
+         "delta": 0.5,
+         "gamma": 0.0004,
+         "theta": -40,
+         "vega": 30
+        }
+       },
+       "pe": {
+        "security_id": 910741,
+        "last_price": 208.3,
+        "top_bid_price": 168.3,
+        "top_ask_price": 248.3,
+        "top_bid_quantity": 40,
+        "top_ask_quantity": 60,
+        "oi": 574100,
+        "previous_oi": 480000,
+        "volume": 2000000,
+        "previous_volume": 1000000,
+        "previous_close_price": 204.13400000000001,
+        "average_price": 208.3,
+        "implied_volatility": 8.6,
+        "greeks": {
+         "delta": 0.5,
+         "gamma": 0.0004,
+         "theta": -40,
+         "vega": 30
+        }
+       }
+      },
+      "74200.000000": {
+       "ce": {
+        "security_id": 900742,
+        "last_price": 655,
+        "top_bid_price": 615,
+        "top_ask_price": 695,
+        "top_bid_quantity": 40,
+        "top_ask_quantity": 60,
+        "oi": 574200,
+        "previous_oi": 480000,
+        "volume": 2000000,
+        "previous_volume": 1000000,
+        "previous_close_price": 641.9,
+        "average_price": 655,
+        "implied_volatility": 16,
+        "greeks": {
+         "delta": 0.5,
+         "gamma": 0.0004,
+         "theta": -40,
+         "vega": 30
+        }
+       },
+       "pe": {
+        "security_id": 910742,
+        "last_price": 236.7,
+        "top_bid_price": 196.7,
+        "top_ask_price": 276.7,
+        "top_bid_quantity": 40,
+        "top_ask_quantity": 60,
+        "oi": 574200,
+        "previous_oi": 480000,
+        "volume": 2000000,
+        "previous_volume": 1000000,
+        "previous_close_price": 231.96599999999998,
+        "average_price": 236.7,
+        "implied_volatility": 8.6,
+        "greeks": {
+         "delta": 0.5,
+         "gamma": 0.0004,
+         "theta": -40,
+         "vega": 30
+        }
+       }
+      },
+      "74300.000000": {
+       "ce": {
+        "security_id": 900743,
+        "last_price": 588,
+        "top_bid_price": 548,
+        "top_ask_price": 628,
+        "top_bid_quantity": 40,
+        "top_ask_quantity": 60,
+        "oi": 574300,
+        "previous_oi": 480000,
+        "volume": 2000000,
+        "previous_volume": 1000000,
+        "previous_close_price": 576.24,
+        "average_price": 588,
+        "implied_volatility": 16,
+        "greeks": {
+         "delta": 0.5,
+         "gamma": 0.0004,
+         "theta": -40,
+         "vega": 30
+        }
+       },
+       "pe": {
+        "security_id": 910743,
+        "last_price": 270.05,
+        "top_bid_price": 230.05,
+        "top_ask_price": 310.05,
+        "top_bid_quantity": 40,
+        "top_ask_quantity": 60,
+        "oi": 574300,
+        "previous_oi": 480000,
+        "volume": 2000000,
+        "previous_volume": 1000000,
+        "previous_close_price": 264.649,
+        "average_price": 270.05,
+        "implied_volatility": 8.6,
+        "greeks": {
+         "delta": 0.5,
+         "gamma": 0.0004,
+         "theta": -40,
+         "vega": 30
+        }
+       }
+      },
+      "74400.000000": {
+       "ce": {
+        "security_id": 900744,
+        "last_price": 517.1,
+        "top_bid_price": 477.1,
+        "top_ask_price": 557.1,
+        "top_bid_quantity": 40,
+        "top_ask_quantity": 60,
+        "oi": 574400,
+        "previous_oi": 480000,
+        "volume": 2000000,
+        "previous_volume": 1000000,
+        "previous_close_price": 506.75800000000004,
+        "average_price": 517.1,
+        "implied_volatility": 16,
+        "greeks": {
+         "delta": 0.5,
+         "gamma": 0.0004,
+         "theta": -40,
+         "vega": 30
+        }
+       },
+       "pe": {
+        "security_id": 910744,
+        "last_price": 303.7,
+        "top_bid_price": 263.7,
+        "top_ask_price": 343.7,
+        "top_bid_quantity": 40,
+        "top_ask_quantity": 60,
+        "oi": 574400,
+        "previous_oi": 480000,
+        "volume": 2000000,
+        "previous_volume": 1000000,
+        "previous_close_price": 297.626,
+        "average_price": 303.7,
+        "implied_volatility": 8.6,
+        "greeks": {
+         "delta": 0.5,
+         "gamma": 0.0004,
+         "theta": -40,
+         "vega": 30
+        }
+       }
+      },
+      "74500.000000": {
+       "ce": {
+        "security_id": 900745,
+        "last_price": 461.55,
+        "top_bid_price": 421.55,
+        "top_ask_price": 501.55,
+        "top_bid_quantity": 40,
+        "top_ask_quantity": 60,
+        "oi": 574500,
+        "previous_oi": 480000,
+        "volume": 2000000,
+        "previous_volume": 1000000,
+        "previous_close_price": 452.319,
+        "average_price": 461.55,
+        "implied_volatility": 16,
+        "greeks": {
+         "delta": 0.5,
+         "gamma": 0.0004,
+         "theta": -40,
+         "vega": 30
+        }
+       },
+       "pe": {
+        "security_id": 910745,
+        "last_price": 345.1,
+        "top_bid_price": 305.1,
+        "top_ask_price": 385.1,
+        "top_bid_quantity": 40,
+        "top_ask_quantity": 60,
+        "oi": 574500,
+        "previous_oi": 480000,
+        "volume": 2000000,
+        "previous_volume": 1000000,
+        "previous_close_price": 338.19800000000004,
+        "average_price": 345.1,
+        "implied_volatility": 8.6,
+        "greeks": {
+         "delta": 0.5,
+         "gamma": 0.0004,
+         "theta": -40,
+         "vega": 30
+        }
+       }
+      }
+     }
+    },
+    "opts": {
+     "maxQuotedSpreadPct": 1.5
+    }
+   },
+   "expected": {
+    "all": [
+     {
+      "strike": 74100,
+      "type": "CE",
+      "securityId": "900741",
+      "lastPrice": 713.6,
+      "topBid": 673.6,
+      "topAsk": 753.6,
+      "topBidQty": 40,
+      "topAskQty": 60,
+      "midPrice": 713.6,
+      "quotedSpreadPct": 11.210762331838565,
+      "oi": 574100,
+      "volume": 2000000,
+      "candidate": false,
+      "rejectReasons": [
+       "Quoted spread 11.21% exceeds 1.5%."
+      ]
+     },
+     {
+      "strike": 74100,
+      "type": "PE",
+      "securityId": "910741",
+      "lastPrice": 208.3,
+      "topBid": 168.3,
+      "topAsk": 248.3,
+      "topBidQty": 40,
+      "topAskQty": 60,
+      "midPrice": 208.3,
+      "quotedSpreadPct": 38.40614498319731,
+      "oi": 574100,
+      "volume": 2000000,
+      "candidate": false,
+      "rejectReasons": [
+       "Quoted spread 38.41% exceeds 1.5%."
+      ]
+     },
+     {
+      "strike": 74200,
+      "type": "CE",
+      "securityId": "900742",
+      "lastPrice": 655,
+      "topBid": 615,
+      "topAsk": 695,
+      "topBidQty": 40,
+      "topAskQty": 60,
+      "midPrice": 655,
+      "quotedSpreadPct": 12.213740458015266,
+      "oi": 574200,
+      "volume": 2000000,
+      "candidate": false,
+      "rejectReasons": [
+       "Quoted spread 12.21% exceeds 1.5%."
+      ]
+     },
+     {
+      "strike": 74200,
+      "type": "PE",
+      "securityId": "910742",
+      "lastPrice": 236.7,
+      "topBid": 196.7,
+      "topAsk": 276.7,
+      "topBidQty": 40,
+      "topAskQty": 60,
+      "midPrice": 236.7,
+      "quotedSpreadPct": 33.798056611744826,
+      "oi": 574200,
+      "volume": 2000000,
+      "candidate": false,
+      "rejectReasons": [
+       "Quoted spread 33.80% exceeds 1.5%."
+      ]
+     },
+     {
+      "strike": 74300,
+      "type": "CE",
+      "securityId": "900743",
+      "lastPrice": 588,
+      "topBid": 548,
+      "topAsk": 628,
+      "topBidQty": 40,
+      "topAskQty": 60,
+      "midPrice": 588,
+      "quotedSpreadPct": 13.60544217687075,
+      "oi": 574300,
+      "volume": 2000000,
+      "candidate": false,
+      "rejectReasons": [
+       "Quoted spread 13.61% exceeds 1.5%."
+      ]
+     },
+     {
+      "strike": 74300,
+      "type": "PE",
+      "securityId": "910743",
+      "lastPrice": 270.05,
+      "topBid": 230.05,
+      "topAsk": 310.05,
+      "topBidQty": 40,
+      "topAskQty": 60,
+      "midPrice": 270.05,
+      "quotedSpreadPct": 29.624143677096832,
+      "oi": 574300,
+      "volume": 2000000,
+      "candidate": false,
+      "rejectReasons": [
+       "Quoted spread 29.62% exceeds 1.5%."
+      ]
+     },
+     {
+      "strike": 74400,
+      "type": "CE",
+      "securityId": "900744",
+      "lastPrice": 517.1,
+      "topBid": 477.1,
+      "topAsk": 557.1,
+      "topBidQty": 40,
+      "topAskQty": 60,
+      "midPrice": 517.1,
+      "quotedSpreadPct": 15.470895378070004,
+      "oi": 574400,
+      "volume": 2000000,
+      "candidate": false,
+      "rejectReasons": [
+       "Quoted spread 15.47% exceeds 1.5%."
+      ]
+     },
+     {
+      "strike": 74400,
+      "type": "PE",
+      "securityId": "910744",
+      "lastPrice": 303.7,
+      "topBid": 263.7,
+      "topAsk": 343.7,
+      "topBidQty": 40,
+      "topAskQty": 60,
+      "midPrice": 303.7,
+      "quotedSpreadPct": 26.341784655910438,
+      "oi": 574400,
+      "volume": 2000000,
+      "candidate": false,
+      "rejectReasons": [
+       "Quoted spread 26.34% exceeds 1.5%."
+      ]
+     },
+     {
+      "strike": 74500,
+      "type": "CE",
+      "securityId": "900745",
+      "lastPrice": 461.55,
+      "topBid": 421.55,
+      "topAsk": 501.55,
+      "topBidQty": 40,
+      "topAskQty": 60,
+      "midPrice": 461.55,
+      "quotedSpreadPct": 17.332900010833065,
+      "oi": 574500,
+      "volume": 2000000,
+      "candidate": false,
+      "rejectReasons": [
+       "Quoted spread 17.33% exceeds 1.5%."
+      ]
+     },
+     {
+      "strike": 74500,
+      "type": "PE",
+      "securityId": "910745",
+      "lastPrice": 345.1,
+      "topBid": 305.1,
+      "topAsk": 385.1,
+      "topBidQty": 40,
+      "topAskQty": 60,
+      "midPrice": 345.1,
+      "quotedSpreadPct": 23.181686467690525,
+      "oi": 574500,
+      "volume": 2000000,
+      "candidate": false,
+      "rejectReasons": [
+       "Quoted spread 23.18% exceeds 1.5%."
+      ]
+     }
+    ],
+    "candidates": []
+   }
+  },
+  {
+   "id": "screenChain/gm-minOi",
+   "input": {
+    "raw": {
+     "last_price": 74294.96,
+     "oc": {
+      "74100.000000": {
+       "ce": {
+        "security_id": 900741,
+        "last_price": 713.6,
+        "top_bid_price": 713.55,
+        "top_ask_price": 713.65,
+        "top_bid_quantity": 40,
+        "top_ask_quantity": 60,
+        "oi": 574100,
+        "previous_oi": 480000,
+        "volume": 2000000,
+        "previous_volume": 1000000,
+        "previous_close_price": 699.328,
+        "average_price": 713.6,
+        "implied_volatility": 16,
+        "greeks": {
+         "delta": 0.5,
+         "gamma": 0.0004,
+         "theta": -40,
+         "vega": 30
+        }
+       },
+       "pe": {
+        "security_id": 910741,
+        "last_price": 208.3,
+        "top_bid_price": 208.25,
+        "top_ask_price": 208.35,
+        "top_bid_quantity": 40,
+        "top_ask_quantity": 60,
+        "oi": 574100,
+        "previous_oi": 480000,
+        "volume": 2000000,
+        "previous_volume": 1000000,
+        "previous_close_price": 204.13400000000001,
+        "average_price": 208.3,
+        "implied_volatility": 8.6,
+        "greeks": {
+         "delta": 0.5,
+         "gamma": 0.0004,
+         "theta": -40,
+         "vega": 30
+        }
+       }
+      },
+      "74200.000000": {
+       "ce": {
+        "security_id": 900742,
+        "last_price": 655,
+        "top_bid_price": 654.95,
+        "top_ask_price": 655.05,
+        "top_bid_quantity": 40,
+        "top_ask_quantity": 60,
+        "oi": 574200,
+        "previous_oi": 480000,
+        "volume": 2000000,
+        "previous_volume": 1000000,
+        "previous_close_price": 641.9,
+        "average_price": 655,
+        "implied_volatility": 16,
+        "greeks": {
+         "delta": 0.5,
+         "gamma": 0.0004,
+         "theta": -40,
+         "vega": 30
+        }
+       },
+       "pe": {
+        "security_id": 910742,
+        "last_price": 236.7,
+        "top_bid_price": 236.65,
+        "top_ask_price": 236.75,
+        "top_bid_quantity": 40,
+        "top_ask_quantity": 60,
+        "oi": 574200,
+        "previous_oi": 480000,
+        "volume": 2000000,
+        "previous_volume": 1000000,
+        "previous_close_price": 231.96599999999998,
+        "average_price": 236.7,
+        "implied_volatility": 8.6,
+        "greeks": {
+         "delta": 0.5,
+         "gamma": 0.0004,
+         "theta": -40,
+         "vega": 30
+        }
+       }
+      },
+      "74300.000000": {
+       "ce": {
+        "security_id": 900743,
+        "last_price": 588,
+        "top_bid_price": 587.95,
+        "top_ask_price": 588.05,
+        "top_bid_quantity": 40,
+        "top_ask_quantity": 60,
+        "oi": 574300,
+        "previous_oi": 480000,
+        "volume": 2000000,
+        "previous_volume": 1000000,
+        "previous_close_price": 576.24,
+        "average_price": 588,
+        "implied_volatility": 16,
+        "greeks": {
+         "delta": 0.5,
+         "gamma": 0.0004,
+         "theta": -40,
+         "vega": 30
+        }
+       },
+       "pe": {
+        "security_id": 910743,
+        "last_price": 270.05,
+        "top_bid_price": 270,
+        "top_ask_price": 270.1,
+        "top_bid_quantity": 40,
+        "top_ask_quantity": 60,
+        "oi": 574300,
+        "previous_oi": 480000,
+        "volume": 2000000,
+        "previous_volume": 1000000,
+        "previous_close_price": 264.649,
+        "average_price": 270.05,
+        "implied_volatility": 8.6,
+        "greeks": {
+         "delta": 0.5,
+         "gamma": 0.0004,
+         "theta": -40,
+         "vega": 30
+        }
+       }
+      },
+      "74400.000000": {
+       "ce": {
+        "security_id": 900744,
+        "last_price": 517.1,
+        "top_bid_price": 517.05,
+        "top_ask_price": 517.15,
+        "top_bid_quantity": 40,
+        "top_ask_quantity": 60,
+        "oi": 574400,
+        "previous_oi": 480000,
+        "volume": 2000000,
+        "previous_volume": 1000000,
+        "previous_close_price": 506.75800000000004,
+        "average_price": 517.1,
+        "implied_volatility": 16,
+        "greeks": {
+         "delta": 0.5,
+         "gamma": 0.0004,
+         "theta": -40,
+         "vega": 30
+        }
+       },
+       "pe": {
+        "security_id": 910744,
+        "last_price": 303.7,
+        "top_bid_price": 303.65,
+        "top_ask_price": 303.75,
+        "top_bid_quantity": 40,
+        "top_ask_quantity": 60,
+        "oi": 574400,
+        "previous_oi": 480000,
+        "volume": 2000000,
+        "previous_volume": 1000000,
+        "previous_close_price": 297.626,
+        "average_price": 303.7,
+        "implied_volatility": 8.6,
+        "greeks": {
+         "delta": 0.5,
+         "gamma": 0.0004,
+         "theta": -40,
+         "vega": 30
+        }
+       }
+      },
+      "74500.000000": {
+       "ce": {
+        "security_id": 900745,
+        "last_price": 461.55,
+        "top_bid_price": 461.5,
+        "top_ask_price": 461.6,
+        "top_bid_quantity": 40,
+        "top_ask_quantity": 60,
+        "oi": 574500,
+        "previous_oi": 480000,
+        "volume": 2000000,
+        "previous_volume": 1000000,
+        "previous_close_price": 452.319,
+        "average_price": 461.55,
+        "implied_volatility": 16,
+        "greeks": {
+         "delta": 0.5,
+         "gamma": 0.0004,
+         "theta": -40,
+         "vega": 30
+        }
+       },
+       "pe": {
+        "security_id": 910745,
+        "last_price": 345.1,
+        "top_bid_price": 345.05,
+        "top_ask_price": 345.15,
+        "top_bid_quantity": 40,
+        "top_ask_quantity": 60,
+        "oi": 574500,
+        "previous_oi": 480000,
+        "volume": 2000000,
+        "previous_volume": 1000000,
+        "previous_close_price": 338.19800000000004,
+        "average_price": 345.1,
+        "implied_volatility": 8.6,
+        "greeks": {
+         "delta": 0.5,
+         "gamma": 0.0004,
+         "theta": -40,
+         "vega": 30
+        }
+       }
+      }
+     }
+    },
+    "opts": {
+     "minOi": 574300
+    }
+   },
+   "expected": {
+    "all": [
+     {
+      "strike": 74100,
+      "type": "CE",
+      "securityId": "900741",
+      "lastPrice": 713.6,
+      "topBid": 713.55,
+      "topAsk": 713.65,
+      "topBidQty": 40,
+      "topAskQty": 60,
+      "midPrice": 713.5999999999999,
+      "quotedSpreadPct": 0.014013452914801394,
+      "oi": 574100,
+      "volume": 2000000,
+      "candidate": false,
+      "rejectReasons": [
+       "OI 574100 below 574300."
+      ]
+     },
+     {
+      "strike": 74100,
+      "type": "PE",
+      "securityId": "910741",
+      "lastPrice": 208.3,
+      "topBid": 208.25,
+      "topAsk": 208.35,
+      "topBidQty": 40,
+      "topAskQty": 60,
+      "midPrice": 208.3,
+      "quotedSpreadPct": 0.04800768122899391,
+      "oi": 574100,
+      "volume": 2000000,
+      "candidate": false,
+      "rejectReasons": [
+       "OI 574100 below 574300."
+      ]
+     },
+     {
+      "strike": 74200,
+      "type": "CE",
+      "securityId": "900742",
+      "lastPrice": 655,
+      "topBid": 654.95,
+      "topAsk": 655.05,
+      "topBidQty": 40,
+      "topAskQty": 60,
+      "midPrice": 655,
+      "quotedSpreadPct": 0.015267175572505199,
+      "oi": 574200,
+      "volume": 2000000,
+      "candidate": false,
+      "rejectReasons": [
+       "OI 574200 below 574300."
+      ]
+     },
+     {
+      "strike": 74200,
+      "type": "PE",
+      "securityId": "910742",
+      "lastPrice": 236.7,
+      "topBid": 236.65,
+      "topAsk": 236.75,
+      "topBidQty": 40,
+      "topAskQty": 60,
+      "midPrice": 236.7,
+      "quotedSpreadPct": 0.04224757076467863,
+      "oi": 574200,
+      "volume": 2000000,
+      "candidate": false,
+      "rejectReasons": [
+       "OI 574200 below 574300."
+      ]
+     },
+     {
+      "strike": 74300,
+      "type": "CE",
+      "securityId": "900743",
+      "lastPrice": 588,
+      "topBid": 587.95,
+      "topAsk": 588.05,
+      "topBidQty": 40,
+      "topAskQty": 60,
+      "midPrice": 588,
+      "quotedSpreadPct": 0.017006802721072967,
+      "oi": 574300,
+      "volume": 2000000,
+      "candidate": true,
+      "rejectReasons": []
+     },
+     {
+      "strike": 74300,
+      "type": "PE",
+      "securityId": "910743",
+      "lastPrice": 270.05,
+      "topBid": 270,
+      "topAsk": 270.1,
+      "topBidQty": 40,
+      "topAskQty": 60,
+      "midPrice": 270.05,
+      "quotedSpreadPct": 0.03703017959637946,
+      "oi": 574300,
+      "volume": 2000000,
+      "candidate": true,
+      "rejectReasons": []
+     },
+     {
+      "strike": 74400,
+      "type": "CE",
+      "securityId": "900744",
+      "lastPrice": 517.1,
+      "topBid": 517.05,
+      "topAsk": 517.15,
+      "topBidQty": 40,
+      "topAskQty": 60,
+      "midPrice": 517.0999999999999,
+      "quotedSpreadPct": 0.019338619222591908,
+      "oi": 574400,
+      "volume": 2000000,
+      "candidate": true,
+      "rejectReasons": []
+     },
+     {
+      "strike": 74400,
+      "type": "PE",
+      "securityId": "910744",
+      "lastPrice": 303.7,
+      "topBid": 303.65,
+      "topAsk": 303.75,
+      "topBidQty": 40,
+      "topAskQty": 60,
+      "midPrice": 303.7,
+      "quotedSpreadPct": 0.032927230819895535,
+      "oi": 574400,
+      "volume": 2000000,
+      "candidate": true,
+      "rejectReasons": []
+     },
+     {
+      "strike": 74500,
+      "type": "CE",
+      "securityId": "900745",
+      "lastPrice": 461.55,
+      "topBid": 461.5,
+      "topAsk": 461.6,
+      "topBidQty": 40,
+      "topAskQty": 60,
+      "midPrice": 461.55,
+      "quotedSpreadPct": 0.021666125013546256,
+      "oi": 574500,
+      "volume": 2000000,
+      "candidate": true,
+      "rejectReasons": []
+     },
+     {
+      "strike": 74500,
+      "type": "PE",
+      "securityId": "910745",
+      "lastPrice": 345.1,
+      "topBid": 345.05,
+      "topAsk": 345.15,
+      "topBidQty": 40,
+      "topAskQty": 60,
+      "midPrice": 345.1,
+      "quotedSpreadPct": 0.02897710808460327,
+      "oi": 574500,
+      "volume": 2000000,
+      "candidate": true,
+      "rejectReasons": []
+     }
+    ],
+    "candidates": [
+     {
+      "strike": 74300,
+      "type": "CE",
+      "securityId": "900743",
+      "lastPrice": 588,
+      "topBid": 587.95,
+      "topAsk": 588.05,
+      "topBidQty": 40,
+      "topAskQty": 60,
+      "midPrice": 588,
+      "quotedSpreadPct": 0.017006802721072967,
+      "oi": 574300,
+      "volume": 2000000,
+      "candidate": true,
+      "rejectReasons": []
+     },
+     {
+      "strike": 74400,
+      "type": "CE",
+      "securityId": "900744",
+      "lastPrice": 517.1,
+      "topBid": 517.05,
+      "topAsk": 517.15,
+      "topBidQty": 40,
+      "topAskQty": 60,
+      "midPrice": 517.0999999999999,
+      "quotedSpreadPct": 0.019338619222591908,
+      "oi": 574400,
+      "volume": 2000000,
+      "candidate": true,
+      "rejectReasons": []
+     },
+     {
+      "strike": 74500,
+      "type": "CE",
+      "securityId": "900745",
+      "lastPrice": 461.55,
+      "topBid": 461.5,
+      "topAsk": 461.6,
+      "topBidQty": 40,
+      "topAskQty": 60,
+      "midPrice": 461.55,
+      "quotedSpreadPct": 0.021666125013546256,
+      "oi": 574500,
+      "volume": 2000000,
+      "candidate": true,
+      "rejectReasons": []
+     },
+     {
+      "strike": 74500,
+      "type": "PE",
+      "securityId": "910745",
+      "lastPrice": 345.1,
+      "topBid": 345.05,
+      "topAsk": 345.15,
+      "topBidQty": 40,
+      "topAskQty": 60,
+      "midPrice": 345.1,
+      "quotedSpreadPct": 0.02897710808460327,
+      "oi": 574500,
+      "volume": 2000000,
+      "candidate": true,
+      "rejectReasons": []
+     },
+     {
+      "strike": 74400,
+      "type": "PE",
+      "securityId": "910744",
+      "lastPrice": 303.7,
+      "topBid": 303.65,
+      "topAsk": 303.75,
+      "topBidQty": 40,
+      "topAskQty": 60,
+      "midPrice": 303.7,
+      "quotedSpreadPct": 0.032927230819895535,
+      "oi": 574400,
+      "volume": 2000000,
+      "candidate": true,
+      "rejectReasons": []
+     },
+     {
+      "strike": 74300,
+      "type": "PE",
+      "securityId": "910743",
+      "lastPrice": 270.05,
+      "topBid": 270,
+      "topAsk": 270.1,
+      "topBidQty": 40,
+      "topAskQty": 60,
+      "midPrice": 270.05,
+      "quotedSpreadPct": 0.03703017959637946,
+      "oi": 574300,
+      "volume": 2000000,
+      "candidate": true,
+      "rejectReasons": []
+     }
+    ]
+   }
+  },
+  {
+   "id": "screenChain/gm-cap2",
+   "input": {
+    "raw": {
+     "last_price": 74294.96,
+     "oc": {
+      "74100.000000": {
+       "ce": {
+        "security_id": 900741,
+        "last_price": 713.6,
+        "top_bid_price": 713.55,
+        "top_ask_price": 713.65,
+        "top_bid_quantity": 40,
+        "top_ask_quantity": 60,
+        "oi": 574100,
+        "previous_oi": 480000,
+        "volume": 2000000,
+        "previous_volume": 1000000,
+        "previous_close_price": 699.328,
+        "average_price": 713.6,
+        "implied_volatility": 16,
+        "greeks": {
+         "delta": 0.5,
+         "gamma": 0.0004,
+         "theta": -40,
+         "vega": 30
+        }
+       },
+       "pe": {
+        "security_id": 910741,
+        "last_price": 208.3,
+        "top_bid_price": 208.25,
+        "top_ask_price": 208.35,
+        "top_bid_quantity": 40,
+        "top_ask_quantity": 60,
+        "oi": 574100,
+        "previous_oi": 480000,
+        "volume": 2000000,
+        "previous_volume": 1000000,
+        "previous_close_price": 204.13400000000001,
+        "average_price": 208.3,
+        "implied_volatility": 8.6,
+        "greeks": {
+         "delta": 0.5,
+         "gamma": 0.0004,
+         "theta": -40,
+         "vega": 30
+        }
+       }
+      },
+      "74200.000000": {
+       "ce": {
+        "security_id": 900742,
+        "last_price": 655,
+        "top_bid_price": 654.95,
+        "top_ask_price": 655.05,
+        "top_bid_quantity": 40,
+        "top_ask_quantity": 60,
+        "oi": 574200,
+        "previous_oi": 480000,
+        "volume": 2000000,
+        "previous_volume": 1000000,
+        "previous_close_price": 641.9,
+        "average_price": 655,
+        "implied_volatility": 16,
+        "greeks": {
+         "delta": 0.5,
+         "gamma": 0.0004,
+         "theta": -40,
+         "vega": 30
+        }
+       },
+       "pe": {
+        "security_id": 910742,
+        "last_price": 236.7,
+        "top_bid_price": 236.65,
+        "top_ask_price": 236.75,
+        "top_bid_quantity": 40,
+        "top_ask_quantity": 60,
+        "oi": 574200,
+        "previous_oi": 480000,
+        "volume": 2000000,
+        "previous_volume": 1000000,
+        "previous_close_price": 231.96599999999998,
+        "average_price": 236.7,
+        "implied_volatility": 8.6,
+        "greeks": {
+         "delta": 0.5,
+         "gamma": 0.0004,
+         "theta": -40,
+         "vega": 30
+        }
+       }
+      },
+      "74300.000000": {
+       "ce": {
+        "security_id": 900743,
+        "last_price": 588,
+        "top_bid_price": 587.95,
+        "top_ask_price": 588.05,
+        "top_bid_quantity": 40,
+        "top_ask_quantity": 60,
+        "oi": 574300,
+        "previous_oi": 480000,
+        "volume": 2000000,
+        "previous_volume": 1000000,
+        "previous_close_price": 576.24,
+        "average_price": 588,
+        "implied_volatility": 16,
+        "greeks": {
+         "delta": 0.5,
+         "gamma": 0.0004,
+         "theta": -40,
+         "vega": 30
+        }
+       },
+       "pe": {
+        "security_id": 910743,
+        "last_price": 270.05,
+        "top_bid_price": 270,
+        "top_ask_price": 270.1,
+        "top_bid_quantity": 40,
+        "top_ask_quantity": 60,
+        "oi": 574300,
+        "previous_oi": 480000,
+        "volume": 2000000,
+        "previous_volume": 1000000,
+        "previous_close_price": 264.649,
+        "average_price": 270.05,
+        "implied_volatility": 8.6,
+        "greeks": {
+         "delta": 0.5,
+         "gamma": 0.0004,
+         "theta": -40,
+         "vega": 30
+        }
+       }
+      },
+      "74400.000000": {
+       "ce": {
+        "security_id": 900744,
+        "last_price": 517.1,
+        "top_bid_price": 517.05,
+        "top_ask_price": 517.15,
+        "top_bid_quantity": 40,
+        "top_ask_quantity": 60,
+        "oi": 574400,
+        "previous_oi": 480000,
+        "volume": 2000000,
+        "previous_volume": 1000000,
+        "previous_close_price": 506.75800000000004,
+        "average_price": 517.1,
+        "implied_volatility": 16,
+        "greeks": {
+         "delta": 0.5,
+         "gamma": 0.0004,
+         "theta": -40,
+         "vega": 30
+        }
+       },
+       "pe": {
+        "security_id": 910744,
+        "last_price": 303.7,
+        "top_bid_price": 303.65,
+        "top_ask_price": 303.75,
+        "top_bid_quantity": 40,
+        "top_ask_quantity": 60,
+        "oi": 574400,
+        "previous_oi": 480000,
+        "volume": 2000000,
+        "previous_volume": 1000000,
+        "previous_close_price": 297.626,
+        "average_price": 303.7,
+        "implied_volatility": 8.6,
+        "greeks": {
+         "delta": 0.5,
+         "gamma": 0.0004,
+         "theta": -40,
+         "vega": 30
+        }
+       }
+      },
+      "74500.000000": {
+       "ce": {
+        "security_id": 900745,
+        "last_price": 461.55,
+        "top_bid_price": 461.5,
+        "top_ask_price": 461.6,
+        "top_bid_quantity": 40,
+        "top_ask_quantity": 60,
+        "oi": 574500,
+        "previous_oi": 480000,
+        "volume": 2000000,
+        "previous_volume": 1000000,
+        "previous_close_price": 452.319,
+        "average_price": 461.55,
+        "implied_volatility": 16,
+        "greeks": {
+         "delta": 0.5,
+         "gamma": 0.0004,
+         "theta": -40,
+         "vega": 30
+        }
+       },
+       "pe": {
+        "security_id": 910745,
+        "last_price": 345.1,
+        "top_bid_price": 345.05,
+        "top_ask_price": 345.15,
+        "top_bid_quantity": 40,
+        "top_ask_quantity": 60,
+        "oi": 574500,
+        "previous_oi": 480000,
+        "volume": 2000000,
+        "previous_volume": 1000000,
+        "previous_close_price": 338.19800000000004,
+        "average_price": 345.1,
+        "implied_volatility": 8.6,
+        "greeks": {
+         "delta": 0.5,
+         "gamma": 0.0004,
+         "theta": -40,
+         "vega": 30
+        }
+       }
+      }
+     }
+    },
+    "opts": {
+     "maxCandidates": 2
+    }
+   },
+   "expected": {
+    "all": [
+     {
+      "strike": 74100,
+      "type": "CE",
+      "securityId": "900741",
+      "lastPrice": 713.6,
+      "topBid": 713.55,
+      "topAsk": 713.65,
+      "topBidQty": 40,
+      "topAskQty": 60,
+      "midPrice": 713.5999999999999,
+      "quotedSpreadPct": 0.014013452914801394,
+      "oi": 574100,
+      "volume": 2000000,
+      "candidate": true,
+      "rejectReasons": []
+     },
+     {
+      "strike": 74100,
+      "type": "PE",
+      "securityId": "910741",
+      "lastPrice": 208.3,
+      "topBid": 208.25,
+      "topAsk": 208.35,
+      "topBidQty": 40,
+      "topAskQty": 60,
+      "midPrice": 208.3,
+      "quotedSpreadPct": 0.04800768122899391,
+      "oi": 574100,
+      "volume": 2000000,
+      "candidate": true,
+      "rejectReasons": []
+     },
+     {
+      "strike": 74200,
+      "type": "CE",
+      "securityId": "900742",
+      "lastPrice": 655,
+      "topBid": 654.95,
+      "topAsk": 655.05,
+      "topBidQty": 40,
+      "topAskQty": 60,
+      "midPrice": 655,
+      "quotedSpreadPct": 0.015267175572505199,
+      "oi": 574200,
+      "volume": 2000000,
+      "candidate": true,
+      "rejectReasons": []
+     },
+     {
+      "strike": 74200,
+      "type": "PE",
+      "securityId": "910742",
+      "lastPrice": 236.7,
+      "topBid": 236.65,
+      "topAsk": 236.75,
+      "topBidQty": 40,
+      "topAskQty": 60,
+      "midPrice": 236.7,
+      "quotedSpreadPct": 0.04224757076467863,
+      "oi": 574200,
+      "volume": 2000000,
+      "candidate": true,
+      "rejectReasons": []
+     },
+     {
+      "strike": 74300,
+      "type": "CE",
+      "securityId": "900743",
+      "lastPrice": 588,
+      "topBid": 587.95,
+      "topAsk": 588.05,
+      "topBidQty": 40,
+      "topAskQty": 60,
+      "midPrice": 588,
+      "quotedSpreadPct": 0.017006802721072967,
+      "oi": 574300,
+      "volume": 2000000,
+      "candidate": true,
+      "rejectReasons": []
+     },
+     {
+      "strike": 74300,
+      "type": "PE",
+      "securityId": "910743",
+      "lastPrice": 270.05,
+      "topBid": 270,
+      "topAsk": 270.1,
+      "topBidQty": 40,
+      "topAskQty": 60,
+      "midPrice": 270.05,
+      "quotedSpreadPct": 0.03703017959637946,
+      "oi": 574300,
+      "volume": 2000000,
+      "candidate": true,
+      "rejectReasons": []
+     },
+     {
+      "strike": 74400,
+      "type": "CE",
+      "securityId": "900744",
+      "lastPrice": 517.1,
+      "topBid": 517.05,
+      "topAsk": 517.15,
+      "topBidQty": 40,
+      "topAskQty": 60,
+      "midPrice": 517.0999999999999,
+      "quotedSpreadPct": 0.019338619222591908,
+      "oi": 574400,
+      "volume": 2000000,
+      "candidate": true,
+      "rejectReasons": []
+     },
+     {
+      "strike": 74400,
+      "type": "PE",
+      "securityId": "910744",
+      "lastPrice": 303.7,
+      "topBid": 303.65,
+      "topAsk": 303.75,
+      "topBidQty": 40,
+      "topAskQty": 60,
+      "midPrice": 303.7,
+      "quotedSpreadPct": 0.032927230819895535,
+      "oi": 574400,
+      "volume": 2000000,
+      "candidate": true,
+      "rejectReasons": []
+     },
+     {
+      "strike": 74500,
+      "type": "CE",
+      "securityId": "900745",
+      "lastPrice": 461.55,
+      "topBid": 461.5,
+      "topAsk": 461.6,
+      "topBidQty": 40,
+      "topAskQty": 60,
+      "midPrice": 461.55,
+      "quotedSpreadPct": 0.021666125013546256,
+      "oi": 574500,
+      "volume": 2000000,
+      "candidate": true,
+      "rejectReasons": []
+     },
+     {
+      "strike": 74500,
+      "type": "PE",
+      "securityId": "910745",
+      "lastPrice": 345.1,
+      "topBid": 345.05,
+      "topAsk": 345.15,
+      "topBidQty": 40,
+      "topAskQty": 60,
+      "midPrice": 345.1,
+      "quotedSpreadPct": 0.02897710808460327,
+      "oi": 574500,
+      "volume": 2000000,
+      "candidate": true,
+      "rejectReasons": []
+     }
+    ],
+    "candidates": [
+     {
+      "strike": 74100,
+      "type": "CE",
+      "securityId": "900741",
+      "lastPrice": 713.6,
+      "topBid": 713.55,
+      "topAsk": 713.65,
+      "topBidQty": 40,
+      "topAskQty": 60,
+      "midPrice": 713.5999999999999,
+      "quotedSpreadPct": 0.014013452914801394,
+      "oi": 574100,
+      "volume": 2000000,
+      "candidate": true,
+      "rejectReasons": []
+     },
+     {
+      "strike": 74200,
+      "type": "CE",
+      "securityId": "900742",
+      "lastPrice": 655,
+      "topBid": 654.95,
+      "topAsk": 655.05,
+      "topBidQty": 40,
+      "topAskQty": 60,
+      "midPrice": 655,
+      "quotedSpreadPct": 0.015267175572505199,
+      "oi": 574200,
+      "volume": 2000000,
+      "candidate": true,
+      "rejectReasons": []
+     }
+    ]
+   }
+  },
+  {
+   "id": "screenChain/malformed",
+   "input": {
+    "raw": {
+     "last_price": null,
+     "oc": {
+      "74000": {
+       "ce": {
+        "security_id": 900001,
+        "last_price": "123.5",
+        "oi": "abc",
+        "top_bid_price": true,
+        "top_ask_price": null,
+        "implied_volatility": 0,
+        "greeks": {}
+       },
+       "pe": {
+        "security_id": "900002",
+        "last_price": -5,
+        "top_bid_price": 10,
+        "top_ask_price": 9,
+        "implied_volatility": 75,
+        "greeks": 0
+       }
+      },
+      "74100": {
+       "ce": [],
+       "pe": "not-a-leg"
+      },
+      "74200": {
+       "ce": {
+        "last_price": 0,
+        "implied_volatility": "12.5",
+        "greeks": {
+         "delta": "0.5",
+         "gamma": null
+        }
+       },
+       "pe": null
+      },
+      "74300": null,
+      "74400": 5
+     }
+    },
+    "opts": {}
+   },
+   "expected": {
+    "all": [
+     {
+      "strike": 74000,
+      "type": "CE",
+      "securityId": "900001",
+      "lastPrice": 123.5,
+      "topBid": null,
+      "topAsk": null,
+      "topBidQty": null,
+      "topAskQty": null,
+      "midPrice": null,
+      "quotedSpreadPct": null,
+      "oi": null,
+      "volume": null,
+      "candidate": false,
+      "rejectReasons": [
+       "No two-sided top-of-book.",
+       "Bid side shows no size.",
+       "Ask side shows no size."
+      ]
+     },
+     {
+      "strike": 74000,
+      "type": "PE",
+      "securityId": "900002",
+      "lastPrice": -5,
+      "topBid": 10,
+      "topAsk": 9,
+      "topBidQty": null,
+      "topAskQty": null,
+      "midPrice": 9.5,
+      "quotedSpreadPct": -10.526315789473683,
+      "oi": null,
+      "volume": null,
+      "candidate": false,
+      "rejectReasons": [
+       "Crossed top-of-book.",
+       "Bid side shows no size.",
+       "Ask side shows no size."
+      ]
+     },
+     {
+      "strike": 74100,
+      "type": "CE",
+      "securityId": null,
+      "lastPrice": null,
+      "topBid": null,
+      "topAsk": null,
+      "topBidQty": null,
+      "topAskQty": null,
+      "midPrice": null,
+      "quotedSpreadPct": null,
+      "oi": null,
+      "volume": null,
+      "candidate": false,
+      "rejectReasons": [
+       "No two-sided top-of-book.",
+       "Bid side shows no size.",
+       "Ask side shows no size.",
+       "No security_id — cannot fetch depth."
+      ]
+     },
+     {
+      "strike": 74200,
+      "type": "CE",
+      "securityId": null,
+      "lastPrice": 0,
+      "topBid": null,
+      "topAsk": null,
+      "topBidQty": null,
+      "topAskQty": null,
+      "midPrice": null,
+      "quotedSpreadPct": null,
+      "oi": null,
+      "volume": null,
+      "candidate": false,
+      "rejectReasons": [
+       "No two-sided top-of-book.",
+       "Bid side shows no size.",
+       "Ask side shows no size.",
+       "No security_id — cannot fetch depth."
+      ]
+     }
+    ],
+    "candidates": []
+   }
+  },
+  {
+   "id": "screenChain/s21",
+   "input": {
+    "raw": {
+     "last_price": 74667.55,
+     "oc": {
+      "74500.000000": {
+       "ce": {
+        "security_id": 920745,
+        "last_price": 445.7,
+        "top_bid_price": 445,
+        "top_ask_price": 445.5,
+        "top_bid_quantity": 20,
+        "top_ask_quantity": 20,
+        "oi": 100000,
+        "previous_oi": 90000,
+        "volume": 50000
+       },
+       "pe": {
+        "security_id": 930745,
+        "last_price": 287.3,
+        "top_bid_price": 286.7,
+        "top_ask_price": 287.35,
+        "top_bid_quantity": 20,
+        "top_ask_quantity": 20,
+        "oi": 100000,
+        "previous_oi": 110000,
+        "volume": 50000
+       }
+      },
+      "74600.000000": {
+       "ce": {
+        "security_id": 920746,
+        "last_price": 388.35,
+        "top_bid_price": 387.75,
+        "top_ask_price": 388.35,
+        "top_bid_quantity": 20,
+        "top_ask_quantity": 20,
+        "oi": 100000,
+        "previous_oi": 90000,
+        "volume": 50000
+       },
+       "pe": {
+        "security_id": 930746,
+        "last_price": 329.75,
+        "top_bid_price": 329.35,
+        "top_ask_price": 330,
+        "top_bid_quantity": 20,
+        "top_ask_quantity": 20,
+        "oi": 100000,
+        "previous_oi": 110000,
+        "volume": 50000
+       }
+      },
+      "74700.000000": {
+       "ce": {
+        "security_id": 920747,
+        "last_price": 335,
+        "top_bid_price": 335,
+        "top_ask_price": 335.05,
+        "top_bid_quantity": 20,
+        "top_ask_quantity": 20,
+        "oi": 100000,
+        "previous_oi": 90000,
+        "volume": 50000
+       },
+       "pe": {
+        "security_id": 930747,
+        "last_price": 376.75,
+        "top_bid_price": 376.3,
+        "top_ask_price": 376.9,
+        "top_bid_quantity": 20,
+        "top_ask_quantity": 20,
+        "oi": 100000,
+        "previous_oi": 110000,
+        "volume": 50000
+       }
+      },
+      "74800.000000": {
+       "ce": {
+        "security_id": 920748,
+        "last_price": 286.75,
+        "top_bid_price": 286.35,
+        "top_ask_price": 286.75,
+        "top_bid_quantity": 20,
+        "top_ask_quantity": 20,
+        "oi": 100000,
+        "previous_oi": 90000,
+        "volume": 50000
+       },
+       "pe": {
+        "security_id": 930748,
+        "last_price": 428.5,
+        "top_bid_price": 428,
+        "top_ask_price": 428.55,
+        "top_bid_quantity": 20,
+        "top_ask_quantity": 20,
+        "oi": 100000,
+        "previous_oi": 110000,
+        "volume": 50000
+       }
+      }
+     }
+    },
+    "opts": {
+     "reference": 74658.89,
+     "bandPct": 0.02,
+     "maxCandidates": 12
+    }
+   },
+   "expected": {
+    "all": [
+     {
+      "strike": 74500,
+      "type": "CE",
+      "securityId": "920745",
+      "lastPrice": 445.7,
+      "topBid": 445,
+      "topAsk": 445.5,
+      "topBidQty": 20,
+      "topAskQty": 20,
+      "midPrice": 445.25,
+      "quotedSpreadPct": 0.11229646266142618,
+      "oi": 100000,
+      "volume": 50000,
+      "candidate": true,
+      "rejectReasons": []
+     },
+     {
+      "strike": 74500,
+      "type": "PE",
+      "securityId": "930745",
+      "lastPrice": 287.3,
+      "topBid": 286.7,
+      "topAsk": 287.35,
+      "topBidQty": 20,
+      "topAskQty": 20,
+      "midPrice": 287.025,
+      "quotedSpreadPct": 0.22646110965944927,
+      "oi": 100000,
+      "volume": 50000,
+      "candidate": true,
+      "rejectReasons": []
+     },
+     {
+      "strike": 74600,
+      "type": "CE",
+      "securityId": "920746",
+      "lastPrice": 388.35,
+      "topBid": 387.75,
+      "topAsk": 388.35,
+      "topBidQty": 20,
+      "topAskQty": 20,
+      "midPrice": 388.05,
+      "quotedSpreadPct": 0.15461925009664287,
+      "oi": 100000,
+      "volume": 50000,
+      "candidate": true,
+      "rejectReasons": []
+     },
+     {
+      "strike": 74600,
+      "type": "PE",
+      "securityId": "930746",
+      "lastPrice": 329.75,
+      "topBid": 329.35,
+      "topAsk": 330,
+      "topBidQty": 20,
+      "topAskQty": 20,
+      "midPrice": 329.675,
+      "quotedSpreadPct": 0.19716387351178502,
+      "oi": 100000,
+      "volume": 50000,
+      "candidate": true,
+      "rejectReasons": []
+     },
+     {
+      "strike": 74700,
+      "type": "CE",
+      "securityId": "920747",
+      "lastPrice": 335,
+      "topBid": 335,
+      "topAsk": 335.05,
+      "topBidQty": 20,
+      "topAskQty": 20,
+      "midPrice": 335.025,
+      "quotedSpreadPct": 0.014924259383631481,
+      "oi": 100000,
+      "volume": 50000,
+      "candidate": true,
+      "rejectReasons": []
+     },
+     {
+      "strike": 74700,
+      "type": "PE",
+      "securityId": "930747",
+      "lastPrice": 376.75,
+      "topBid": 376.3,
+      "topAsk": 376.9,
+      "topBidQty": 20,
+      "topAskQty": 20,
+      "midPrice": 376.6,
+      "quotedSpreadPct": 0.159320233669667,
+      "oi": 100000,
+      "volume": 50000,
+      "candidate": true,
+      "rejectReasons": []
+     },
+     {
+      "strike": 74800,
+      "type": "CE",
+      "securityId": "920748",
+      "lastPrice": 286.75,
+      "topBid": 286.35,
+      "topAsk": 286.75,
+      "topBidQty": 20,
+      "topAskQty": 20,
+      "midPrice": 286.55,
+      "quotedSpreadPct": 0.13959169429418156,
+      "oi": 100000,
+      "volume": 50000,
+      "candidate": true,
+      "rejectReasons": []
+     },
+     {
+      "strike": 74800,
+      "type": "PE",
+      "securityId": "930748",
+      "lastPrice": 428.5,
+      "topBid": 428,
+      "topAsk": 428.55,
+      "topBidQty": 20,
+      "topAskQty": 20,
+      "midPrice": 428.275,
+      "quotedSpreadPct": 0.1284221586597423,
+      "oi": 100000,
+      "volume": 50000,
+      "candidate": true,
+      "rejectReasons": []
+     }
+    ],
+    "candidates": [
+     {
+      "strike": 74700,
+      "type": "CE",
+      "securityId": "920747",
+      "lastPrice": 335,
+      "topBid": 335,
+      "topAsk": 335.05,
+      "topBidQty": 20,
+      "topAskQty": 20,
+      "midPrice": 335.025,
+      "quotedSpreadPct": 0.014924259383631481,
+      "oi": 100000,
+      "volume": 50000,
+      "candidate": true,
+      "rejectReasons": []
+     },
+     {
+      "strike": 74500,
+      "type": "CE",
+      "securityId": "920745",
+      "lastPrice": 445.7,
+      "topBid": 445,
+      "topAsk": 445.5,
+      "topBidQty": 20,
+      "topAskQty": 20,
+      "midPrice": 445.25,
+      "quotedSpreadPct": 0.11229646266142618,
+      "oi": 100000,
+      "volume": 50000,
+      "candidate": true,
+      "rejectReasons": []
+     },
+     {
+      "strike": 74800,
+      "type": "PE",
+      "securityId": "930748",
+      "lastPrice": 428.5,
+      "topBid": 428,
+      "topAsk": 428.55,
+      "topBidQty": 20,
+      "topAskQty": 20,
+      "midPrice": 428.275,
+      "quotedSpreadPct": 0.1284221586597423,
+      "oi": 100000,
+      "volume": 50000,
+      "candidate": true,
+      "rejectReasons": []
+     },
+     {
+      "strike": 74800,
+      "type": "CE",
+      "securityId": "920748",
+      "lastPrice": 286.75,
+      "topBid": 286.35,
+      "topAsk": 286.75,
+      "topBidQty": 20,
+      "topAskQty": 20,
+      "midPrice": 286.55,
+      "quotedSpreadPct": 0.13959169429418156,
+      "oi": 100000,
+      "volume": 50000,
+      "candidate": true,
+      "rejectReasons": []
+     },
+     {
+      "strike": 74600,
+      "type": "CE",
+      "securityId": "920746",
+      "lastPrice": 388.35,
+      "topBid": 387.75,
+      "topAsk": 388.35,
+      "topBidQty": 20,
+      "topAskQty": 20,
+      "midPrice": 388.05,
+      "quotedSpreadPct": 0.15461925009664287,
+      "oi": 100000,
+      "volume": 50000,
+      "candidate": true,
+      "rejectReasons": []
+     },
+     {
+      "strike": 74700,
+      "type": "PE",
+      "securityId": "930747",
+      "lastPrice": 376.75,
+      "topBid": 376.3,
+      "topAsk": 376.9,
+      "topBidQty": 20,
+      "topAskQty": 20,
+      "midPrice": 376.6,
+      "quotedSpreadPct": 0.159320233669667,
+      "oi": 100000,
+      "volume": 50000,
+      "candidate": true,
+      "rejectReasons": []
+     },
+     {
+      "strike": 74600,
+      "type": "PE",
+      "securityId": "930746",
+      "lastPrice": 329.75,
+      "topBid": 329.35,
+      "topAsk": 330,
+      "topBidQty": 20,
+      "topAskQty": 20,
+      "midPrice": 329.675,
+      "quotedSpreadPct": 0.19716387351178502,
+      "oi": 100000,
+      "volume": 50000,
+      "candidate": true,
+      "rejectReasons": []
+     },
+     {
+      "strike": 74500,
+      "type": "PE",
+      "securityId": "930745",
+      "lastPrice": 287.3,
+      "topBid": 286.7,
+      "topAsk": 287.35,
+      "topBidQty": 20,
+      "topAskQty": 20,
+      "midPrice": 287.025,
+      "quotedSpreadPct": 0.22646110965944927,
+      "oi": 100000,
+      "volume": 50000,
+      "candidate": true,
+      "rejectReasons": []
+     }
+    ]
+   }
+  }
+ ]
+}

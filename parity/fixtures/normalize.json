@@ -1,0 +1,4808 @@
+{
+ "module": "normalize",
+ "generator": "server/test/parity/builder.ts",
+ "cases": [
+  {
+   "id": "normalizeChain/gm",
+   "input": {
+    "last_price": 74294.96,
+    "oc": {
+     "74100.000000": {
+      "ce": {
+       "security_id": 900741,
+       "last_price": 713.6,
+       "top_bid_price": 713.55,
+       "top_ask_price": 713.65,
+       "top_bid_quantity": 40,
+       "top_ask_quantity": 60,
+       "oi": 574100,
+       "previous_oi": 480000,
+       "volume": 2000000,
+       "previous_volume": 1000000,
+       "previous_close_price": 699.328,
+       "average_price": 713.6,
+       "implied_volatility": 16,
+       "greeks": {
+        "delta": 0.5,
+        "gamma": 0.0004,
+        "theta": -40,
+        "vega": 30
+       }
+      },
+      "pe": {
+       "security_id": 910741,
+       "last_price": 208.3,
+       "top_bid_price": 208.25,
+       "top_ask_price": 208.35,
+       "top_bid_quantity": 40,
+       "top_ask_quantity": 60,
+       "oi": 574100,
+       "previous_oi": 480000,
+       "volume": 2000000,
+       "previous_volume": 1000000,
+       "previous_close_price": 204.13400000000001,
+       "average_price": 208.3,
+       "implied_volatility": 8.6,
+       "greeks": {
+        "delta": 0.5,
+        "gamma": 0.0004,
+        "theta": -40,
+        "vega": 30
+       }
+      }
+     },
+     "74200.000000": {
+      "ce": {
+       "security_id": 900742,
+       "last_price": 655,
+       "top_bid_price": 654.95,
+       "top_ask_price": 655.05,
+       "top_bid_quantity": 40,
+       "top_ask_quantity": 60,
+       "oi": 574200,
+       "previous_oi": 480000,
+       "volume": 2000000,
+       "previous_volume": 1000000,
+       "previous_close_price": 641.9,
+       "average_price": 655,
+       "implied_volatility": 16,
+       "greeks": {
+        "delta": 0.5,
+        "gamma": 0.0004,
+        "theta": -40,
+        "vega": 30
+       }
+      },
+      "pe": {
+       "security_id": 910742,
+       "last_price": 236.7,
+       "top_bid_price": 236.65,
+       "top_ask_price": 236.75,
+       "top_bid_quantity": 40,
+       "top_ask_quantity": 60,
+       "oi": 574200,
+       "previous_oi": 480000,
+       "volume": 2000000,
+       "previous_volume": 1000000,
+       "previous_close_price": 231.96599999999998,
+       "average_price": 236.7,
+       "implied_volatility": 8.6,
+       "greeks": {
+        "delta": 0.5,
+        "gamma": 0.0004,
+        "theta": -40,
+        "vega": 30
+       }
+      }
+     },
+     "74300.000000": {
+      "ce": {
+       "security_id": 900743,
+       "last_price": 588,
+       "top_bid_price": 587.95,
+       "top_ask_price": 588.05,
+       "top_bid_quantity": 40,
+       "top_ask_quantity": 60,
+       "oi": 574300,
+       "previous_oi": 480000,
+       "volume": 2000000,
+       "previous_volume": 1000000,
+       "previous_close_price": 576.24,
+       "average_price": 588,
+       "implied_volatility": 16,
+       "greeks": {
+        "delta": 0.5,
+        "gamma": 0.0004,
+        "theta": -40,
+        "vega": 30
+       }
+      },
+      "pe": {
+       "security_id": 910743,
+       "last_price": 270.05,
+       "top_bid_price": 270,
+       "top_ask_price": 270.1,
+       "top_bid_quantity": 40,
+       "top_ask_quantity": 60,
+       "oi": 574300,
+       "previous_oi": 480000,
+       "volume": 2000000,
+       "previous_volume": 1000000,
+       "previous_close_price": 264.649,
+       "average_price": 270.05,
+       "implied_volatility": 8.6,
+       "greeks": {
+        "delta": 0.5,
+        "gamma": 0.0004,
+        "theta": -40,
+        "vega": 30
+       }
+      }
+     },
+     "74400.000000": {
+      "ce": {
+       "security_id": 900744,
+       "last_price": 517.1,
+       "top_bid_price": 517.05,
+       "top_ask_price": 517.15,
+       "top_bid_quantity": 40,
+       "top_ask_quantity": 60,
+       "oi": 574400,
+       "previous_oi": 480000,
+       "volume": 2000000,
+       "previous_volume": 1000000,
+       "previous_close_price": 506.75800000000004,
+       "average_price": 517.1,
+       "implied_volatility": 16,
+       "greeks": {
+        "delta": 0.5,
+        "gamma": 0.0004,
+        "theta": -40,
+        "vega": 30
+       }
+      },
+      "pe": {
+       "security_id": 910744,
+       "last_price": 303.7,
+       "top_bid_price": 303.65,
+       "top_ask_price": 303.75,
+       "top_bid_quantity": 40,
+       "top_ask_quantity": 60,
+       "oi": 574400,
+       "previous_oi": 480000,
+       "volume": 2000000,
+       "previous_volume": 1000000,
+       "previous_close_price": 297.626,
+       "average_price": 303.7,
+       "implied_volatility": 8.6,
+       "greeks": {
+        "delta": 0.5,
+        "gamma": 0.0004,
+        "theta": -40,
+        "vega": 30
+       }
+      }
+     },
+     "74500.000000": {
+      "ce": {
+       "security_id": 900745,
+       "last_price": 461.55,
+       "top_bid_price": 461.5,
+       "top_ask_price": 461.6,
+       "top_bid_quantity": 40,
+       "top_ask_quantity": 60,
+       "oi": 574500,
+       "previous_oi": 480000,
+       "volume": 2000000,
+       "previous_volume": 1000000,
+       "previous_close_price": 452.319,
+       "average_price": 461.55,
+       "implied_volatility": 16,
+       "greeks": {
+        "delta": 0.5,
+        "gamma": 0.0004,
+        "theta": -40,
+        "vega": 30
+       }
+      },
+      "pe": {
+       "security_id": 910745,
+       "last_price": 345.1,
+       "top_bid_price": 345.05,
+       "top_ask_price": 345.15,
+       "top_bid_quantity": 40,
+       "top_ask_quantity": 60,
+       "oi": 574500,
+       "previous_oi": 480000,
+       "volume": 2000000,
+       "previous_volume": 1000000,
+       "previous_close_price": 338.19800000000004,
+       "average_price": 345.1,
+       "implied_volatility": 8.6,
+       "greeks": {
+        "delta": 0.5,
+        "gamma": 0.0004,
+        "theta": -40,
+        "vega": 30
+       }
+      }
+     }
+    }
+   },
+   "expected": {
+    "underlying": "SENSEX",
+    "underlyingScrip": 51,
+    "underlyingSeg": "IDX_I",
+    "expiry": "2026-09-24",
+    "underlyingLtpDoNotUseAsSpot": 74294.96,
+    "strikes": [
+     {
+      "strike": 74100,
+      "ce": {
+       "securityId": "900741",
+       "lastPrice": 713.6,
+       "oi": 574100,
+       "previousOi": 480000,
+       "volume": 2000000,
+       "previousVolume": 1000000,
+       "previousClosePrice": 699.328,
+       "averagePrice": 713.6,
+       "topBidPrice": 713.55,
+       "topBidQuantity": 40,
+       "topAskPrice": 713.65,
+       "topAskQuantity": 60,
+       "vendorQuarantined": {
+        "impliedVolatility": 16,
+        "greeks": {
+         "delta": 0.5,
+         "gamma": 0.0004,
+         "theta": -40,
+         "vega": 30
+        },
+        "reason": "Vendor analytics are computed against the index LTP, not the forward."
+       }
+      },
+      "pe": {
+       "securityId": "910741",
+       "lastPrice": 208.3,
+       "oi": 574100,
+       "previousOi": 480000,
+       "volume": 2000000,
+       "previousVolume": 1000000,
+       "previousClosePrice": 204.13400000000001,
+       "averagePrice": 208.3,
+       "topBidPrice": 208.25,
+       "topBidQuantity": 40,
+       "topAskPrice": 208.35,
+       "topAskQuantity": 60,
+       "vendorQuarantined": {
+        "impliedVolatility": 8.6,
+        "greeks": {
+         "delta": 0.5,
+         "gamma": 0.0004,
+         "theta": -40,
+         "vega": 30
+        },
+        "reason": "Vendor analytics are computed against the index LTP, not the forward."
+       }
+      }
+     },
+     {
+      "strike": 74200,
+      "ce": {
+       "securityId": "900742",
+       "lastPrice": 655,
+       "oi": 574200,
+       "previousOi": 480000,
+       "volume": 2000000,
+       "previousVolume": 1000000,
+       "previousClosePrice": 641.9,
+       "averagePrice": 655,
+       "topBidPrice": 654.95,
+       "topBidQuantity": 40,
+       "topAskPrice": 655.05,
+       "topAskQuantity": 60,
+       "vendorQuarantined": {
+        "impliedVolatility": 16,
+        "greeks": {
+         "delta": 0.5,
+         "gamma": 0.0004,
+         "theta": -40,
+         "vega": 30
+        },
+        "reason": "Vendor analytics are computed against the index LTP, not the forward."
+       }
+      },
+      "pe": {
+       "securityId": "910742",
+       "lastPrice": 236.7,
+       "oi": 574200,
+       "previousOi": 480000,
+       "volume": 2000000,
+       "previousVolume": 1000000,
+       "previousClosePrice": 231.96599999999998,
+       "averagePrice": 236.7,
+       "topBidPrice": 236.65,
+       "topBidQuantity": 40,
+       "topAskPrice": 236.75,
+       "topAskQuantity": 60,
+       "vendorQuarantined": {
+        "impliedVolatility": 8.6,
+        "greeks": {
+         "delta": 0.5,
+         "gamma": 0.0004,
+         "theta": -40,
+         "vega": 30
+        },
+        "reason": "Vendor analytics are computed against the index LTP, not the forward."
+       }
+      }
+     },
+     {
+      "strike": 74300,
+      "ce": {
+       "securityId": "900743",
+       "lastPrice": 588,
+       "oi": 574300,
+       "previousOi": 480000,
+       "volume": 2000000,
+       "previousVolume": 1000000,
+       "previousClosePrice": 576.24,
+       "averagePrice": 588,
+       "topBidPrice": 587.95,
+       "topBidQuantity": 40,
+       "topAskPrice": 588.05,
+       "topAskQuantity": 60,
+       "vendorQuarantined": {
+        "impliedVolatility": 16,
+        "greeks": {
+         "delta": 0.5,
+         "gamma": 0.0004,
+         "theta": -40,
+         "vega": 30
+        },
+        "reason": "Vendor analytics are computed against the index LTP, not the forward."
+       }
+      },
+      "pe": {
+       "securityId": "910743",
+       "lastPrice": 270.05,
+       "oi": 574300,
+       "previousOi": 480000,
+       "volume": 2000000,
+       "previousVolume": 1000000,
+       "previousClosePrice": 264.649,
+       "averagePrice": 270.05,
+       "topBidPrice": 270,
+       "topBidQuantity": 40,
+       "topAskPrice": 270.1,
+       "topAskQuantity": 60,
+       "vendorQuarantined": {
+        "impliedVolatility": 8.6,
+        "greeks": {
+         "delta": 0.5,
+         "gamma": 0.0004,
+         "theta": -40,
+         "vega": 30
+        },
+        "reason": "Vendor analytics are computed against the index LTP, not the forward."
+       }
+      }
+     },
+     {
+      "strike": 74400,
+      "ce": {
+       "securityId": "900744",
+       "lastPrice": 517.1,
+       "oi": 574400,
+       "previousOi": 480000,
+       "volume": 2000000,
+       "previousVolume": 1000000,
+       "previousClosePrice": 506.75800000000004,
+       "averagePrice": 517.1,
+       "topBidPrice": 517.05,
+       "topBidQuantity": 40,
+       "topAskPrice": 517.15,
+       "topAskQuantity": 60,
+       "vendorQuarantined": {
+        "impliedVolatility": 16,
+        "greeks": {
+         "delta": 0.5,
+         "gamma": 0.0004,
+         "theta": -40,
+         "vega": 30
+        },
+        "reason": "Vendor analytics are computed against the index LTP, not the forward."
+       }
+      },
+      "pe": {
+       "securityId": "910744",
+       "lastPrice": 303.7,
+       "oi": 574400,
+       "previousOi": 480000,
+       "volume": 2000000,
+       "previousVolume": 1000000,
+       "previousClosePrice": 297.626,
+       "averagePrice": 303.7,
+       "topBidPrice": 303.65,
+       "topBidQuantity": 40,
+       "topAskPrice": 303.75,
+       "topAskQuantity": 60,
+       "vendorQuarantined": {
+        "impliedVolatility": 8.6,
+        "greeks": {
+         "delta": 0.5,
+         "gamma": 0.0004,
+         "theta": -40,
+         "vega": 30
+        },
+        "reason": "Vendor analytics are computed against the index LTP, not the forward."
+       }
+      }
+     },
+     {
+      "strike": 74500,
+      "ce": {
+       "securityId": "900745",
+       "lastPrice": 461.55,
+       "oi": 574500,
+       "previousOi": 480000,
+       "volume": 2000000,
+       "previousVolume": 1000000,
+       "previousClosePrice": 452.319,
+       "averagePrice": 461.55,
+       "topBidPrice": 461.5,
+       "topBidQuantity": 40,
+       "topAskPrice": 461.6,
+       "topAskQuantity": 60,
+       "vendorQuarantined": {
+        "impliedVolatility": 16,
+        "greeks": {
+         "delta": 0.5,
+         "gamma": 0.0004,
+         "theta": -40,
+         "vega": 30
+        },
+        "reason": "Vendor analytics are computed against the index LTP, not the forward."
+       }
+      },
+      "pe": {
+       "securityId": "910745",
+       "lastPrice": 345.1,
+       "oi": 574500,
+       "previousOi": 480000,
+       "volume": 2000000,
+       "previousVolume": 1000000,
+       "previousClosePrice": 338.19800000000004,
+       "averagePrice": 345.1,
+       "topBidPrice": 345.05,
+       "topBidQuantity": 40,
+       "topAskPrice": 345.15,
+       "topAskQuantity": 60,
+       "vendorQuarantined": {
+        "impliedVolatility": 8.6,
+        "greeks": {
+         "delta": 0.5,
+         "gamma": 0.0004,
+         "theta": -40,
+         "vega": 30
+        },
+        "reason": "Vendor analytics are computed against the index LTP, not the forward."
+       }
+      }
+     }
+    ],
+    "provenance": {
+     "fetchId": "chain",
+     "epochMs": 1789725600000,
+     "source": "dhan-rest-v2",
+     "endpoint": "/optionchain"
+    },
+    "quarantined": {}
+   }
+  },
+  {
+   "id": "normalizeChain/s21",
+   "input": {
+    "last_price": 74667.55,
+    "oc": {
+     "74500.000000": {
+      "ce": {
+       "security_id": 920745,
+       "last_price": 445.7,
+       "top_bid_price": 445,
+       "top_ask_price": 445.5,
+       "top_bid_quantity": 20,
+       "top_ask_quantity": 20,
+       "oi": 100000,
+       "previous_oi": 90000,
+       "volume": 50000
+      },
+      "pe": {
+       "security_id": 930745,
+       "last_price": 287.3,
+       "top_bid_price": 286.7,
+       "top_ask_price": 287.35,
+       "top_bid_quantity": 20,
+       "top_ask_quantity": 20,
+       "oi": 100000,
+       "previous_oi": 110000,
+       "volume": 50000
+      }
+     },
+     "74600.000000": {
+      "ce": {
+       "security_id": 920746,
+       "last_price": 388.35,
+       "top_bid_price": 387.75,
+       "top_ask_price": 388.35,
+       "top_bid_quantity": 20,
+       "top_ask_quantity": 20,
+       "oi": 100000,
+       "previous_oi": 90000,
+       "volume": 50000
+      },
+      "pe": {
+       "security_id": 930746,
+       "last_price": 329.75,
+       "top_bid_price": 329.35,
+       "top_ask_price": 330,
+       "top_bid_quantity": 20,
+       "top_ask_quantity": 20,
+       "oi": 100000,
+       "previous_oi": 110000,
+       "volume": 50000
+      }
+     },
+     "74700.000000": {
+      "ce": {
+       "security_id": 920747,
+       "last_price": 335,
+       "top_bid_price": 335,
+       "top_ask_price": 335.05,
+       "top_bid_quantity": 20,
+       "top_ask_quantity": 20,
+       "oi": 100000,
+       "previous_oi": 90000,
+       "volume": 50000
+      },
+      "pe": {
+       "security_id": 930747,
+       "last_price": 376.75,
+       "top_bid_price": 376.3,
+       "top_ask_price": 376.9,
+       "top_bid_quantity": 20,
+       "top_ask_quantity": 20,
+       "oi": 100000,
+       "previous_oi": 110000,
+       "volume": 50000
+      }
+     },
+     "74800.000000": {
+      "ce": {
+       "security_id": 920748,
+       "last_price": 286.75,
+       "top_bid_price": 286.35,
+       "top_ask_price": 286.75,
+       "top_bid_quantity": 20,
+       "top_ask_quantity": 20,
+       "oi": 100000,
+       "previous_oi": 90000,
+       "volume": 50000
+      },
+      "pe": {
+       "security_id": 930748,
+       "last_price": 428.5,
+       "top_bid_price": 428,
+       "top_ask_price": 428.55,
+       "top_bid_quantity": 20,
+       "top_ask_quantity": 20,
+       "oi": 100000,
+       "previous_oi": 110000,
+       "volume": 50000
+      }
+     }
+    }
+   },
+   "expected": {
+    "underlying": "SENSEX",
+    "underlyingScrip": 51,
+    "underlyingSeg": "IDX_I",
+    "expiry": "2026-09-24",
+    "underlyingLtpDoNotUseAsSpot": 74667.55,
+    "strikes": [
+     {
+      "strike": 74500,
+      "ce": {
+       "securityId": "920745",
+       "lastPrice": 445.7,
+       "oi": 100000,
+       "previousOi": 90000,
+       "volume": 50000,
+       "previousVolume": null,
+       "previousClosePrice": null,
+       "averagePrice": null,
+       "topBidPrice": 445,
+       "topBidQuantity": 20,
+       "topAskPrice": 445.5,
+       "topAskQuantity": 20,
+       "vendorQuarantined": {
+        "impliedVolatility": null,
+        "greeks": null,
+        "reason": "Vendor analytics are computed against the index LTP, not the forward. IV missing or unparseable."
+       }
+      },
+      "pe": {
+       "securityId": "930745",
+       "lastPrice": 287.3,
+       "oi": 100000,
+       "previousOi": 110000,
+       "volume": 50000,
+       "previousVolume": null,
+       "previousClosePrice": null,
+       "averagePrice": null,
+       "topBidPrice": 286.7,
+       "topBidQuantity": 20,
+       "topAskPrice": 287.35,
+       "topAskQuantity": 20,
+       "vendorQuarantined": {
+        "impliedVolatility": null,
+        "greeks": null,
+        "reason": "Vendor analytics are computed against the index LTP, not the forward. IV missing or unparseable."
+       }
+      }
+     },
+     {
+      "strike": 74600,
+      "ce": {
+       "securityId": "920746",
+       "lastPrice": 388.35,
+       "oi": 100000,
+       "previousOi": 90000,
+       "volume": 50000,
+       "previousVolume": null,
+       "previousClosePrice": null,
+       "averagePrice": null,
+       "topBidPrice": 387.75,
+       "topBidQuantity": 20,
+       "topAskPrice": 388.35,
+       "topAskQuantity": 20,
+       "vendorQuarantined": {
+        "impliedVolatility": null,
+        "greeks": null,
+        "reason": "Vendor analytics are computed against the index LTP, not the forward. IV missing or unparseable."
+       }
+      },
+      "pe": {
+       "securityId": "930746",
+       "lastPrice": 329.75,
+       "oi": 100000,
+       "previousOi": 110000,
+       "volume": 50000,
+       "previousVolume": null,
+       "previousClosePrice": null,
+       "averagePrice": null,
+       "topBidPrice": 329.35,
+       "topBidQuantity": 20,
+       "topAskPrice": 330,
+       "topAskQuantity": 20,
+       "vendorQuarantined": {
+        "impliedVolatility": null,
+        "greeks": null,
+        "reason": "Vendor analytics are computed against the index LTP, not the forward. IV missing or unparseable."
+       }
+      }
+     },
+     {
+      "strike": 74700,
+      "ce": {
+       "securityId": "920747",
+       "lastPrice": 335,
+       "oi": 100000,
+       "previousOi": 90000,
+       "volume": 50000,
+       "previousVolume": null,
+       "previousClosePrice": null,
+       "averagePrice": null,
+       "topBidPrice": 335,
+       "topBidQuantity": 20,
+       "topAskPrice": 335.05,
+       "topAskQuantity": 20,
+       "vendorQuarantined": {
+        "impliedVolatility": null,
+        "greeks": null,
+        "reason": "Vendor analytics are computed against the index LTP, not the forward. IV missing or unparseable."
+       }
+      },
+      "pe": {
+       "securityId": "930747",
+       "lastPrice": 376.75,
+       "oi": 100000,
+       "previousOi": 110000,
+       "volume": 50000,
+       "previousVolume": null,
+       "previousClosePrice": null,
+       "averagePrice": null,
+       "topBidPrice": 376.3,
+       "topBidQuantity": 20,
+       "topAskPrice": 376.9,
+       "topAskQuantity": 20,
+       "vendorQuarantined": {
+        "impliedVolatility": null,
+        "greeks": null,
+        "reason": "Vendor analytics are computed against the index LTP, not the forward. IV missing or unparseable."
+       }
+      }
+     },
+     {
+      "strike": 74800,
+      "ce": {
+       "securityId": "920748",
+       "lastPrice": 286.75,
+       "oi": 100000,
+       "previousOi": 90000,
+       "volume": 50000,
+       "previousVolume": null,
+       "previousClosePrice": null,
+       "averagePrice": null,
+       "topBidPrice": 286.35,
+       "topBidQuantity": 20,
+       "topAskPrice": 286.75,
+       "topAskQuantity": 20,
+       "vendorQuarantined": {
+        "impliedVolatility": null,
+        "greeks": null,
+        "reason": "Vendor analytics are computed against the index LTP, not the forward. IV missing or unparseable."
+       }
+      },
+      "pe": {
+       "securityId": "930748",
+       "lastPrice": 428.5,
+       "oi": 100000,
+       "previousOi": 110000,
+       "volume": 50000,
+       "previousVolume": null,
+       "previousClosePrice": null,
+       "averagePrice": null,
+       "topBidPrice": 428,
+       "topBidQuantity": 20,
+       "topAskPrice": 428.55,
+       "topAskQuantity": 20,
+       "vendorQuarantined": {
+        "impliedVolatility": null,
+        "greeks": null,
+        "reason": "Vendor analytics are computed against the index LTP, not the forward. IV missing or unparseable."
+       }
+      }
+     }
+    ],
+    "provenance": {
+     "fetchId": "chain",
+     "epochMs": 1789725600000,
+     "source": "dhan-rest-v2",
+     "endpoint": "/optionchain"
+    },
+    "quarantined": {}
+   }
+  },
+  {
+   "id": "normalizeChain/nullRaw",
+   "input": null,
+   "expected": {
+    "underlying": "SENSEX",
+    "underlyingScrip": 51,
+    "underlyingSeg": "IDX_I",
+    "expiry": "2026-09-24",
+    "underlyingLtpDoNotUseAsSpot": null,
+    "strikes": [],
+    "provenance": {
+     "fetchId": "chain",
+     "epochMs": 1789725600000,
+     "source": "dhan-rest-v2",
+     "endpoint": "/optionchain"
+    },
+    "quarantined": {}
+   }
+  },
+  {
+   "id": "normalizeChain/emptyObject",
+   "input": {},
+   "expected": {
+    "underlying": "SENSEX",
+    "underlyingScrip": 51,
+    "underlyingSeg": "IDX_I",
+    "expiry": "2026-09-24",
+    "underlyingLtpDoNotUseAsSpot": null,
+    "strikes": [],
+    "provenance": {
+     "fetchId": "chain",
+     "epochMs": 1789725600000,
+     "source": "dhan-rest-v2",
+     "endpoint": "/optionchain"
+    },
+    "quarantined": {}
+   }
+  },
+  {
+   "id": "normalizeChain/emptyOc",
+   "input": {
+    "last_price": 74300,
+    "oc": {}
+   },
+   "expected": {
+    "underlying": "SENSEX",
+    "underlyingScrip": 51,
+    "underlyingSeg": "IDX_I",
+    "expiry": "2026-09-24",
+    "underlyingLtpDoNotUseAsSpot": 74300,
+    "strikes": [],
+    "provenance": {
+     "fetchId": "chain",
+     "epochMs": 1789725600000,
+     "source": "dhan-rest-v2",
+     "endpoint": "/optionchain"
+    },
+    "quarantined": {}
+   }
+  },
+  {
+   "id": "normalizeChain/ocArray",
+   "input": {
+    "last_price": 74300,
+    "oc": [
+     {
+      "ce": {
+       "last_price": 10
+      }
+     }
+    ]
+   },
+   "expected": {
+    "underlying": "SENSEX",
+    "underlyingScrip": 51,
+    "underlyingSeg": "IDX_I",
+    "expiry": "2026-09-24",
+    "underlyingLtpDoNotUseAsSpot": 74300,
+    "strikes": [
+     {
+      "strike": 0,
+      "ce": {
+       "securityId": null,
+       "lastPrice": 10,
+       "oi": null,
+       "previousOi": null,
+       "volume": null,
+       "previousVolume": null,
+       "previousClosePrice": null,
+       "averagePrice": null,
+       "topBidPrice": null,
+       "topBidQuantity": null,
+       "topAskPrice": null,
+       "topAskQuantity": null,
+       "vendorQuarantined": {
+        "impliedVolatility": null,
+        "greeks": null,
+        "reason": "Vendor analytics are computed against the index LTP, not the forward. IV missing or unparseable."
+       }
+      },
+      "pe": null
+     }
+    ],
+    "provenance": {
+     "fetchId": "chain",
+     "epochMs": 1789725600000,
+     "source": "dhan-rest-v2",
+     "endpoint": "/optionchain"
+    },
+    "quarantined": {}
+   }
+  },
+  {
+   "id": "normalizeChain/ocNotObject",
+   "input": {
+    "oc": "oops"
+   },
+   "expected": {
+    "underlying": "SENSEX",
+    "underlyingScrip": 51,
+    "underlyingSeg": "IDX_I",
+    "expiry": "2026-09-24",
+    "underlyingLtpDoNotUseAsSpot": null,
+    "strikes": [
+     {
+      "strike": 0,
+      "ce": null,
+      "pe": null
+     },
+     {
+      "strike": 1,
+      "ce": null,
+      "pe": null
+     },
+     {
+      "strike": 2,
+      "ce": null,
+      "pe": null
+     },
+     {
+      "strike": 3,
+      "ce": null,
+      "pe": null
+     }
+    ],
+    "provenance": {
+     "fetchId": "chain",
+     "epochMs": 1789725600000,
+     "source": "dhan-rest-v2",
+     "endpoint": "/optionchain"
+    },
+    "quarantined": {}
+   }
+  },
+  {
+   "id": "normalizeChain/lastPriceString",
+   "input": {
+    "last_price": "74294.96",
+    "oc": {}
+   },
+   "expected": {
+    "underlying": "SENSEX",
+    "underlyingScrip": 51,
+    "underlyingSeg": "IDX_I",
+    "expiry": "2026-09-24",
+    "underlyingLtpDoNotUseAsSpot": 74294.96,
+    "strikes": [],
+    "provenance": {
+     "fetchId": "chain",
+     "epochMs": 1789725600000,
+     "source": "dhan-rest-v2",
+     "endpoint": "/optionchain"
+    },
+    "quarantined": {}
+   }
+  },
+  {
+   "id": "normalizeChain/oddKeys",
+   "input": {
+    "last_price": 74300,
+    "oc": {
+     "74100": {
+      "ce": {
+       "last_price": 3
+      }
+     },
+     "74200.000000": {
+      "ce": {
+       "last_price": 5
+      },
+      "pe": {
+       "last_price": 6
+      }
+     },
+     "abc": {
+      "ce": {
+       "last_price": 1
+      }
+     },
+     "": {
+      "ce": {
+       "last_price": 2
+      }
+     },
+     "74100.000000": {
+      "pe": {
+       "last_price": 4
+      }
+     },
+     " 74300 ": {
+      "ce": {
+       "last_price": 7
+      }
+     },
+     "1e5": {
+      "ce": {
+       "last_price": 8
+      }
+     },
+     "0x10": {
+      "ce": {
+       "last_price": 9
+      }
+     },
+     "Infinity": {
+      "ce": {
+       "last_price": 10
+      }
+     },
+     "nan": {
+      "ce": {
+       "last_price": 11
+      }
+     },
+     "1_000": {
+      "ce": {
+       "last_price": 12
+      }
+     }
+    }
+   },
+   "expected": {
+    "underlying": "SENSEX",
+    "underlyingScrip": 51,
+    "underlyingSeg": "IDX_I",
+    "expiry": "2026-09-24",
+    "underlyingLtpDoNotUseAsSpot": 74300,
+    "strikes": [
+     {
+      "strike": 0,
+      "ce": {
+       "securityId": null,
+       "lastPrice": 2,
+       "oi": null,
+       "previousOi": null,
+       "volume": null,
+       "previousVolume": null,
+       "previousClosePrice": null,
+       "averagePrice": null,
+       "topBidPrice": null,
+       "topBidQuantity": null,
+       "topAskPrice": null,
+       "topAskQuantity": null,
+       "vendorQuarantined": {
+        "impliedVolatility": null,
+        "greeks": null,
+        "reason": "Vendor analytics are computed against the index LTP, not the forward. IV missing or unparseable."
+       }
+      },
+      "pe": null
+     },
+     {
+      "strike": 16,
+      "ce": {
+       "securityId": null,
+       "lastPrice": 9,
+       "oi": null,
+       "previousOi": null,
+       "volume": null,
+       "previousVolume": null,
+       "previousClosePrice": null,
+       "averagePrice": null,
+       "topBidPrice": null,
+       "topBidQuantity": null,
+       "topAskPrice": null,
+       "topAskQuantity": null,
+       "vendorQuarantined": {
+        "impliedVolatility": null,
+        "greeks": null,
+        "reason": "Vendor analytics are computed against the index LTP, not the forward. IV missing or unparseable."
+       }
+      },
+      "pe": null
+     },
+     {
+      "strike": 74100,
+      "ce": {
+       "securityId": null,
+       "lastPrice": 3,
+       "oi": null,
+       "previousOi": null,
+       "volume": null,
+       "previousVolume": null,
+       "previousClosePrice": null,
+       "averagePrice": null,
+       "topBidPrice": null,
+       "topBidQuantity": null,
+       "topAskPrice": null,
+       "topAskQuantity": null,
+       "vendorQuarantined": {
+        "impliedVolatility": null,
+        "greeks": null,
+        "reason": "Vendor analytics are computed against the index LTP, not the forward. IV missing or unparseable."
+       }
+      },
+      "pe": null
+     },
+     {
+      "strike": 74100,
+      "ce": null,
+      "pe": {
+       "securityId": null,
+       "lastPrice": 4,
+       "oi": null,
+       "previousOi": null,
+       "volume": null,
+       "previousVolume": null,
+       "previousClosePrice": null,
+       "averagePrice": null,
+       "topBidPrice": null,
+       "topBidQuantity": null,
+       "topAskPrice": null,
+       "topAskQuantity": null,
+       "vendorQuarantined": {
+        "impliedVolatility": null,
+        "greeks": null,
+        "reason": "Vendor analytics are computed against the index LTP, not the forward. IV missing or unparseable."
+       }
+      }
+     },
+     {
+      "strike": 74200,
+      "ce": {
+       "securityId": null,
+       "lastPrice": 5,
+       "oi": null,
+       "previousOi": null,
+       "volume": null,
+       "previousVolume": null,
+       "previousClosePrice": null,
+       "averagePrice": null,
+       "topBidPrice": null,
+       "topBidQuantity": null,
+       "topAskPrice": null,
+       "topAskQuantity": null,
+       "vendorQuarantined": {
+        "impliedVolatility": null,
+        "greeks": null,
+        "reason": "Vendor analytics are computed against the index LTP, not the forward. IV missing or unparseable."
+       }
+      },
+      "pe": {
+       "securityId": null,
+       "lastPrice": 6,
+       "oi": null,
+       "previousOi": null,
+       "volume": null,
+       "previousVolume": null,
+       "previousClosePrice": null,
+       "averagePrice": null,
+       "topBidPrice": null,
+       "topBidQuantity": null,
+       "topAskPrice": null,
+       "topAskQuantity": null,
+       "vendorQuarantined": {
+        "impliedVolatility": null,
+        "greeks": null,
+        "reason": "Vendor analytics are computed against the index LTP, not the forward. IV missing or unparseable."
+       }
+      }
+     },
+     {
+      "strike": 74300,
+      "ce": {
+       "securityId": null,
+       "lastPrice": 7,
+       "oi": null,
+       "previousOi": null,
+       "volume": null,
+       "previousVolume": null,
+       "previousClosePrice": null,
+       "averagePrice": null,
+       "topBidPrice": null,
+       "topBidQuantity": null,
+       "topAskPrice": null,
+       "topAskQuantity": null,
+       "vendorQuarantined": {
+        "impliedVolatility": null,
+        "greeks": null,
+        "reason": "Vendor analytics are computed against the index LTP, not the forward. IV missing or unparseable."
+       }
+      },
+      "pe": null
+     },
+     {
+      "strike": 100000,
+      "ce": {
+       "securityId": null,
+       "lastPrice": 8,
+       "oi": null,
+       "previousOi": null,
+       "volume": null,
+       "previousVolume": null,
+       "previousClosePrice": null,
+       "averagePrice": null,
+       "topBidPrice": null,
+       "topBidQuantity": null,
+       "topAskPrice": null,
+       "topAskQuantity": null,
+       "vendorQuarantined": {
+        "impliedVolatility": null,
+        "greeks": null,
+        "reason": "Vendor analytics are computed against the index LTP, not the forward. IV missing or unparseable."
+       }
+      },
+      "pe": null
+     }
+    ],
+    "provenance": {
+     "fetchId": "chain",
+     "epochMs": 1789725600000,
+     "source": "dhan-rest-v2",
+     "endpoint": "/optionchain"
+    },
+    "quarantined": {
+     "oc.abc": "unparseable strike key",
+     "oc.Infinity": "unparseable strike key",
+     "oc.nan": "unparseable strike key",
+     "oc.1_000": "unparseable strike key"
+    }
+   }
+  },
+  {
+   "id": "normalizeChain/malformedLegs",
+   "input": {
+    "last_price": null,
+    "oc": {
+     "74000": {
+      "ce": {
+       "security_id": 900001,
+       "last_price": "123.5",
+       "oi": "abc",
+       "top_bid_price": true,
+       "top_ask_price": null,
+       "implied_volatility": 0,
+       "greeks": {}
+      },
+      "pe": {
+       "security_id": "900002",
+       "last_price": -5,
+       "top_bid_price": 10,
+       "top_ask_price": 9,
+       "implied_volatility": 75,
+       "greeks": 0
+      }
+     },
+     "74100": {
+      "ce": [],
+      "pe": "not-a-leg"
+     },
+     "74200": {
+      "ce": {
+       "last_price": 0,
+       "implied_volatility": "12.5",
+       "greeks": {
+        "delta": "0.5",
+        "gamma": null
+       }
+      },
+      "pe": null
+     },
+     "74300": null,
+     "74400": 5
+    }
+   },
+   "expected": {
+    "underlying": "SENSEX",
+    "underlyingScrip": 51,
+    "underlyingSeg": "IDX_I",
+    "expiry": "2026-09-24",
+    "underlyingLtpDoNotUseAsSpot": null,
+    "strikes": [
+     {
+      "strike": 74000,
+      "ce": {
+       "securityId": "900001",
+       "lastPrice": 123.5,
+       "oi": null,
+       "previousOi": null,
+       "volume": null,
+       "previousVolume": null,
+       "previousClosePrice": null,
+       "averagePrice": null,
+       "topBidPrice": null,
+       "topBidQuantity": null,
+       "topAskPrice": null,
+       "topAskQuantity": null,
+       "vendorQuarantined": {
+        "impliedVolatility": 0,
+        "greeks": {
+         "delta": null,
+         "gamma": null,
+         "theta": null,
+         "vega": null
+        },
+        "reason": "Vendor analytics are computed against the index LTP, not the forward. IV <= 0."
+       }
+      },
+      "pe": {
+       "securityId": "900002",
+       "lastPrice": -5,
+       "oi": null,
+       "previousOi": null,
+       "volume": null,
+       "previousVolume": null,
+       "previousClosePrice": null,
+       "averagePrice": null,
+       "topBidPrice": 10,
+       "topBidQuantity": null,
+       "topAskPrice": 9,
+       "topAskQuantity": null,
+       "vendorQuarantined": {
+        "impliedVolatility": 75,
+        "greeks": null,
+        "reason": "Vendor analytics are computed against the index LTP, not the forward. IV > 60% — implausible for an index option."
+       }
+      }
+     },
+     {
+      "strike": 74100,
+      "ce": {
+       "securityId": null,
+       "lastPrice": null,
+       "oi": null,
+       "previousOi": null,
+       "volume": null,
+       "previousVolume": null,
+       "previousClosePrice": null,
+       "averagePrice": null,
+       "topBidPrice": null,
+       "topBidQuantity": null,
+       "topAskPrice": null,
+       "topAskQuantity": null,
+       "vendorQuarantined": {
+        "impliedVolatility": null,
+        "greeks": null,
+        "reason": "Vendor analytics are computed against the index LTP, not the forward. IV missing or unparseable."
+       }
+      },
+      "pe": null
+     },
+     {
+      "strike": 74200,
+      "ce": {
+       "securityId": null,
+       "lastPrice": 0,
+       "oi": null,
+       "previousOi": null,
+       "volume": null,
+       "previousVolume": null,
+       "previousClosePrice": null,
+       "averagePrice": null,
+       "topBidPrice": null,
+       "topBidQuantity": null,
+       "topAskPrice": null,
+       "topAskQuantity": null,
+       "vendorQuarantined": {
+        "impliedVolatility": 12.5,
+        "greeks": {
+         "delta": 0.5,
+         "gamma": null,
+         "theta": null,
+         "vega": null
+        },
+        "reason": "Vendor analytics are computed against the index LTP, not the forward."
+       }
+      },
+      "pe": null
+     },
+     {
+      "strike": 74300,
+      "ce": null,
+      "pe": null
+     },
+     {
+      "strike": 74400,
+      "ce": null,
+      "pe": null
+     }
+    ],
+    "provenance": {
+     "fetchId": "chain",
+     "epochMs": 1789725600000,
+     "source": "dhan-rest-v2",
+     "endpoint": "/optionchain"
+    },
+    "quarantined": {}
+   }
+  },
+  {
+   "id": "normalizeQuote/normal",
+   "input": {
+    "last_price": 74656.75,
+    "last_trade_time": "18/09/2026 15:29:58",
+    "ohlc": {
+     "open": 74506.75,
+     "high": 74776.75,
+     "low": 74456.75,
+     "close": 74626.75
+    },
+    "volume": 50000,
+    "oi": 120000,
+    "depth": {
+     "buy": [
+      {
+       "price": 74656.25,
+       "quantity": 20,
+       "orders": 1
+      },
+      {
+       "price": 74655.75,
+       "quantity": 40,
+       "orders": 2
+      },
+      {
+       "price": 74655.25,
+       "quantity": 60,
+       "orders": 3
+      },
+      {
+       "price": 74654.75,
+       "quantity": 80,
+       "orders": 4
+      },
+      {
+       "price": 74654.25,
+       "quantity": 100,
+       "orders": 5
+      }
+     ],
+     "sell": [
+      {
+       "price": 74657.25,
+       "quantity": 20,
+       "orders": 1
+      },
+      {
+       "price": 74657.75,
+       "quantity": 40,
+       "orders": 2
+      },
+      {
+       "price": 74658.25,
+       "quantity": 60,
+       "orders": 3
+      },
+      {
+       "price": 74658.75,
+       "quantity": 80,
+       "orders": 4
+      },
+      {
+       "price": 74659.25,
+       "quantity": 100,
+       "orders": 5
+      }
+     ]
+    }
+   },
+   "expected": {
+    "securityId": "FUT",
+    "segment": "BSE_FNO",
+    "ltp": 74656.75,
+    "ohlc": {
+     "open": 74506.75,
+     "high": 74776.75,
+     "low": 74456.75,
+     "close": 74626.75
+    },
+    "volume": 50000,
+    "oi": 120000,
+    "oiDayHigh": null,
+    "oiDayLow": null,
+    "averagePrice": null,
+    "buyQuantity": null,
+    "sellQuantity": null,
+    "netChange": null,
+    "upperCircuit": null,
+    "lowerCircuit": null,
+    "lastTradeTimeMs": 1789725598000,
+    "depth": {
+     "buy": [
+      {
+       "price": 74656.25,
+       "quantity": 20,
+       "orders": 1
+      },
+      {
+       "price": 74655.75,
+       "quantity": 40,
+       "orders": 2
+      },
+      {
+       "price": 74655.25,
+       "quantity": 60,
+       "orders": 3
+      },
+      {
+       "price": 74654.75,
+       "quantity": 80,
+       "orders": 4
+      },
+      {
+       "price": 74654.25,
+       "quantity": 100,
+       "orders": 5
+      }
+     ],
+     "sell": [
+      {
+       "price": 74657.25,
+       "quantity": 20,
+       "orders": 1
+      },
+      {
+       "price": 74657.75,
+       "quantity": 40,
+       "orders": 2
+      },
+      {
+       "price": 74658.25,
+       "quantity": 60,
+       "orders": 3
+      },
+      {
+       "price": 74658.75,
+       "quantity": 80,
+       "orders": 4
+      },
+      {
+       "price": 74659.25,
+       "quantity": 100,
+       "orders": 5
+      }
+     ]
+    },
+    "provenance": {
+     "fetchId": "futures",
+     "epochMs": 1789725600000,
+     "source": "dhan-rest-v2",
+     "endpoint": "/marketfeed/quote"
+    },
+    "quarantined": {}
+   }
+  },
+  {
+   "id": "normalizeQuote/missingLtp",
+   "input": {
+    "last_trade_time": "18/09/2026 15:29:58",
+    "ohlc": {
+     "open": 74506.75,
+     "high": 74776.75,
+     "low": 74456.75,
+     "close": 74626.75
+    },
+    "volume": 50000,
+    "oi": 120000,
+    "depth": {
+     "buy": [
+      {
+       "price": 74656.25,
+       "quantity": 20,
+       "orders": 1
+      },
+      {
+       "price": 74655.75,
+       "quantity": 40,
+       "orders": 2
+      },
+      {
+       "price": 74655.25,
+       "quantity": 60,
+       "orders": 3
+      },
+      {
+       "price": 74654.75,
+       "quantity": 80,
+       "orders": 4
+      },
+      {
+       "price": 74654.25,
+       "quantity": 100,
+       "orders": 5
+      }
+     ],
+     "sell": [
+      {
+       "price": 74657.25,
+       "quantity": 20,
+       "orders": 1
+      },
+      {
+       "price": 74657.75,
+       "quantity": 40,
+       "orders": 2
+      },
+      {
+       "price": 74658.25,
+       "quantity": 60,
+       "orders": 3
+      },
+      {
+       "price": 74658.75,
+       "quantity": 80,
+       "orders": 4
+      },
+      {
+       "price": 74659.25,
+       "quantity": 100,
+       "orders": 5
+      }
+     ]
+    }
+   },
+   "expected": {
+    "securityId": "FUT",
+    "segment": "BSE_FNO",
+    "ltp": {
+     "$num": "NaN"
+    },
+    "ohlc": {
+     "open": 74506.75,
+     "high": 74776.75,
+     "low": 74456.75,
+     "close": 74626.75
+    },
+    "volume": 50000,
+    "oi": 120000,
+    "oiDayHigh": null,
+    "oiDayLow": null,
+    "averagePrice": null,
+    "buyQuantity": null,
+    "sellQuantity": null,
+    "netChange": null,
+    "upperCircuit": null,
+    "lowerCircuit": null,
+    "lastTradeTimeMs": 1789725598000,
+    "depth": {
+     "buy": [
+      {
+       "price": 74656.25,
+       "quantity": 20,
+       "orders": 1
+      },
+      {
+       "price": 74655.75,
+       "quantity": 40,
+       "orders": 2
+      },
+      {
+       "price": 74655.25,
+       "quantity": 60,
+       "orders": 3
+      },
+      {
+       "price": 74654.75,
+       "quantity": 80,
+       "orders": 4
+      },
+      {
+       "price": 74654.25,
+       "quantity": 100,
+       "orders": 5
+      }
+     ],
+     "sell": [
+      {
+       "price": 74657.25,
+       "quantity": 20,
+       "orders": 1
+      },
+      {
+       "price": 74657.75,
+       "quantity": 40,
+       "orders": 2
+      },
+      {
+       "price": 74658.25,
+       "quantity": 60,
+       "orders": 3
+      },
+      {
+       "price": 74658.75,
+       "quantity": 80,
+       "orders": 4
+      },
+      {
+       "price": 74659.25,
+       "quantity": 100,
+       "orders": 5
+      }
+     ]
+    },
+    "provenance": {
+     "fetchId": "futures",
+     "epochMs": 1789725600000,
+     "source": "dhan-rest-v2",
+     "endpoint": "/marketfeed/quote"
+    },
+    "quarantined": {
+     "last_price": {
+      "$undefined": true
+     }
+    }
+   }
+  },
+  {
+   "id": "normalizeQuote/nullLtp",
+   "input": {
+    "last_price": null,
+    "last_trade_time": "18/09/2026 15:29:58",
+    "ohlc": {
+     "open": 74506.75,
+     "high": 74776.75,
+     "low": 74456.75,
+     "close": 74626.75
+    },
+    "volume": 50000,
+    "oi": 120000,
+    "depth": {
+     "buy": [
+      {
+       "price": 74656.25,
+       "quantity": 20,
+       "orders": 1
+      },
+      {
+       "price": 74655.75,
+       "quantity": 40,
+       "orders": 2
+      },
+      {
+       "price": 74655.25,
+       "quantity": 60,
+       "orders": 3
+      },
+      {
+       "price": 74654.75,
+       "quantity": 80,
+       "orders": 4
+      },
+      {
+       "price": 74654.25,
+       "quantity": 100,
+       "orders": 5
+      }
+     ],
+     "sell": [
+      {
+       "price": 74657.25,
+       "quantity": 20,
+       "orders": 1
+      },
+      {
+       "price": 74657.75,
+       "quantity": 40,
+       "orders": 2
+      },
+      {
+       "price": 74658.25,
+       "quantity": 60,
+       "orders": 3
+      },
+      {
+       "price": 74658.75,
+       "quantity": 80,
+       "orders": 4
+      },
+      {
+       "price": 74659.25,
+       "quantity": 100,
+       "orders": 5
+      }
+     ]
+    }
+   },
+   "expected": {
+    "securityId": "FUT",
+    "segment": "BSE_FNO",
+    "ltp": {
+     "$num": "NaN"
+    },
+    "ohlc": {
+     "open": 74506.75,
+     "high": 74776.75,
+     "low": 74456.75,
+     "close": 74626.75
+    },
+    "volume": 50000,
+    "oi": 120000,
+    "oiDayHigh": null,
+    "oiDayLow": null,
+    "averagePrice": null,
+    "buyQuantity": null,
+    "sellQuantity": null,
+    "netChange": null,
+    "upperCircuit": null,
+    "lowerCircuit": null,
+    "lastTradeTimeMs": 1789725598000,
+    "depth": {
+     "buy": [
+      {
+       "price": 74656.25,
+       "quantity": 20,
+       "orders": 1
+      },
+      {
+       "price": 74655.75,
+       "quantity": 40,
+       "orders": 2
+      },
+      {
+       "price": 74655.25,
+       "quantity": 60,
+       "orders": 3
+      },
+      {
+       "price": 74654.75,
+       "quantity": 80,
+       "orders": 4
+      },
+      {
+       "price": 74654.25,
+       "quantity": 100,
+       "orders": 5
+      }
+     ],
+     "sell": [
+      {
+       "price": 74657.25,
+       "quantity": 20,
+       "orders": 1
+      },
+      {
+       "price": 74657.75,
+       "quantity": 40,
+       "orders": 2
+      },
+      {
+       "price": 74658.25,
+       "quantity": 60,
+       "orders": 3
+      },
+      {
+       "price": 74658.75,
+       "quantity": 80,
+       "orders": 4
+      },
+      {
+       "price": 74659.25,
+       "quantity": 100,
+       "orders": 5
+      }
+     ]
+    },
+    "provenance": {
+     "fetchId": "futures",
+     "epochMs": 1789725600000,
+     "source": "dhan-rest-v2",
+     "endpoint": "/marketfeed/quote"
+    },
+    "quarantined": {
+     "last_price": null
+    }
+   }
+  },
+  {
+   "id": "normalizeQuote/stringLtp",
+   "input": {
+    "last_price": "74656.75",
+    "last_trade_time": "18/09/2026 15:29:58",
+    "ohlc": {
+     "open": 74506.75,
+     "high": 74776.75,
+     "low": 74456.75,
+     "close": 74626.75
+    },
+    "volume": 50000,
+    "oi": 120000,
+    "depth": {
+     "buy": [
+      {
+       "price": 74656.25,
+       "quantity": 20,
+       "orders": 1
+      },
+      {
+       "price": 74655.75,
+       "quantity": 40,
+       "orders": 2
+      },
+      {
+       "price": 74655.25,
+       "quantity": 60,
+       "orders": 3
+      },
+      {
+       "price": 74654.75,
+       "quantity": 80,
+       "orders": 4
+      },
+      {
+       "price": 74654.25,
+       "quantity": 100,
+       "orders": 5
+      }
+     ],
+     "sell": [
+      {
+       "price": 74657.25,
+       "quantity": 20,
+       "orders": 1
+      },
+      {
+       "price": 74657.75,
+       "quantity": 40,
+       "orders": 2
+      },
+      {
+       "price": 74658.25,
+       "quantity": 60,
+       "orders": 3
+      },
+      {
+       "price": 74658.75,
+       "quantity": 80,
+       "orders": 4
+      },
+      {
+       "price": 74659.25,
+       "quantity": 100,
+       "orders": 5
+      }
+     ]
+    }
+   },
+   "expected": {
+    "securityId": "FUT",
+    "segment": "BSE_FNO",
+    "ltp": 74656.75,
+    "ohlc": {
+     "open": 74506.75,
+     "high": 74776.75,
+     "low": 74456.75,
+     "close": 74626.75
+    },
+    "volume": 50000,
+    "oi": 120000,
+    "oiDayHigh": null,
+    "oiDayLow": null,
+    "averagePrice": null,
+    "buyQuantity": null,
+    "sellQuantity": null,
+    "netChange": null,
+    "upperCircuit": null,
+    "lowerCircuit": null,
+    "lastTradeTimeMs": 1789725598000,
+    "depth": {
+     "buy": [
+      {
+       "price": 74656.25,
+       "quantity": 20,
+       "orders": 1
+      },
+      {
+       "price": 74655.75,
+       "quantity": 40,
+       "orders": 2
+      },
+      {
+       "price": 74655.25,
+       "quantity": 60,
+       "orders": 3
+      },
+      {
+       "price": 74654.75,
+       "quantity": 80,
+       "orders": 4
+      },
+      {
+       "price": 74654.25,
+       "quantity": 100,
+       "orders": 5
+      }
+     ],
+     "sell": [
+      {
+       "price": 74657.25,
+       "quantity": 20,
+       "orders": 1
+      },
+      {
+       "price": 74657.75,
+       "quantity": 40,
+       "orders": 2
+      },
+      {
+       "price": 74658.25,
+       "quantity": 60,
+       "orders": 3
+      },
+      {
+       "price": 74658.75,
+       "quantity": 80,
+       "orders": 4
+      },
+      {
+       "price": 74659.25,
+       "quantity": 100,
+       "orders": 5
+      }
+     ]
+    },
+    "provenance": {
+     "fetchId": "futures",
+     "epochMs": 1789725600000,
+     "source": "dhan-rest-v2",
+     "endpoint": "/marketfeed/quote"
+    },
+    "quarantined": {}
+   }
+  },
+  {
+   "id": "normalizeQuote/neverTraded",
+   "input": {
+    "last_price": 74656.75,
+    "last_trade_time": "01/01/1980 00:00:00",
+    "ohlc": {
+     "open": 74506.75,
+     "high": 74776.75,
+     "low": 74456.75,
+     "close": 74626.75
+    },
+    "volume": 50000,
+    "oi": 120000,
+    "depth": {
+     "buy": [
+      {
+       "price": 74656.25,
+       "quantity": 20,
+       "orders": 1
+      },
+      {
+       "price": 74655.75,
+       "quantity": 40,
+       "orders": 2
+      },
+      {
+       "price": 74655.25,
+       "quantity": 60,
+       "orders": 3
+      },
+      {
+       "price": 74654.75,
+       "quantity": 80,
+       "orders": 4
+      },
+      {
+       "price": 74654.25,
+       "quantity": 100,
+       "orders": 5
+      }
+     ],
+     "sell": [
+      {
+       "price": 74657.25,
+       "quantity": 20,
+       "orders": 1
+      },
+      {
+       "price": 74657.75,
+       "quantity": 40,
+       "orders": 2
+      },
+      {
+       "price": 74658.25,
+       "quantity": 60,
+       "orders": 3
+      },
+      {
+       "price": 74658.75,
+       "quantity": 80,
+       "orders": 4
+      },
+      {
+       "price": 74659.25,
+       "quantity": 100,
+       "orders": 5
+      }
+     ]
+    }
+   },
+   "expected": {
+    "securityId": "FUT",
+    "segment": "BSE_FNO",
+    "ltp": 74656.75,
+    "ohlc": {
+     "open": 74506.75,
+     "high": 74776.75,
+     "low": 74456.75,
+     "close": 74626.75
+    },
+    "volume": 50000,
+    "oi": 120000,
+    "oiDayHigh": null,
+    "oiDayLow": null,
+    "averagePrice": null,
+    "buyQuantity": null,
+    "sellQuantity": null,
+    "netChange": null,
+    "upperCircuit": null,
+    "lowerCircuit": null,
+    "lastTradeTimeMs": null,
+    "depth": {
+     "buy": [
+      {
+       "price": 74656.25,
+       "quantity": 20,
+       "orders": 1
+      },
+      {
+       "price": 74655.75,
+       "quantity": 40,
+       "orders": 2
+      },
+      {
+       "price": 74655.25,
+       "quantity": 60,
+       "orders": 3
+      },
+      {
+       "price": 74654.75,
+       "quantity": 80,
+       "orders": 4
+      },
+      {
+       "price": 74654.25,
+       "quantity": 100,
+       "orders": 5
+      }
+     ],
+     "sell": [
+      {
+       "price": 74657.25,
+       "quantity": 20,
+       "orders": 1
+      },
+      {
+       "price": 74657.75,
+       "quantity": 40,
+       "orders": 2
+      },
+      {
+       "price": 74658.25,
+       "quantity": 60,
+       "orders": 3
+      },
+      {
+       "price": 74658.75,
+       "quantity": 80,
+       "orders": 4
+      },
+      {
+       "price": 74659.25,
+       "quantity": 100,
+       "orders": 5
+      }
+     ]
+    },
+    "provenance": {
+     "fetchId": "futures",
+     "epochMs": 1789725600000,
+     "source": "dhan-rest-v2",
+     "endpoint": "/marketfeed/quote"
+    },
+    "quarantined": {
+     "last_trade_time": "01/01/1980 00:00:00"
+    }
+   }
+  },
+  {
+   "id": "normalizeQuote/badLtt",
+   "input": {
+    "last_price": 74656.75,
+    "last_trade_time": "2026-09-18 15:29:58",
+    "ohlc": {
+     "open": 74506.75,
+     "high": 74776.75,
+     "low": 74456.75,
+     "close": 74626.75
+    },
+    "volume": 50000,
+    "oi": 120000,
+    "depth": {
+     "buy": [
+      {
+       "price": 74656.25,
+       "quantity": 20,
+       "orders": 1
+      },
+      {
+       "price": 74655.75,
+       "quantity": 40,
+       "orders": 2
+      },
+      {
+       "price": 74655.25,
+       "quantity": 60,
+       "orders": 3
+      },
+      {
+       "price": 74654.75,
+       "quantity": 80,
+       "orders": 4
+      },
+      {
+       "price": 74654.25,
+       "quantity": 100,
+       "orders": 5
+      }
+     ],
+     "sell": [
+      {
+       "price": 74657.25,
+       "quantity": 20,
+       "orders": 1
+      },
+      {
+       "price": 74657.75,
+       "quantity": 40,
+       "orders": 2
+      },
+      {
+       "price": 74658.25,
+       "quantity": 60,
+       "orders": 3
+      },
+      {
+       "price": 74658.75,
+       "quantity": 80,
+       "orders": 4
+      },
+      {
+       "price": 74659.25,
+       "quantity": 100,
+       "orders": 5
+      }
+     ]
+    }
+   },
+   "expected": {
+    "securityId": "FUT",
+    "segment": "BSE_FNO",
+    "ltp": 74656.75,
+    "ohlc": {
+     "open": 74506.75,
+     "high": 74776.75,
+     "low": 74456.75,
+     "close": 74626.75
+    },
+    "volume": 50000,
+    "oi": 120000,
+    "oiDayHigh": null,
+    "oiDayLow": null,
+    "averagePrice": null,
+    "buyQuantity": null,
+    "sellQuantity": null,
+    "netChange": null,
+    "upperCircuit": null,
+    "lowerCircuit": null,
+    "lastTradeTimeMs": null,
+    "depth": {
+     "buy": [
+      {
+       "price": 74656.25,
+       "quantity": 20,
+       "orders": 1
+      },
+      {
+       "price": 74655.75,
+       "quantity": 40,
+       "orders": 2
+      },
+      {
+       "price": 74655.25,
+       "quantity": 60,
+       "orders": 3
+      },
+      {
+       "price": 74654.75,
+       "quantity": 80,
+       "orders": 4
+      },
+      {
+       "price": 74654.25,
+       "quantity": 100,
+       "orders": 5
+      }
+     ],
+     "sell": [
+      {
+       "price": 74657.25,
+       "quantity": 20,
+       "orders": 1
+      },
+      {
+       "price": 74657.75,
+       "quantity": 40,
+       "orders": 2
+      },
+      {
+       "price": 74658.25,
+       "quantity": 60,
+       "orders": 3
+      },
+      {
+       "price": 74658.75,
+       "quantity": 80,
+       "orders": 4
+      },
+      {
+       "price": 74659.25,
+       "quantity": 100,
+       "orders": 5
+      }
+     ]
+    },
+    "provenance": {
+     "fetchId": "futures",
+     "epochMs": 1789725600000,
+     "source": "dhan-rest-v2",
+     "endpoint": "/marketfeed/quote"
+    },
+    "quarantined": {
+     "last_trade_time": "2026-09-18 15:29:58"
+    }
+   }
+  },
+  {
+   "id": "normalizeQuote/nullLtt",
+   "input": {
+    "last_price": 74656.75,
+    "last_trade_time": null,
+    "ohlc": {
+     "open": 74506.75,
+     "high": 74776.75,
+     "low": 74456.75,
+     "close": 74626.75
+    },
+    "volume": 50000,
+    "oi": 120000,
+    "depth": {
+     "buy": [
+      {
+       "price": 74656.25,
+       "quantity": 20,
+       "orders": 1
+      },
+      {
+       "price": 74655.75,
+       "quantity": 40,
+       "orders": 2
+      },
+      {
+       "price": 74655.25,
+       "quantity": 60,
+       "orders": 3
+      },
+      {
+       "price": 74654.75,
+       "quantity": 80,
+       "orders": 4
+      },
+      {
+       "price": 74654.25,
+       "quantity": 100,
+       "orders": 5
+      }
+     ],
+     "sell": [
+      {
+       "price": 74657.25,
+       "quantity": 20,
+       "orders": 1
+      },
+      {
+       "price": 74657.75,
+       "quantity": 40,
+       "orders": 2
+      },
+      {
+       "price": 74658.25,
+       "quantity": 60,
+       "orders": 3
+      },
+      {
+       "price": 74658.75,
+       "quantity": 80,
+       "orders": 4
+      },
+      {
+       "price": 74659.25,
+       "quantity": 100,
+       "orders": 5
+      }
+     ]
+    }
+   },
+   "expected": {
+    "securityId": "FUT",
+    "segment": "BSE_FNO",
+    "ltp": 74656.75,
+    "ohlc": {
+     "open": 74506.75,
+     "high": 74776.75,
+     "low": 74456.75,
+     "close": 74626.75
+    },
+    "volume": 50000,
+    "oi": 120000,
+    "oiDayHigh": null,
+    "oiDayLow": null,
+    "averagePrice": null,
+    "buyQuantity": null,
+    "sellQuantity": null,
+    "netChange": null,
+    "upperCircuit": null,
+    "lowerCircuit": null,
+    "lastTradeTimeMs": null,
+    "depth": {
+     "buy": [
+      {
+       "price": 74656.25,
+       "quantity": 20,
+       "orders": 1
+      },
+      {
+       "price": 74655.75,
+       "quantity": 40,
+       "orders": 2
+      },
+      {
+       "price": 74655.25,
+       "quantity": 60,
+       "orders": 3
+      },
+      {
+       "price": 74654.75,
+       "quantity": 80,
+       "orders": 4
+      },
+      {
+       "price": 74654.25,
+       "quantity": 100,
+       "orders": 5
+      }
+     ],
+     "sell": [
+      {
+       "price": 74657.25,
+       "quantity": 20,
+       "orders": 1
+      },
+      {
+       "price": 74657.75,
+       "quantity": 40,
+       "orders": 2
+      },
+      {
+       "price": 74658.25,
+       "quantity": 60,
+       "orders": 3
+      },
+      {
+       "price": 74658.75,
+       "quantity": 80,
+       "orders": 4
+      },
+      {
+       "price": 74659.25,
+       "quantity": 100,
+       "orders": 5
+      }
+     ]
+    },
+    "provenance": {
+     "fetchId": "futures",
+     "epochMs": 1789725600000,
+     "source": "dhan-rest-v2",
+     "endpoint": "/marketfeed/quote"
+    },
+    "quarantined": {
+     "last_trade_time": null
+    }
+   }
+  },
+  {
+   "id": "normalizeQuote/overflowLtt",
+   "input": {
+    "last_price": 74656.75,
+    "last_trade_time": "31/02/2026 10:00:00",
+    "ohlc": {
+     "open": 74506.75,
+     "high": 74776.75,
+     "low": 74456.75,
+     "close": 74626.75
+    },
+    "volume": 50000,
+    "oi": 120000,
+    "depth": {
+     "buy": [
+      {
+       "price": 74656.25,
+       "quantity": 20,
+       "orders": 1
+      },
+      {
+       "price": 74655.75,
+       "quantity": 40,
+       "orders": 2
+      },
+      {
+       "price": 74655.25,
+       "quantity": 60,
+       "orders": 3
+      },
+      {
+       "price": 74654.75,
+       "quantity": 80,
+       "orders": 4
+      },
+      {
+       "price": 74654.25,
+       "quantity": 100,
+       "orders": 5
+      }
+     ],
+     "sell": [
+      {
+       "price": 74657.25,
+       "quantity": 20,
+       "orders": 1
+      },
+      {
+       "price": 74657.75,
+       "quantity": 40,
+       "orders": 2
+      },
+      {
+       "price": 74658.25,
+       "quantity": 60,
+       "orders": 3
+      },
+      {
+       "price": 74658.75,
+       "quantity": 80,
+       "orders": 4
+      },
+      {
+       "price": 74659.25,
+       "quantity": 100,
+       "orders": 5
+      }
+     ]
+    }
+   },
+   "expected": {
+    "securityId": "FUT",
+    "segment": "BSE_FNO",
+    "ltp": 74656.75,
+    "ohlc": {
+     "open": 74506.75,
+     "high": 74776.75,
+     "low": 74456.75,
+     "close": 74626.75
+    },
+    "volume": 50000,
+    "oi": 120000,
+    "oiDayHigh": null,
+    "oiDayLow": null,
+    "averagePrice": null,
+    "buyQuantity": null,
+    "sellQuantity": null,
+    "netChange": null,
+    "upperCircuit": null,
+    "lowerCircuit": null,
+    "lastTradeTimeMs": 1772512200000,
+    "depth": {
+     "buy": [
+      {
+       "price": 74656.25,
+       "quantity": 20,
+       "orders": 1
+      },
+      {
+       "price": 74655.75,
+       "quantity": 40,
+       "orders": 2
+      },
+      {
+       "price": 74655.25,
+       "quantity": 60,
+       "orders": 3
+      },
+      {
+       "price": 74654.75,
+       "quantity": 80,
+       "orders": 4
+      },
+      {
+       "price": 74654.25,
+       "quantity": 100,
+       "orders": 5
+      }
+     ],
+     "sell": [
+      {
+       "price": 74657.25,
+       "quantity": 20,
+       "orders": 1
+      },
+      {
+       "price": 74657.75,
+       "quantity": 40,
+       "orders": 2
+      },
+      {
+       "price": 74658.25,
+       "quantity": 60,
+       "orders": 3
+      },
+      {
+       "price": 74658.75,
+       "quantity": 80,
+       "orders": 4
+      },
+      {
+       "price": 74659.25,
+       "quantity": 100,
+       "orders": 5
+      }
+     ]
+    },
+    "provenance": {
+     "fetchId": "futures",
+     "epochMs": 1789725600000,
+     "source": "dhan-rest-v2",
+     "endpoint": "/marketfeed/quote"
+    },
+    "quarantined": {}
+   }
+  },
+  {
+   "id": "normalizeQuote/stale",
+   "input": {
+    "last_price": 74656.75,
+    "last_trade_time": "18/09/2026 15:00:00",
+    "ohlc": {
+     "open": 74506.75,
+     "high": 74776.75,
+     "low": 74456.75,
+     "close": 74626.75
+    },
+    "volume": 50000,
+    "oi": 120000,
+    "depth": {
+     "buy": [
+      {
+       "price": 74656.25,
+       "quantity": 20,
+       "orders": 1
+      },
+      {
+       "price": 74655.75,
+       "quantity": 40,
+       "orders": 2
+      },
+      {
+       "price": 74655.25,
+       "quantity": 60,
+       "orders": 3
+      },
+      {
+       "price": 74654.75,
+       "quantity": 80,
+       "orders": 4
+      },
+      {
+       "price": 74654.25,
+       "quantity": 100,
+       "orders": 5
+      }
+     ],
+     "sell": [
+      {
+       "price": 74657.25,
+       "quantity": 20,
+       "orders": 1
+      },
+      {
+       "price": 74657.75,
+       "quantity": 40,
+       "orders": 2
+      },
+      {
+       "price": 74658.25,
+       "quantity": 60,
+       "orders": 3
+      },
+      {
+       "price": 74658.75,
+       "quantity": 80,
+       "orders": 4
+      },
+      {
+       "price": 74659.25,
+       "quantity": 100,
+       "orders": 5
+      }
+     ]
+    }
+   },
+   "expected": {
+    "securityId": "FUT",
+    "segment": "BSE_FNO",
+    "ltp": 74656.75,
+    "ohlc": {
+     "open": 74506.75,
+     "high": 74776.75,
+     "low": 74456.75,
+     "close": 74626.75
+    },
+    "volume": 50000,
+    "oi": 120000,
+    "oiDayHigh": null,
+    "oiDayLow": null,
+    "averagePrice": null,
+    "buyQuantity": null,
+    "sellQuantity": null,
+    "netChange": null,
+    "upperCircuit": null,
+    "lowerCircuit": null,
+    "lastTradeTimeMs": 1789723800000,
+    "depth": {
+     "buy": [
+      {
+       "price": 74656.25,
+       "quantity": 20,
+       "orders": 1
+      },
+      {
+       "price": 74655.75,
+       "quantity": 40,
+       "orders": 2
+      },
+      {
+       "price": 74655.25,
+       "quantity": 60,
+       "orders": 3
+      },
+      {
+       "price": 74654.75,
+       "quantity": 80,
+       "orders": 4
+      },
+      {
+       "price": 74654.25,
+       "quantity": 100,
+       "orders": 5
+      }
+     ],
+     "sell": [
+      {
+       "price": 74657.25,
+       "quantity": 20,
+       "orders": 1
+      },
+      {
+       "price": 74657.75,
+       "quantity": 40,
+       "orders": 2
+      },
+      {
+       "price": 74658.25,
+       "quantity": 60,
+       "orders": 3
+      },
+      {
+       "price": 74658.75,
+       "quantity": 80,
+       "orders": 4
+      },
+      {
+       "price": 74659.25,
+       "quantity": 100,
+       "orders": 5
+      }
+     ]
+    },
+    "provenance": {
+     "fetchId": "futures",
+     "epochMs": 1789725600000,
+     "source": "dhan-rest-v2",
+     "endpoint": "/marketfeed/quote"
+    },
+    "quarantined": {}
+   }
+  },
+  {
+   "id": "normalizeQuote/crossed",
+   "input": {
+    "last_price": 100,
+    "last_trade_time": "18/09/2026 15:29:58",
+    "ohlc": {
+     "open": -50,
+     "high": 220,
+     "low": -100,
+     "close": 70
+    },
+    "volume": 50000,
+    "oi": 120000,
+    "depth": {
+     "buy": [
+      {
+       "price": 101,
+       "quantity": 1,
+       "orders": 1
+      }
+     ],
+     "sell": [
+      {
+       "price": 100.5,
+       "quantity": 1,
+       "orders": 1
+      }
+     ]
+    }
+   },
+   "expected": {
+    "securityId": "FUT",
+    "segment": "BSE_FNO",
+    "ltp": 100,
+    "ohlc": {
+     "open": -50,
+     "high": 220,
+     "low": -100,
+     "close": 70
+    },
+    "volume": 50000,
+    "oi": 120000,
+    "oiDayHigh": null,
+    "oiDayLow": null,
+    "averagePrice": null,
+    "buyQuantity": null,
+    "sellQuantity": null,
+    "netChange": null,
+    "upperCircuit": null,
+    "lowerCircuit": null,
+    "lastTradeTimeMs": 1789725598000,
+    "depth": {
+     "buy": [
+      {
+       "price": 101,
+       "quantity": 1,
+       "orders": 1
+      }
+     ],
+     "sell": [
+      {
+       "price": 100.5,
+       "quantity": 1,
+       "orders": 1
+      }
+     ]
+    },
+    "provenance": {
+     "fetchId": "futures",
+     "epochMs": 1789725600000,
+     "source": "dhan-rest-v2",
+     "endpoint": "/marketfeed/quote"
+    },
+    "quarantined": {}
+   }
+  },
+  {
+   "id": "normalizeQuote/oneSided",
+   "input": {
+    "last_price": 100,
+    "last_trade_time": "18/09/2026 15:29:58",
+    "ohlc": {
+     "open": -50,
+     "high": 220,
+     "low": -100,
+     "close": 70
+    },
+    "volume": 50000,
+    "oi": 120000,
+    "depth": {
+     "buy": [
+      {
+       "price": 99,
+       "quantity": 5,
+       "orders": 1
+      }
+     ],
+     "sell": [
+      {
+       "price": 0,
+       "quantity": 0,
+       "orders": 0
+      }
+     ]
+    }
+   },
+   "expected": {
+    "securityId": "FUT",
+    "segment": "BSE_FNO",
+    "ltp": 100,
+    "ohlc": {
+     "open": -50,
+     "high": 220,
+     "low": -100,
+     "close": 70
+    },
+    "volume": 50000,
+    "oi": 120000,
+    "oiDayHigh": null,
+    "oiDayLow": null,
+    "averagePrice": null,
+    "buyQuantity": null,
+    "sellQuantity": null,
+    "netChange": null,
+    "upperCircuit": null,
+    "lowerCircuit": null,
+    "lastTradeTimeMs": 1789725598000,
+    "depth": {
+     "buy": [
+      {
+       "price": 99,
+       "quantity": 5,
+       "orders": 1
+      }
+     ],
+     "sell": [
+      {
+       "price": 0,
+       "quantity": 0,
+       "orders": 0
+      }
+     ]
+    },
+    "provenance": {
+     "fetchId": "futures",
+     "epochMs": 1789725600000,
+     "source": "dhan-rest-v2",
+     "endpoint": "/marketfeed/quote"
+    },
+    "quarantined": {}
+   }
+  },
+  {
+   "id": "normalizeQuote/depthArray",
+   "input": {
+    "last_price": 100,
+    "last_trade_time": "18/09/2026 15:29:58",
+    "ohlc": {
+     "open": -50,
+     "high": 220,
+     "low": -100,
+     "close": 70
+    },
+    "volume": 50000,
+    "oi": 120000,
+    "depth": [
+     1,
+     2
+    ]
+   },
+   "expected": {
+    "securityId": "FUT",
+    "segment": "BSE_FNO",
+    "ltp": 100,
+    "ohlc": {
+     "open": -50,
+     "high": 220,
+     "low": -100,
+     "close": 70
+    },
+    "volume": 50000,
+    "oi": 120000,
+    "oiDayHigh": null,
+    "oiDayLow": null,
+    "averagePrice": null,
+    "buyQuantity": null,
+    "sellQuantity": null,
+    "netChange": null,
+    "upperCircuit": null,
+    "lowerCircuit": null,
+    "lastTradeTimeMs": 1789725598000,
+    "depth": {
+     "buy": [],
+     "sell": []
+    },
+    "provenance": {
+     "fetchId": "futures",
+     "epochMs": 1789725600000,
+     "source": "dhan-rest-v2",
+     "endpoint": "/marketfeed/quote"
+    },
+    "quarantined": {}
+   }
+  },
+  {
+   "id": "normalizeQuote/depthMalformed",
+   "input": {
+    "last_price": 100,
+    "last_trade_time": "18/09/2026 15:29:58",
+    "ohlc": {
+     "open": -50,
+     "high": 220,
+     "low": -100,
+     "close": 70
+    },
+    "volume": 50000,
+    "oi": 120000,
+    "depth": {
+     "buy": [
+      null,
+      7,
+      {
+       "price": "99.5",
+       "quantity": "10"
+      }
+     ],
+     "sell": "x"
+    }
+   },
+   "expected": {
+    "securityId": "FUT",
+    "segment": "BSE_FNO",
+    "ltp": 100,
+    "ohlc": {
+     "open": -50,
+     "high": 220,
+     "low": -100,
+     "close": 70
+    },
+    "volume": 50000,
+    "oi": 120000,
+    "oiDayHigh": null,
+    "oiDayLow": null,
+    "averagePrice": null,
+    "buyQuantity": null,
+    "sellQuantity": null,
+    "netChange": null,
+    "upperCircuit": null,
+    "lowerCircuit": null,
+    "lastTradeTimeMs": 1789725598000,
+    "depth": {
+     "buy": [
+      {
+       "price": 0,
+       "quantity": 0,
+       "orders": 0
+      },
+      {
+       "price": 0,
+       "quantity": 0,
+       "orders": 0
+      },
+      {
+       "price": 99.5,
+       "quantity": 10,
+       "orders": 0
+      }
+     ],
+     "sell": []
+    },
+    "provenance": {
+     "fetchId": "futures",
+     "epochMs": 1789725600000,
+     "source": "dhan-rest-v2",
+     "endpoint": "/marketfeed/quote"
+    },
+    "quarantined": {}
+   }
+  },
+  {
+   "id": "normalizeQuote/ohlcPartial",
+   "input": {
+    "last_price": 100,
+    "last_trade_time": "18/09/2026 15:29:58",
+    "ohlc": {
+     "high": 105
+    },
+    "volume": 50000,
+    "oi": 120000,
+    "depth": {
+     "buy": [
+      {
+       "price": 99.5,
+       "quantity": 20,
+       "orders": 1
+      },
+      {
+       "price": 99,
+       "quantity": 40,
+       "orders": 2
+      },
+      {
+       "price": 98.5,
+       "quantity": 60,
+       "orders": 3
+      },
+      {
+       "price": 98,
+       "quantity": 80,
+       "orders": 4
+      },
+      {
+       "price": 97.5,
+       "quantity": 100,
+       "orders": 5
+      }
+     ],
+     "sell": [
+      {
+       "price": 100.5,
+       "quantity": 20,
+       "orders": 1
+      },
+      {
+       "price": 101,
+       "quantity": 40,
+       "orders": 2
+      },
+      {
+       "price": 101.5,
+       "quantity": 60,
+       "orders": 3
+      },
+      {
+       "price": 102,
+       "quantity": 80,
+       "orders": 4
+      },
+      {
+       "price": 102.5,
+       "quantity": 100,
+       "orders": 5
+      }
+     ]
+    }
+   },
+   "expected": {
+    "securityId": "FUT",
+    "segment": "BSE_FNO",
+    "ltp": 100,
+    "ohlc": {
+     "open": 0,
+     "high": 105,
+     "low": 0,
+     "close": 0
+    },
+    "volume": 50000,
+    "oi": 120000,
+    "oiDayHigh": null,
+    "oiDayLow": null,
+    "averagePrice": null,
+    "buyQuantity": null,
+    "sellQuantity": null,
+    "netChange": null,
+    "upperCircuit": null,
+    "lowerCircuit": null,
+    "lastTradeTimeMs": 1789725598000,
+    "depth": {
+     "buy": [
+      {
+       "price": 99.5,
+       "quantity": 20,
+       "orders": 1
+      },
+      {
+       "price": 99,
+       "quantity": 40,
+       "orders": 2
+      },
+      {
+       "price": 98.5,
+       "quantity": 60,
+       "orders": 3
+      },
+      {
+       "price": 98,
+       "quantity": 80,
+       "orders": 4
+      },
+      {
+       "price": 97.5,
+       "quantity": 100,
+       "orders": 5
+      }
+     ],
+     "sell": [
+      {
+       "price": 100.5,
+       "quantity": 20,
+       "orders": 1
+      },
+      {
+       "price": 101,
+       "quantity": 40,
+       "orders": 2
+      },
+      {
+       "price": 101.5,
+       "quantity": 60,
+       "orders": 3
+      },
+      {
+       "price": 102,
+       "quantity": 80,
+       "orders": 4
+      },
+      {
+       "price": 102.5,
+       "quantity": 100,
+       "orders": 5
+      }
+     ]
+    },
+    "provenance": {
+     "fetchId": "futures",
+     "epochMs": 1789725600000,
+     "source": "dhan-rest-v2",
+     "endpoint": "/marketfeed/quote"
+    },
+    "quarantined": {}
+   }
+  },
+  {
+   "id": "normalizeQuote/ohlcEmpty",
+   "input": {
+    "last_price": 100,
+    "last_trade_time": "18/09/2026 15:29:58",
+    "ohlc": {},
+    "volume": 50000,
+    "oi": 120000,
+    "depth": {
+     "buy": [
+      {
+       "price": 99.5,
+       "quantity": 20,
+       "orders": 1
+      },
+      {
+       "price": 99,
+       "quantity": 40,
+       "orders": 2
+      },
+      {
+       "price": 98.5,
+       "quantity": 60,
+       "orders": 3
+      },
+      {
+       "price": 98,
+       "quantity": 80,
+       "orders": 4
+      },
+      {
+       "price": 97.5,
+       "quantity": 100,
+       "orders": 5
+      }
+     ],
+     "sell": [
+      {
+       "price": 100.5,
+       "quantity": 20,
+       "orders": 1
+      },
+      {
+       "price": 101,
+       "quantity": 40,
+       "orders": 2
+      },
+      {
+       "price": 101.5,
+       "quantity": 60,
+       "orders": 3
+      },
+      {
+       "price": 102,
+       "quantity": 80,
+       "orders": 4
+      },
+      {
+       "price": 102.5,
+       "quantity": 100,
+       "orders": 5
+      }
+     ]
+    }
+   },
+   "expected": {
+    "securityId": "FUT",
+    "segment": "BSE_FNO",
+    "ltp": 100,
+    "ohlc": null,
+    "volume": 50000,
+    "oi": 120000,
+    "oiDayHigh": null,
+    "oiDayLow": null,
+    "averagePrice": null,
+    "buyQuantity": null,
+    "sellQuantity": null,
+    "netChange": null,
+    "upperCircuit": null,
+    "lowerCircuit": null,
+    "lastTradeTimeMs": 1789725598000,
+    "depth": {
+     "buy": [
+      {
+       "price": 99.5,
+       "quantity": 20,
+       "orders": 1
+      },
+      {
+       "price": 99,
+       "quantity": 40,
+       "orders": 2
+      },
+      {
+       "price": 98.5,
+       "quantity": 60,
+       "orders": 3
+      },
+      {
+       "price": 98,
+       "quantity": 80,
+       "orders": 4
+      },
+      {
+       "price": 97.5,
+       "quantity": 100,
+       "orders": 5
+      }
+     ],
+     "sell": [
+      {
+       "price": 100.5,
+       "quantity": 20,
+       "orders": 1
+      },
+      {
+       "price": 101,
+       "quantity": 40,
+       "orders": 2
+      },
+      {
+       "price": 101.5,
+       "quantity": 60,
+       "orders": 3
+      },
+      {
+       "price": 102,
+       "quantity": 80,
+       "orders": 4
+      },
+      {
+       "price": 102.5,
+       "quantity": 100,
+       "orders": 5
+      }
+     ]
+    },
+    "provenance": {
+     "fetchId": "futures",
+     "epochMs": 1789725600000,
+     "source": "dhan-rest-v2",
+     "endpoint": "/marketfeed/quote"
+    },
+    "quarantined": {}
+   }
+  },
+  {
+   "id": "normalizeQuote/nullRaw",
+   "input": null,
+   "expected": {
+    "securityId": "FUT",
+    "segment": "BSE_FNO",
+    "ltp": {
+     "$num": "NaN"
+    },
+    "ohlc": null,
+    "volume": null,
+    "oi": null,
+    "oiDayHigh": null,
+    "oiDayLow": null,
+    "averagePrice": null,
+    "buyQuantity": null,
+    "sellQuantity": null,
+    "netChange": null,
+    "upperCircuit": null,
+    "lowerCircuit": null,
+    "lastTradeTimeMs": null,
+    "depth": null,
+    "provenance": {
+     "fetchId": "futures",
+     "epochMs": 1789725600000,
+     "source": "dhan-rest-v2",
+     "endpoint": "/marketfeed/quote"
+    },
+    "quarantined": {
+     "last_price": {
+      "$undefined": true
+     }
+    }
+   }
+  },
+  {
+   "id": "normalizeQuote/emptyObject",
+   "input": {},
+   "expected": {
+    "securityId": "FUT",
+    "segment": "BSE_FNO",
+    "ltp": {
+     "$num": "NaN"
+    },
+    "ohlc": null,
+    "volume": null,
+    "oi": null,
+    "oiDayHigh": null,
+    "oiDayLow": null,
+    "averagePrice": null,
+    "buyQuantity": null,
+    "sellQuantity": null,
+    "netChange": null,
+    "upperCircuit": null,
+    "lowerCircuit": null,
+    "lastTradeTimeMs": null,
+    "depth": null,
+    "provenance": {
+     "fetchId": "futures",
+     "epochMs": 1789725600000,
+     "source": "dhan-rest-v2",
+     "endpoint": "/marketfeed/quote"
+    },
+    "quarantined": {
+     "last_price": {
+      "$undefined": true
+     }
+    }
+   }
+  },
+  {
+   "id": "parseLastTradeTime",
+   "input": [
+    "18/09/2026 15:29:58",
+    "01/01/1980 00:00:00",
+    " 18/09/2026 15:29:58 ",
+    "18/09/2026  15:29:58",
+    "31/02/2026 10:00:00",
+    "18/09/2026 25:61:61",
+    "18-09-2026 15:29:58",
+    "",
+    null,
+    12345,
+    "1/9/2026 09:15:00",
+    "01/01/0050 10:00:00",
+    "29/02/2024 09:15:00"
+   ],
+   "expected": [
+    1789725598000,
+    null,
+    1789725598000,
+    1789725598000,
+    1772512200000,
+    1789763521000,
+    null,
+    null,
+    null,
+    null,
+    null,
+    -631135800000,
+    1709178300000
+   ]
+  },
+  {
+   "id": "toCandles/real18Sep",
+   "input": {
+    "timestamp": [
+     1789703100,
+     1789703400,
+     1789703700,
+     1789704000,
+     1789704300,
+     1789704600,
+     1789704900,
+     1789705200,
+     1789705500,
+     1789705800,
+     1789706100,
+     1789706400,
+     1789706700,
+     1789707000,
+     1789707300,
+     1789707600,
+     1789707900,
+     1789708200,
+     1789708500,
+     1789708800,
+     1789709100,
+     1789709400,
+     1789709700,
+     1789710000,
+     1789710300,
+     1789710600,
+     1789710900,
+     1789711200,
+     1789711500,
+     1789711800,
+     1789712100,
+     1789712400,
+     1789712700,
+     1789713000,
+     1789713300,
+     1789713600,
+     1789713900,
+     1789714200,
+     1789714500,
+     1789714800,
+     1789715100,
+     1789715400,
+     1789715700,
+     1789716000,
+     1789716300,
+     1789716600,
+     1789716900,
+     1789717200,
+     1789717500,
+     1789717800,
+     1789718100,
+     1789718400,
+     1789718700,
+     1789719000,
+     1789719300,
+     1789719600,
+     1789719900,
+     1789720200,
+     1789720500,
+     1789720800,
+     1789721100,
+     1789721400,
+     1789721700,
+     1789722000,
+     1789722300,
+     1789722600,
+     1789722900,
+     1789723200,
+     1789723500,
+     1789723800,
+     1789724100,
+     1789724400,
+     1789724700,
+     1789725000,
+     1789725300,
+     1789725600,
+     1789725900
+    ],
+    "open": [
+     74573.55,
+     74600,
+     74599.75,
+     74520,
+     74520,
+     74574.55,
+     74526.2,
+     74587.5,
+     74542.1,
+     74600,
+     74590,
+     74575.35,
+     74581.4,
+     74585.95,
+     74528.55,
+     74519.05,
+     74520,
+     74520,
+     74545.15,
+     74545.15,
+     74545.1,
+     74555.1,
+     74552.2,
+     74530,
+     74530,
+     74519.1,
+     74519.1,
+     74519.05,
+     74513.8,
+     74513.8,
+     74513.8,
+     74525.85,
+     74600,
+     74600,
+     74568.8,
+     74587.6,
+     74562.45,
+     74562.45,
+     74562.45,
+     74590.35,
+     74590.35,
+     74610,
+     74620,
+     74595.15,
+     74595.15,
+     74625,
+     74647.65,
+     74651.5,
+     74647.65,
+     74647.65,
+     74647.65,
+     74630,
+     74618.7,
+     74618.7,
+     74618.7,
+     74618.7,
+     74610,
+     74590.5,
+     74630,
+     74680,
+     74650.8,
+     74699,
+     74697.25,
+     74700,
+     74771.3,
+     74746.3,
+     74690,
+     74686,
+     74778.15,
+     74734.75,
+     74700,
+     74641.65,
+     74679.95,
+     74694.9,
+     74626.75,
+     74653.15,
+     74642.45
+    ],
+    "high": [
+     74674.95,
+     74636,
+     74610,
+     74544.1,
+     74578.05,
+     74595.75,
+     74587.5,
+     74587.5,
+     74600,
+     74600,
+     74590,
+     74590,
+     74600,
+     74585.95,
+     74570,
+     74520,
+     74540,
+     74545.15,
+     74545.15,
+     74545.15,
+     74567.35,
+     74555.1,
+     74552.2,
+     74530,
+     74530,
+     74519.1,
+     74526.75,
+     74519.05,
+     74513.8,
+     74513.8,
+     74525.85,
+     74600,
+     74600,
+     74600,
+     74587.6,
+     74587.6,
+     74562.45,
+     74562.45,
+     74590.35,
+     74590.35,
+     74610,
+     74620,
+     74620,
+     74595.15,
+     74620,
+     74660,
+     74651.95,
+     74651.5,
+     74647.65,
+     74647.65,
+     74647.65,
+     74630,
+     74618.7,
+     74618.7,
+     74618.7,
+     74618.7,
+     74610,
+     74630,
+     74680,
+     74698,
+     74699,
+     74706.95,
+     74700,
+     74781.65,
+     74771.3,
+     74746.3,
+     74690,
+     74778.15,
+     74778.15,
+     74734.75,
+     74700,
+     74679.95,
+     74694.9,
+     74694.9,
+     74670.9,
+     74653.15,
+     74665.25
+    ],
+    "low": [
+     74573.55,
+     74560,
+     74520,
+     74520,
+     74510,
+     74526.2,
+     74526.2,
+     74532,
+     74542.1,
+     74590,
+     74569.95,
+     74575.35,
+     74581.4,
+     74528.55,
+     74516.05,
+     74519.05,
+     74520,
+     74501,
+     74545.15,
+     74545.1,
+     74545.1,
+     74552.2,
+     74465.15,
+     74530,
+     74519.1,
+     74519.1,
+     74505,
+     74500,
+     74513.8,
+     74513.8,
+     74513.8,
+     74525.85,
+     74600,
+     74568.8,
+     74568.8,
+     74562.45,
+     74562.45,
+     74562.45,
+     74562.45,
+     74590.35,
+     74590,
+     74610,
+     74595.15,
+     74595.15,
+     74595.15,
+     74625,
+     74647.65,
+     74647.65,
+     74647.65,
+     74647.65,
+     74630,
+     74618.7,
+     74618.7,
+     74618.7,
+     74618.7,
+     74600,
+     74590.5,
+     74590.5,
+     74630,
+     74650.8,
+     74650.8,
+     74665.55,
+     74697.2,
+     74700,
+     74746.3,
+     74690,
+     74686,
+     74686,
+     74704.45,
+     74700,
+     74641.65,
+     74641.65,
+     74679.95,
+     74626.75,
+     74626.75,
+     74639.25,
+     74619.05
+    ],
+    "close": [
+     74600,
+     74599.75,
+     74520,
+     74520,
+     74574.55,
+     74526.2,
+     74587.5,
+     74542.1,
+     74600,
+     74590,
+     74575.35,
+     74581.4,
+     74585.95,
+     74528.55,
+     74519.05,
+     74520,
+     74520,
+     74545.15,
+     74545.15,
+     74545.1,
+     74555.1,
+     74552.2,
+     74530,
+     74530,
+     74519.1,
+     74519.1,
+     74519.05,
+     74513.8,
+     74513.8,
+     74513.8,
+     74525.85,
+     74600,
+     74600,
+     74568.8,
+     74587.6,
+     74562.45,
+     74562.45,
+     74562.45,
+     74590.35,
+     74590.35,
+     74610,
+     74620,
+     74595.15,
+     74595.15,
+     74620,
+     74647.65,
+     74651.5,
+     74647.65,
+     74647.65,
+     74647.65,
+     74630,
+     74618.7,
+     74618.7,
+     74618.7,
+     74618.7,
+     74610,
+     74590.5,
+     74630,
+     74680,
+     74650.8,
+     74699,
+     74697.25,
+     74700,
+     74771.3,
+     74746.3,
+     74690,
+     74686,
+     74778.15,
+     74734.75,
+     74700,
+     74641.65,
+     74679.95,
+     74694.9,
+     74626.75,
+     74653.15,
+     74642.45,
+     74655.8
+    ],
+    "volume": [
+     340,
+     220,
+     140,
+     100,
+     120,
+     160,
+     40,
+     180,
+     120,
+     20,
+     40,
+     40,
+     100,
+     80,
+     100,
+     20,
+     40,
+     100,
+     0,
+     40,
+     40,
+     20,
+     80,
+     0,
+     100,
+     20,
+     140,
+     260,
+     0,
+     0,
+     20,
+     40,
+     20,
+     40,
+     400,
+     20,
+     0,
+     20,
+     20,
+     20,
+     460,
+     40,
+     20,
+     0,
+     60,
+     220,
+     40,
+     40,
+     0,
+     0,
+     20,
+     20,
+     0,
+     0,
+     0,
+     40,
+     20,
+     40,
+     220,
+     220,
+     60,
+     140,
+     240,
+     180,
+     140,
+     80,
+     40,
+     260,
+     360,
+     20,
+     120,
+     40,
+     240,
+     60,
+     160,
+     280,
+     320
+    ]
+   },
+   "expected": [
+    {
+     "timestampMs": 1789703100000,
+     "open": 74573.55,
+     "high": 74674.95,
+     "low": 74573.55,
+     "close": 74600,
+     "volume": 340,
+     "openInterest": null
+    },
+    {
+     "timestampMs": 1789703400000,
+     "open": 74600,
+     "high": 74636,
+     "low": 74560,
+     "close": 74599.75,
+     "volume": 220,
+     "openInterest": null
+    },
+    {
+     "timestampMs": 1789703700000,
+     "open": 74599.75,
+     "high": 74610,
+     "low": 74520,
+     "close": 74520,
+     "volume": 140,
+     "openInterest": null
+    },
+    {
+     "timestampMs": 1789704000000,
+     "open": 74520,
+     "high": 74544.1,
+     "low": 74520,
+     "close": 74520,
+     "volume": 100,
+     "openInterest": null
+    },
+    {
+     "timestampMs": 1789704300000,
+     "open": 74520,
+     "high": 74578.05,
+     "low": 74510,
+     "close": 74574.55,
+     "volume": 120,
+     "openInterest": null
+    },
+    {
+     "timestampMs": 1789704600000,
+     "open": 74574.55,
+     "high": 74595.75,
+     "low": 74526.2,
+     "close": 74526.2,
+     "volume": 160,
+     "openInterest": null
+    },
+    {
+     "timestampMs": 1789704900000,
+     "open": 74526.2,
+     "high": 74587.5,
+     "low": 74526.2,
+     "close": 74587.5,
+     "volume": 40,
+     "openInterest": null
+    },
+    {
+     "timestampMs": 1789705200000,
+     "open": 74587.5,
+     "high": 74587.5,
+     "low": 74532,
+     "close": 74542.1,
+     "volume": 180,
+     "openInterest": null
+    },
+    {
+     "timestampMs": 1789705500000,
+     "open": 74542.1,
+     "high": 74600,
+     "low": 74542.1,
+     "close": 74600,
+     "volume": 120,
+     "openInterest": null
+    },
+    {
+     "timestampMs": 1789705800000,
+     "open": 74600,
+     "high": 74600,
+     "low": 74590,
+     "close": 74590,
+     "volume": 20,
+     "openInterest": null
+    },
+    {
+     "timestampMs": 1789706100000,
+     "open": 74590,
+     "high": 74590,
+     "low": 74569.95,
+     "close": 74575.35,
+     "volume": 40,
+     "openInterest": null
+    },
+    {
+     "timestampMs": 1789706400000,
+     "open": 74575.35,
+     "high": 74590,
+     "low": 74575.35,
+     "close": 74581.4,
+     "volume": 40,
+     "openInterest": null
+    },
+    {
+     "timestampMs": 1789706700000,
+     "open": 74581.4,
+     "high": 74600,
+     "low": 74581.4,
+     "close": 74585.95,
+     "volume": 100,
+     "openInterest": null
+    },
+    {
+     "timestampMs": 1789707000000,
+     "open": 74585.95,
+     "high": 74585.95,
+     "low": 74528.55,
+     "close": 74528.55,
+     "volume": 80,
+     "openInterest": null
+    },
+    {
+     "timestampMs": 1789707300000,
+     "open": 74528.55,
+     "high": 74570,
+     "low": 74516.05,
+     "close": 74519.05,
+     "volume": 100,
+     "openInterest": null
+    },
+    {
+     "timestampMs": 1789707600000,
+     "open": 74519.05,
+     "high": 74520,
+     "low": 74519.05,
+     "close": 74520,
+     "volume": 20,
+     "openInterest": null
+    },
+    {
+     "timestampMs": 1789707900000,
+     "open": 74520,
+     "high": 74540,
+     "low": 74520,
+     "close": 74520,
+     "volume": 40,
+     "openInterest": null
+    },
+    {
+     "timestampMs": 1789708200000,
+     "open": 74520,
+     "high": 74545.15,
+     "low": 74501,
+     "close": 74545.15,
+     "volume": 100,
+     "openInterest": null
+    },
+    {
+     "timestampMs": 1789708500000,
+     "open": 74545.15,
+     "high": 74545.15,
+     "low": 74545.15,
+     "close": 74545.15,
+     "volume": 0,
+     "openInterest": null
+    },
+    {
+     "timestampMs": 1789708800000,
+     "open": 74545.15,
+     "high": 74545.15,
+     "low": 74545.1,
+     "close": 74545.1,
+     "volume": 40,
+     "openInterest": null
+    },
+    {
+     "timestampMs": 1789709100000,
+     "open": 74545.1,
+     "high": 74567.35,
+     "low": 74545.1,
+     "close": 74555.1,
+     "volume": 40,
+     "openInterest": null
+    },
+    {
+     "timestampMs": 1789709400000,
+     "open": 74555.1,
+     "high": 74555.1,
+     "low": 74552.2,
+     "close": 74552.2,
+     "volume": 20,
+     "openInterest": null
+    },
+    {
+     "timestampMs": 1789709700000,
+     "open": 74552.2,
+     "high": 74552.2,
+     "low": 74465.15,
+     "close": 74530,
+     "volume": 80,
+     "openInterest": null
+    },
+    {
+     "timestampMs": 1789710000000,
+     "open": 74530,
+     "high": 74530,
+     "low": 74530,
+     "close": 74530,
+     "volume": 0,
+     "openInterest": null
+    },
+    {
+     "timestampMs": 1789710300000,
+     "open": 74530,
+     "high": 74530,
+     "low": 74519.1,
+     "close": 74519.1,
+     "volume": 100,
+     "openInterest": null
+    },
+    {
+     "timestampMs": 1789710600000,
+     "open": 74519.1,
+     "high": 74519.1,
+     "low": 74519.1,
+     "close": 74519.1,
+     "volume": 20,
+     "openInterest": null
+    },
+    {
+     "timestampMs": 1789710900000,
+     "open": 74519.1,
+     "high": 74526.75,
+     "low": 74505,
+     "close": 74519.05,
+     "volume": 140,
+     "openInterest": null
+    },
+    {
+     "timestampMs": 1789711200000,
+     "open": 74519.05,
+     "high": 74519.05,
+     "low": 74500,
+     "close": 74513.8,
+     "volume": 260,
+     "openInterest": null
+    },
+    {
+     "timestampMs": 1789711500000,
+     "open": 74513.8,
+     "high": 74513.8,
+     "low": 74513.8,
+     "close": 74513.8,
+     "volume": 0,
+     "openInterest": null
+    },
+    {
+     "timestampMs": 1789711800000,
+     "open": 74513.8,
+     "high": 74513.8,
+     "low": 74513.8,
+     "close": 74513.8,
+     "volume": 0,
+     "openInterest": null
+    },
+    {
+     "timestampMs": 1789712100000,
+     "open": 74513.8,
+     "high": 74525.85,
+     "low": 74513.8,
+     "close": 74525.85,
+     "volume": 20,
+     "openInterest": null
+    },
+    {
+     "timestampMs": 1789712400000,
+     "open": 74525.85,
+     "high": 74600,
+     "low": 74525.85,
+     "close": 74600,
+     "volume": 40,
+     "openInterest": null
+    },
+    {
+     "timestampMs": 1789712700000,
+     "open": 74600,
+     "high": 74600,
+     "low": 74600,
+     "close": 74600,
+     "volume": 20,
+     "openInterest": null
+    },
+    {
+     "timestampMs": 1789713000000,
+     "open": 74600,
+     "high": 74600,
+     "low": 74568.8,
+     "close": 74568.8,
+     "volume": 40,
+     "openInterest": null
+    },
+    {
+     "timestampMs": 1789713300000,
+     "open": 74568.8,
+     "high": 74587.6,
+     "low": 74568.8,
+     "close": 74587.6,
+     "volume": 400,
+     "openInterest": null
+    },
+    {
+     "timestampMs": 1789713600000,
+     "open": 74587.6,
+     "high": 74587.6,
+     "low": 74562.45,
+     "close": 74562.45,
+     "volume": 20,
+     "openInterest": null
+    },
+    {
+     "timestampMs": 1789713900000,
+     "open": 74562.45,
+     "high": 74562.45,
+     "low": 74562.45,
+     "close": 74562.45,
+     "volume": 0,
+     "openInterest": null
+    },
+    {
+     "timestampMs": 1789714200000,
+     "open": 74562.45,
+     "high": 74562.45,
+     "low": 74562.45,
+     "close": 74562.45,
+     "volume": 20,
+     "openInterest": null
+    },
+    {
+     "timestampMs": 1789714500000,
+     "open": 74562.45,
+     "high": 74590.35,
+     "low": 74562.45,
+     "close": 74590.35,
+     "volume": 20,
+     "openInterest": null
+    },
+    {
+     "timestampMs": 1789714800000,
+     "open": 74590.35,
+     "high": 74590.35,
+     "low": 74590.35,
+     "close": 74590.35,
+     "volume": 20,
+     "openInterest": null
+    },
+    {
+     "timestampMs": 1789715100000,
+     "open": 74590.35,
+     "high": 74610,
+     "low": 74590,
+     "close": 74610,
+     "volume": 460,
+     "openInterest": null
+    },
+    {
+     "timestampMs": 1789715400000,
+     "open": 74610,
+     "high": 74620,
+     "low": 74610,
+     "close": 74620,
+     "volume": 40,
+     "openInterest": null
+    },
+    {
+     "timestampMs": 1789715700000,
+     "open": 74620,
+     "high": 74620,
+     "low": 74595.15,
+     "close": 74595.15,
+     "volume": 20,
+     "openInterest": null
+    },
+    {
+     "timestampMs": 1789716000000,
+     "open": 74595.15,
+     "high": 74595.15,
+     "low": 74595.15,
+     "close": 74595.15,
+     "volume": 0,
+     "openInterest": null
+    },
+    {
+     "timestampMs": 1789716300000,
+     "open": 74595.15,
+     "high": 74620,
+     "low": 74595.15,
+     "close": 74620,
+     "volume": 60,
+     "openInterest": null
+    },
+    {
+     "timestampMs": 1789716600000,
+     "open": 74625,
+     "high": 74660,
+     "low": 74625,
+     "close": 74647.65,
+     "volume": 220,
+     "openInterest": null
+    },
+    {
+     "timestampMs": 1789716900000,
+     "open": 74647.65,
+     "high": 74651.95,
+     "low": 74647.65,
+     "close": 74651.5,
+     "volume": 40,
+     "openInterest": null
+    },
+    {
+     "timestampMs": 1789717200000,
+     "open": 74651.5,
+     "high": 74651.5,
+     "low": 74647.65,
+     "close": 74647.65,
+     "volume": 40,
+     "openInterest": null
+    },
+    {
+     "timestampMs": 1789717500000,
+     "open": 74647.65,
+     "high": 74647.65,
+     "low": 74647.65,
+     "close": 74647.65,
+     "volume": 0,
+     "openInterest": null
+    },
+    {
+     "timestampMs": 1789717800000,
+     "open": 74647.65,
+     "high": 74647.65,
+     "low": 74647.65,
+     "close": 74647.65,
+     "volume": 0,
+     "openInterest": null
+    },
+    {
+     "timestampMs": 1789718100000,
+     "open": 74647.65,
+     "high": 74647.65,
+     "low": 74630,
+     "close": 74630,
+     "volume": 20,
+     "openInterest": null
+    },
+    {
+     "timestampMs": 1789718400000,
+     "open": 74630,
+     "high": 74630,
+     "low": 74618.7,
+     "close": 74618.7,
+     "volume": 20,
+     "openInterest": null
+    },
+    {
+     "timestampMs": 1789718700000,
+     "open": 74618.7,
+     "high": 74618.7,
+     "low": 74618.7,
+     "close": 74618.7,
+     "volume": 0,
+     "openInterest": null
+    },
+    {
+     "timestampMs": 1789719000000,
+     "open": 74618.7,
+     "high": 74618.7,
+     "low": 74618.7,
+     "close": 74618.7,
+     "volume": 0,
+     "openInterest": null
+    },
+    {
+     "timestampMs": 1789719300000,
+     "open": 74618.7,
+     "high": 74618.7,
+     "low": 74618.7,
+     "close": 74618.7,
+     "volume": 0,
+     "openInterest": null
+    },
+    {
+     "timestampMs": 1789719600000,
+     "open": 74618.7,
+     "high": 74618.7,
+     "low": 74600,
+     "close": 74610,
+     "volume": 40,
+     "openInterest": null
+    },
+    {
+     "timestampMs": 1789719900000,
+     "open": 74610,
+     "high": 74610,
+     "low": 74590.5,
+     "close": 74590.5,
+     "volume": 20,
+     "openInterest": null
+    },
+    {
+     "timestampMs": 1789720200000,
+     "open": 74590.5,
+     "high": 74630,
+     "low": 74590.5,
+     "close": 74630,
+     "volume": 40,
+     "openInterest": null
+    },
+    {
+     "timestampMs": 1789720500000,
+     "open": 74630,
+     "high": 74680,
+     "low": 74630,
+     "close": 74680,
+     "volume": 220,
+     "openInterest": null
+    },
+    {
+     "timestampMs": 1789720800000,
+     "open": 74680,
+     "high": 74698,
+     "low": 74650.8,
+     "close": 74650.8,
+     "volume": 220,
+     "openInterest": null
+    },
+    {
+     "timestampMs": 1789721100000,
+     "open": 74650.8,
+     "high": 74699,
+     "low": 74650.8,
+     "close": 74699,
+     "volume": 60,
+     "openInterest": null
+    },
+    {
+     "timestampMs": 1789721400000,
+     "open": 74699,
+     "high": 74706.95,
+     "low": 74665.55,
+     "close": 74697.25,
+     "volume": 140,
+     "openInterest": null
+    },
+    {
+     "timestampMs": 1789721700000,
+     "open": 74697.25,
+     "high": 74700,
+     "low": 74697.2,
+     "close": 74700,
+     "volume": 240,
+     "openInterest": null
+    },
+    {
+     "timestampMs": 1789722000000,
+     "open": 74700,
+     "high": 74781.65,
+     "low": 74700,
+     "close": 74771.3,
+     "volume": 180,
+     "openInterest": null
+    },
+    {
+     "timestampMs": 1789722300000,
+     "open": 74771.3,
+     "high": 74771.3,
+     "low": 74746.3,
+     "close": 74746.3,
+     "volume": 140,
+     "openInterest": null
+    },
+    {
+     "timestampMs": 1789722600000,
+     "open": 74746.3,
+     "high": 74746.3,
+     "low": 74690,
+     "close": 74690,
+     "volume": 80,
+     "openInterest": null
+    },
+    {
+     "timestampMs": 1789722900000,
+     "open": 74690,
+     "high": 74690,
+     "low": 74686,
+     "close": 74686,
+     "volume": 40,
+     "openInterest": null
+    },
+    {
+     "timestampMs": 1789723200000,
+     "open": 74686,
+     "high": 74778.15,
+     "low": 74686,
+     "close": 74778.15,
+     "volume": 260,
+     "openInterest": null
+    },
+    {
+     "timestampMs": 1789723500000,
+     "open": 74778.15,
+     "high": 74778.15,
+     "low": 74704.45,
+     "close": 74734.75,
+     "volume": 360,
+     "openInterest": null
+    },
+    {
+     "timestampMs": 1789723800000,
+     "open": 74734.75,
+     "high": 74734.75,
+     "low": 74700,
+     "close": 74700,
+     "volume": 20,
+     "openInterest": null
+    },
+    {
+     "timestampMs": 1789724100000,
+     "open": 74700,
+     "high": 74700,
+     "low": 74641.65,
+     "close": 74641.65,
+     "volume": 120,
+     "openInterest": null
+    },
+    {
+     "timestampMs": 1789724400000,
+     "open": 74641.65,
+     "high": 74679.95,
+     "low": 74641.65,
+     "close": 74679.95,
+     "volume": 40,
+     "openInterest": null
+    },
+    {
+     "timestampMs": 1789724700000,
+     "open": 74679.95,
+     "high": 74694.9,
+     "low": 74679.95,
+     "close": 74694.9,
+     "volume": 240,
+     "openInterest": null
+    },
+    {
+     "timestampMs": 1789725000000,
+     "open": 74694.9,
+     "high": 74694.9,
+     "low": 74626.75,
+     "close": 74626.75,
+     "volume": 60,
+     "openInterest": null
+    },
+    {
+     "timestampMs": 1789725300000,
+     "open": 74626.75,
+     "high": 74670.9,
+     "low": 74626.75,
+     "close": 74653.15,
+     "volume": 160,
+     "openInterest": null
+    },
+    {
+     "timestampMs": 1789725600000,
+     "open": 74653.15,
+     "high": 74653.15,
+     "low": 74639.25,
+     "close": 74642.45,
+     "volume": 280,
+     "openInterest": null
+    },
+    {
+     "timestampMs": 1789725900000,
+     "open": 74642.45,
+     "high": 74665.25,
+     "low": 74619.05,
+     "close": 74655.8,
+     "volume": 320,
+     "openInterest": null
+    }
+   ]
+  },
+  {
+   "id": "toCandles/ragged",
+   "input": {
+    "timestamp": [
+     3,
+     1,
+     2
+    ],
+    "open": [
+     1,
+     2,
+     3
+    ],
+    "high": [
+     1,
+     2
+    ],
+    "low": [
+     1,
+     2,
+     3
+    ],
+    "close": [
+     1,
+     2,
+     3
+    ],
+    "volume": [
+     5
+    ]
+   },
+   "expected": [
+    {
+     "timestampMs": 1000,
+     "open": 2,
+     "high": 2,
+     "low": 2,
+     "close": 2,
+     "volume": null,
+     "openInterest": null
+    },
+    {
+     "timestampMs": 3000,
+     "open": 1,
+     "high": 1,
+     "low": 1,
+     "close": 1,
+     "volume": 5,
+     "openInterest": null
+    }
+   ]
+  },
+  {
+   "id": "toCandles/nonFiniteTs",
+   "input": {
+    "timestamp": [
+     1,
+     null,
+     "x",
+     4
+    ],
+    "open": [
+     1,
+     2,
+     3,
+     4
+    ],
+    "high": [
+     1,
+     2,
+     3,
+     4
+    ],
+    "low": [
+     1,
+     2,
+     3,
+     4
+    ],
+    "close": [
+     1,
+     2,
+     3,
+     4
+    ],
+    "open_interest": [
+     9,
+     9,
+     9,
+     9
+    ]
+   },
+   "expected": [
+    {
+     "timestampMs": 1000,
+     "open": 1,
+     "high": 1,
+     "low": 1,
+     "close": 1,
+     "volume": null,
+     "openInterest": 9
+    },
+    {
+     "timestampMs": 4000,
+     "open": 4,
+     "high": 4,
+     "low": 4,
+     "close": 4,
+     "volume": null,
+     "openInterest": 9
+    }
+   ]
+  },
+  {
+   "id": "toCandles/empty",
+   "input": {},
+   "expected": []
+  },
+  {
+   "id": "toCandles/missingClose",
+   "input": {
+    "timestamp": [
+     1
+    ],
+    "open": [
+     1
+    ],
+    "high": [
+     1
+    ],
+    "low": [
+     1
+    ]
+   },
+   "expected": []
+  }
+ ]
+}

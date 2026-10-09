@@ -1,0 +1,2062 @@
+{
+ "module": "integrity",
+ "generator": "server/test/parity/builder.ts",
+ "cases": [
+  {
+   "id": "checkQuote/normal",
+   "input": {
+    "last_price": 74656.75,
+    "last_trade_time": "18/09/2026 15:29:58",
+    "ohlc": {
+     "open": 74506.75,
+     "high": 74776.75,
+     "low": 74456.75,
+     "close": 74626.75
+    },
+    "volume": 50000,
+    "oi": 120000,
+    "depth": {
+     "buy": [
+      {
+       "price": 74656.25,
+       "quantity": 20,
+       "orders": 1
+      },
+      {
+       "price": 74655.75,
+       "quantity": 40,
+       "orders": 2
+      },
+      {
+       "price": 74655.25,
+       "quantity": 60,
+       "orders": 3
+      },
+      {
+       "price": 74654.75,
+       "quantity": 80,
+       "orders": 4
+      },
+      {
+       "price": 74654.25,
+       "quantity": 100,
+       "orders": 5
+      }
+     ],
+     "sell": [
+      {
+       "price": 74657.25,
+       "quantity": 20,
+       "orders": 1
+      },
+      {
+       "price": 74657.75,
+       "quantity": 40,
+       "orders": 2
+      },
+      {
+       "price": 74658.25,
+       "quantity": 60,
+       "orders": 3
+      },
+      {
+       "price": 74658.75,
+       "quantity": 80,
+       "orders": 4
+      },
+      {
+       "price": 74659.25,
+       "quantity": 100,
+       "orders": 5
+      }
+     ]
+    }
+   },
+   "expected": {
+    "ok": true,
+    "findings": [],
+    "checkedAtMs": 1789725601000
+   }
+  },
+  {
+   "id": "checkQuote/missingLtp",
+   "input": {
+    "last_trade_time": "18/09/2026 15:29:58",
+    "ohlc": {
+     "open": 74506.75,
+     "high": 74776.75,
+     "low": 74456.75,
+     "close": 74626.75
+    },
+    "volume": 50000,
+    "oi": 120000,
+    "depth": {
+     "buy": [
+      {
+       "price": 74656.25,
+       "quantity": 20,
+       "orders": 1
+      },
+      {
+       "price": 74655.75,
+       "quantity": 40,
+       "orders": 2
+      },
+      {
+       "price": 74655.25,
+       "quantity": 60,
+       "orders": 3
+      },
+      {
+       "price": 74654.75,
+       "quantity": 80,
+       "orders": 4
+      },
+      {
+       "price": 74654.25,
+       "quantity": 100,
+       "orders": 5
+      }
+     ],
+     "sell": [
+      {
+       "price": 74657.25,
+       "quantity": 20,
+       "orders": 1
+      },
+      {
+       "price": 74657.75,
+       "quantity": 40,
+       "orders": 2
+      },
+      {
+       "price": 74658.25,
+       "quantity": 60,
+       "orders": 3
+      },
+      {
+       "price": 74658.75,
+       "quantity": 80,
+       "orders": 4
+      },
+      {
+       "price": 74659.25,
+       "quantity": 100,
+       "orders": 5
+      }
+     ]
+    }
+   },
+   "expected": {
+    "ok": false,
+    "findings": [
+     {
+      "severity": "block",
+      "code": "QUOTE_NO_LTP",
+      "message": "No usable last_price for BSE_FNO:FUT."
+     },
+     {
+      "severity": "warn",
+      "code": "QUOTE_QUARANTINED_FIELDS",
+      "message": "Quarantined unparseable fields: last_price."
+     }
+    ],
+    "checkedAtMs": 1789725601000
+   }
+  },
+  {
+   "id": "checkQuote/nullLtp",
+   "input": {
+    "last_price": null,
+    "last_trade_time": "18/09/2026 15:29:58",
+    "ohlc": {
+     "open": 74506.75,
+     "high": 74776.75,
+     "low": 74456.75,
+     "close": 74626.75
+    },
+    "volume": 50000,
+    "oi": 120000,
+    "depth": {
+     "buy": [
+      {
+       "price": 74656.25,
+       "quantity": 20,
+       "orders": 1
+      },
+      {
+       "price": 74655.75,
+       "quantity": 40,
+       "orders": 2
+      },
+      {
+       "price": 74655.25,
+       "quantity": 60,
+       "orders": 3
+      },
+      {
+       "price": 74654.75,
+       "quantity": 80,
+       "orders": 4
+      },
+      {
+       "price": 74654.25,
+       "quantity": 100,
+       "orders": 5
+      }
+     ],
+     "sell": [
+      {
+       "price": 74657.25,
+       "quantity": 20,
+       "orders": 1
+      },
+      {
+       "price": 74657.75,
+       "quantity": 40,
+       "orders": 2
+      },
+      {
+       "price": 74658.25,
+       "quantity": 60,
+       "orders": 3
+      },
+      {
+       "price": 74658.75,
+       "quantity": 80,
+       "orders": 4
+      },
+      {
+       "price": 74659.25,
+       "quantity": 100,
+       "orders": 5
+      }
+     ]
+    }
+   },
+   "expected": {
+    "ok": false,
+    "findings": [
+     {
+      "severity": "block",
+      "code": "QUOTE_NO_LTP",
+      "message": "No usable last_price for BSE_FNO:FUT."
+     },
+     {
+      "severity": "warn",
+      "code": "QUOTE_QUARANTINED_FIELDS",
+      "message": "Quarantined unparseable fields: last_price."
+     }
+    ],
+    "checkedAtMs": 1789725601000
+   }
+  },
+  {
+   "id": "checkQuote/stringLtp",
+   "input": {
+    "last_price": "74656.75",
+    "last_trade_time": "18/09/2026 15:29:58",
+    "ohlc": {
+     "open": 74506.75,
+     "high": 74776.75,
+     "low": 74456.75,
+     "close": 74626.75
+    },
+    "volume": 50000,
+    "oi": 120000,
+    "depth": {
+     "buy": [
+      {
+       "price": 74656.25,
+       "quantity": 20,
+       "orders": 1
+      },
+      {
+       "price": 74655.75,
+       "quantity": 40,
+       "orders": 2
+      },
+      {
+       "price": 74655.25,
+       "quantity": 60,
+       "orders": 3
+      },
+      {
+       "price": 74654.75,
+       "quantity": 80,
+       "orders": 4
+      },
+      {
+       "price": 74654.25,
+       "quantity": 100,
+       "orders": 5
+      }
+     ],
+     "sell": [
+      {
+       "price": 74657.25,
+       "quantity": 20,
+       "orders": 1
+      },
+      {
+       "price": 74657.75,
+       "quantity": 40,
+       "orders": 2
+      },
+      {
+       "price": 74658.25,
+       "quantity": 60,
+       "orders": 3
+      },
+      {
+       "price": 74658.75,
+       "quantity": 80,
+       "orders": 4
+      },
+      {
+       "price": 74659.25,
+       "quantity": 100,
+       "orders": 5
+      }
+     ]
+    }
+   },
+   "expected": {
+    "ok": true,
+    "findings": [],
+    "checkedAtMs": 1789725601000
+   }
+  },
+  {
+   "id": "checkQuote/neverTraded",
+   "input": {
+    "last_price": 74656.75,
+    "last_trade_time": "01/01/1980 00:00:00",
+    "ohlc": {
+     "open": 74506.75,
+     "high": 74776.75,
+     "low": 74456.75,
+     "close": 74626.75
+    },
+    "volume": 50000,
+    "oi": 120000,
+    "depth": {
+     "buy": [
+      {
+       "price": 74656.25,
+       "quantity": 20,
+       "orders": 1
+      },
+      {
+       "price": 74655.75,
+       "quantity": 40,
+       "orders": 2
+      },
+      {
+       "price": 74655.25,
+       "quantity": 60,
+       "orders": 3
+      },
+      {
+       "price": 74654.75,
+       "quantity": 80,
+       "orders": 4
+      },
+      {
+       "price": 74654.25,
+       "quantity": 100,
+       "orders": 5
+      }
+     ],
+     "sell": [
+      {
+       "price": 74657.25,
+       "quantity": 20,
+       "orders": 1
+      },
+      {
+       "price": 74657.75,
+       "quantity": 40,
+       "orders": 2
+      },
+      {
+       "price": 74658.25,
+       "quantity": 60,
+       "orders": 3
+      },
+      {
+       "price": 74658.75,
+       "quantity": 80,
+       "orders": 4
+      },
+      {
+       "price": 74659.25,
+       "quantity": 100,
+       "orders": 5
+      }
+     ]
+    }
+   },
+   "expected": {
+    "ok": true,
+    "findings": [
+     {
+      "severity": "warn",
+      "code": "QUOTE_NO_TRADE_TIME",
+      "message": "BSE_FNO:FUT has no last_trade_time (never traded, or the 01/01/1980 sentinel). Staleness cannot be established from the vendor clock."
+     },
+     {
+      "severity": "warn",
+      "code": "QUOTE_QUARANTINED_FIELDS",
+      "message": "Quarantined unparseable fields: last_trade_time."
+     }
+    ],
+    "checkedAtMs": 1789725601000
+   }
+  },
+  {
+   "id": "checkQuote/badLtt",
+   "input": {
+    "last_price": 74656.75,
+    "last_trade_time": "2026-09-18 15:29:58",
+    "ohlc": {
+     "open": 74506.75,
+     "high": 74776.75,
+     "low": 74456.75,
+     "close": 74626.75
+    },
+    "volume": 50000,
+    "oi": 120000,
+    "depth": {
+     "buy": [
+      {
+       "price": 74656.25,
+       "quantity": 20,
+       "orders": 1
+      },
+      {
+       "price": 74655.75,
+       "quantity": 40,
+       "orders": 2
+      },
+      {
+       "price": 74655.25,
+       "quantity": 60,
+       "orders": 3
+      },
+      {
+       "price": 74654.75,
+       "quantity": 80,
+       "orders": 4
+      },
+      {
+       "price": 74654.25,
+       "quantity": 100,
+       "orders": 5
+      }
+     ],
+     "sell": [
+      {
+       "price": 74657.25,
+       "quantity": 20,
+       "orders": 1
+      },
+      {
+       "price": 74657.75,
+       "quantity": 40,
+       "orders": 2
+      },
+      {
+       "price": 74658.25,
+       "quantity": 60,
+       "orders": 3
+      },
+      {
+       "price": 74658.75,
+       "quantity": 80,
+       "orders": 4
+      },
+      {
+       "price": 74659.25,
+       "quantity": 100,
+       "orders": 5
+      }
+     ]
+    }
+   },
+   "expected": {
+    "ok": true,
+    "findings": [
+     {
+      "severity": "warn",
+      "code": "QUOTE_NO_TRADE_TIME",
+      "message": "BSE_FNO:FUT has no last_trade_time (never traded, or the 01/01/1980 sentinel). Staleness cannot be established from the vendor clock."
+     },
+     {
+      "severity": "warn",
+      "code": "QUOTE_QUARANTINED_FIELDS",
+      "message": "Quarantined unparseable fields: last_trade_time."
+     }
+    ],
+    "checkedAtMs": 1789725601000
+   }
+  },
+  {
+   "id": "checkQuote/nullLtt",
+   "input": {
+    "last_price": 74656.75,
+    "last_trade_time": null,
+    "ohlc": {
+     "open": 74506.75,
+     "high": 74776.75,
+     "low": 74456.75,
+     "close": 74626.75
+    },
+    "volume": 50000,
+    "oi": 120000,
+    "depth": {
+     "buy": [
+      {
+       "price": 74656.25,
+       "quantity": 20,
+       "orders": 1
+      },
+      {
+       "price": 74655.75,
+       "quantity": 40,
+       "orders": 2
+      },
+      {
+       "price": 74655.25,
+       "quantity": 60,
+       "orders": 3
+      },
+      {
+       "price": 74654.75,
+       "quantity": 80,
+       "orders": 4
+      },
+      {
+       "price": 74654.25,
+       "quantity": 100,
+       "orders": 5
+      }
+     ],
+     "sell": [
+      {
+       "price": 74657.25,
+       "quantity": 20,
+       "orders": 1
+      },
+      {
+       "price": 74657.75,
+       "quantity": 40,
+       "orders": 2
+      },
+      {
+       "price": 74658.25,
+       "quantity": 60,
+       "orders": 3
+      },
+      {
+       "price": 74658.75,
+       "quantity": 80,
+       "orders": 4
+      },
+      {
+       "price": 74659.25,
+       "quantity": 100,
+       "orders": 5
+      }
+     ]
+    }
+   },
+   "expected": {
+    "ok": true,
+    "findings": [
+     {
+      "severity": "warn",
+      "code": "QUOTE_NO_TRADE_TIME",
+      "message": "BSE_FNO:FUT has no last_trade_time (never traded, or the 01/01/1980 sentinel). Staleness cannot be established from the vendor clock."
+     },
+     {
+      "severity": "warn",
+      "code": "QUOTE_QUARANTINED_FIELDS",
+      "message": "Quarantined unparseable fields: last_trade_time."
+     }
+    ],
+    "checkedAtMs": 1789725601000
+   }
+  },
+  {
+   "id": "checkQuote/overflowLtt",
+   "input": {
+    "last_price": 74656.75,
+    "last_trade_time": "31/02/2026 10:00:00",
+    "ohlc": {
+     "open": 74506.75,
+     "high": 74776.75,
+     "low": 74456.75,
+     "close": 74626.75
+    },
+    "volume": 50000,
+    "oi": 120000,
+    "depth": {
+     "buy": [
+      {
+       "price": 74656.25,
+       "quantity": 20,
+       "orders": 1
+      },
+      {
+       "price": 74655.75,
+       "quantity": 40,
+       "orders": 2
+      },
+      {
+       "price": 74655.25,
+       "quantity": 60,
+       "orders": 3
+      },
+      {
+       "price": 74654.75,
+       "quantity": 80,
+       "orders": 4
+      },
+      {
+       "price": 74654.25,
+       "quantity": 100,
+       "orders": 5
+      }
+     ],
+     "sell": [
+      {
+       "price": 74657.25,
+       "quantity": 20,
+       "orders": 1
+      },
+      {
+       "price": 74657.75,
+       "quantity": 40,
+       "orders": 2
+      },
+      {
+       "price": 74658.25,
+       "quantity": 60,
+       "orders": 3
+      },
+      {
+       "price": 74658.75,
+       "quantity": 80,
+       "orders": 4
+      },
+      {
+       "price": 74659.25,
+       "quantity": 100,
+       "orders": 5
+      }
+     ]
+    }
+   },
+   "expected": {
+    "ok": true,
+    "findings": [
+     {
+      "severity": "warn",
+      "code": "QUOTE_STALE",
+      "message": "BSE_FNO:FUT last traded 17213401.0s ago, beyond the 15.0s freshness window."
+     }
+    ],
+    "checkedAtMs": 1789725601000
+   }
+  },
+  {
+   "id": "checkQuote/stale",
+   "input": {
+    "last_price": 74656.75,
+    "last_trade_time": "18/09/2026 15:00:00",
+    "ohlc": {
+     "open": 74506.75,
+     "high": 74776.75,
+     "low": 74456.75,
+     "close": 74626.75
+    },
+    "volume": 50000,
+    "oi": 120000,
+    "depth": {
+     "buy": [
+      {
+       "price": 74656.25,
+       "quantity": 20,
+       "orders": 1
+      },
+      {
+       "price": 74655.75,
+       "quantity": 40,
+       "orders": 2
+      },
+      {
+       "price": 74655.25,
+       "quantity": 60,
+       "orders": 3
+      },
+      {
+       "price": 74654.75,
+       "quantity": 80,
+       "orders": 4
+      },
+      {
+       "price": 74654.25,
+       "quantity": 100,
+       "orders": 5
+      }
+     ],
+     "sell": [
+      {
+       "price": 74657.25,
+       "quantity": 20,
+       "orders": 1
+      },
+      {
+       "price": 74657.75,
+       "quantity": 40,
+       "orders": 2
+      },
+      {
+       "price": 74658.25,
+       "quantity": 60,
+       "orders": 3
+      },
+      {
+       "price": 74658.75,
+       "quantity": 80,
+       "orders": 4
+      },
+      {
+       "price": 74659.25,
+       "quantity": 100,
+       "orders": 5
+      }
+     ]
+    }
+   },
+   "expected": {
+    "ok": true,
+    "findings": [
+     {
+      "severity": "warn",
+      "code": "QUOTE_STALE",
+      "message": "BSE_FNO:FUT last traded 1801.0s ago, beyond the 15.0s freshness window."
+     }
+    ],
+    "checkedAtMs": 1789725601000
+   }
+  },
+  {
+   "id": "checkQuote/crossed",
+   "input": {
+    "last_price": 100,
+    "last_trade_time": "18/09/2026 15:29:58",
+    "ohlc": {
+     "open": -50,
+     "high": 220,
+     "low": -100,
+     "close": 70
+    },
+    "volume": 50000,
+    "oi": 120000,
+    "depth": {
+     "buy": [
+      {
+       "price": 101,
+       "quantity": 1,
+       "orders": 1
+      }
+     ],
+     "sell": [
+      {
+       "price": 100.5,
+       "quantity": 1,
+       "orders": 1
+      }
+     ]
+    }
+   },
+   "expected": {
+    "ok": false,
+    "findings": [
+     {
+      "severity": "block",
+      "code": "QUOTE_CROSSED",
+      "message": "Crossed book on BSE_FNO:FUT: bid 101 >= ask 100.5. Refusing to derive liquidity from it."
+     }
+    ],
+    "checkedAtMs": 1789725601000
+   }
+  },
+  {
+   "id": "checkQuote/oneSided",
+   "input": {
+    "last_price": 100,
+    "last_trade_time": "18/09/2026 15:29:58",
+    "ohlc": {
+     "open": -50,
+     "high": 220,
+     "low": -100,
+     "close": 70
+    },
+    "volume": 50000,
+    "oi": 120000,
+    "depth": {
+     "buy": [
+      {
+       "price": 99,
+       "quantity": 5,
+       "orders": 1
+      }
+     ],
+     "sell": [
+      {
+       "price": 0,
+       "quantity": 0,
+       "orders": 0
+      }
+     ]
+    }
+   },
+   "expected": {
+    "ok": true,
+    "findings": [
+     {
+      "severity": "warn",
+      "code": "QUOTE_ONE_SIDED",
+      "message": "One-sided or empty book on BSE_FNO:FUT."
+     }
+    ],
+    "checkedAtMs": 1789725601000
+   }
+  },
+  {
+   "id": "checkQuote/depthArray",
+   "input": {
+    "last_price": 100,
+    "last_trade_time": "18/09/2026 15:29:58",
+    "ohlc": {
+     "open": -50,
+     "high": 220,
+     "low": -100,
+     "close": 70
+    },
+    "volume": 50000,
+    "oi": 120000,
+    "depth": [
+     1,
+     2
+    ]
+   },
+   "expected": {
+    "ok": true,
+    "findings": [
+     {
+      "severity": "warn",
+      "code": "QUOTE_ONE_SIDED",
+      "message": "One-sided or empty book on BSE_FNO:FUT."
+     }
+    ],
+    "checkedAtMs": 1789725601000
+   }
+  },
+  {
+   "id": "checkQuote/depthMalformed",
+   "input": {
+    "last_price": 100,
+    "last_trade_time": "18/09/2026 15:29:58",
+    "ohlc": {
+     "open": -50,
+     "high": 220,
+     "low": -100,
+     "close": 70
+    },
+    "volume": 50000,
+    "oi": 120000,
+    "depth": {
+     "buy": [
+      null,
+      7,
+      {
+       "price": "99.5",
+       "quantity": "10"
+      }
+     ],
+     "sell": "x"
+    }
+   },
+   "expected": {
+    "ok": true,
+    "findings": [
+     {
+      "severity": "warn",
+      "code": "QUOTE_ONE_SIDED",
+      "message": "One-sided or empty book on BSE_FNO:FUT."
+     }
+    ],
+    "checkedAtMs": 1789725601000
+   }
+  },
+  {
+   "id": "checkQuote/ohlcPartial",
+   "input": {
+    "last_price": 100,
+    "last_trade_time": "18/09/2026 15:29:58",
+    "ohlc": {
+     "high": 105
+    },
+    "volume": 50000,
+    "oi": 120000,
+    "depth": {
+     "buy": [
+      {
+       "price": 99.5,
+       "quantity": 20,
+       "orders": 1
+      },
+      {
+       "price": 99,
+       "quantity": 40,
+       "orders": 2
+      },
+      {
+       "price": 98.5,
+       "quantity": 60,
+       "orders": 3
+      },
+      {
+       "price": 98,
+       "quantity": 80,
+       "orders": 4
+      },
+      {
+       "price": 97.5,
+       "quantity": 100,
+       "orders": 5
+      }
+     ],
+     "sell": [
+      {
+       "price": 100.5,
+       "quantity": 20,
+       "orders": 1
+      },
+      {
+       "price": 101,
+       "quantity": 40,
+       "orders": 2
+      },
+      {
+       "price": 101.5,
+       "quantity": 60,
+       "orders": 3
+      },
+      {
+       "price": 102,
+       "quantity": 80,
+       "orders": 4
+      },
+      {
+       "price": 102.5,
+       "quantity": 100,
+       "orders": 5
+      }
+     ]
+    }
+   },
+   "expected": {
+    "ok": true,
+    "findings": [],
+    "checkedAtMs": 1789725601000
+   }
+  },
+  {
+   "id": "checkQuote/ohlcEmpty",
+   "input": {
+    "last_price": 100,
+    "last_trade_time": "18/09/2026 15:29:58",
+    "ohlc": {},
+    "volume": 50000,
+    "oi": 120000,
+    "depth": {
+     "buy": [
+      {
+       "price": 99.5,
+       "quantity": 20,
+       "orders": 1
+      },
+      {
+       "price": 99,
+       "quantity": 40,
+       "orders": 2
+      },
+      {
+       "price": 98.5,
+       "quantity": 60,
+       "orders": 3
+      },
+      {
+       "price": 98,
+       "quantity": 80,
+       "orders": 4
+      },
+      {
+       "price": 97.5,
+       "quantity": 100,
+       "orders": 5
+      }
+     ],
+     "sell": [
+      {
+       "price": 100.5,
+       "quantity": 20,
+       "orders": 1
+      },
+      {
+       "price": 101,
+       "quantity": 40,
+       "orders": 2
+      },
+      {
+       "price": 101.5,
+       "quantity": 60,
+       "orders": 3
+      },
+      {
+       "price": 102,
+       "quantity": 80,
+       "orders": 4
+      },
+      {
+       "price": 102.5,
+       "quantity": 100,
+       "orders": 5
+      }
+     ]
+    }
+   },
+   "expected": {
+    "ok": true,
+    "findings": [],
+    "checkedAtMs": 1789725601000
+   }
+  },
+  {
+   "id": "checkQuote/nullRaw",
+   "input": null,
+   "expected": {
+    "ok": false,
+    "findings": [
+     {
+      "severity": "block",
+      "code": "QUOTE_NO_LTP",
+      "message": "No usable last_price for BSE_FNO:FUT."
+     },
+     {
+      "severity": "warn",
+      "code": "QUOTE_NO_TRADE_TIME",
+      "message": "BSE_FNO:FUT has no last_trade_time (never traded, or the 01/01/1980 sentinel). Staleness cannot be established from the vendor clock."
+     },
+     {
+      "severity": "warn",
+      "code": "QUOTE_QUARANTINED_FIELDS",
+      "message": "Quarantined unparseable fields: last_price."
+     }
+    ],
+    "checkedAtMs": 1789725601000
+   }
+  },
+  {
+   "id": "checkQuote/emptyObject",
+   "input": {},
+   "expected": {
+    "ok": false,
+    "findings": [
+     {
+      "severity": "block",
+      "code": "QUOTE_NO_LTP",
+      "message": "No usable last_price for BSE_FNO:FUT."
+     },
+     {
+      "severity": "warn",
+      "code": "QUOTE_NO_TRADE_TIME",
+      "message": "BSE_FNO:FUT has no last_trade_time (never traded, or the 01/01/1980 sentinel). Staleness cannot be established from the vendor clock."
+     },
+     {
+      "severity": "warn",
+      "code": "QUOTE_QUARANTINED_FIELDS",
+      "message": "Quarantined unparseable fields: last_price."
+     }
+    ],
+    "checkedAtMs": 1789725601000
+   }
+  },
+  {
+   "id": "checkQuote/boundary-exactly15s",
+   "input": {
+    "raw": {
+     "last_price": 74656.75,
+     "last_trade_time": "18/09/2026 15:29:58",
+     "ohlc": {
+      "open": 74506.75,
+      "high": 74776.75,
+      "low": 74456.75,
+      "close": 74626.75
+     },
+     "volume": 50000,
+     "oi": 120000,
+     "depth": {
+      "buy": [
+       {
+        "price": 74656.25,
+        "quantity": 20,
+        "orders": 1
+       },
+       {
+        "price": 74655.75,
+        "quantity": 40,
+        "orders": 2
+       },
+       {
+        "price": 74655.25,
+        "quantity": 60,
+        "orders": 3
+       },
+       {
+        "price": 74654.75,
+        "quantity": 80,
+        "orders": 4
+       },
+       {
+        "price": 74654.25,
+        "quantity": 100,
+        "orders": 5
+       }
+      ],
+      "sell": [
+       {
+        "price": 74657.25,
+        "quantity": 20,
+        "orders": 1
+       },
+       {
+        "price": 74657.75,
+        "quantity": 40,
+        "orders": 2
+       },
+       {
+        "price": 74658.25,
+        "quantity": 60,
+        "orders": 3
+       },
+       {
+        "price": 74658.75,
+        "quantity": 80,
+        "orders": 4
+       },
+       {
+        "price": 74659.25,
+        "quantity": 100,
+        "orders": 5
+       }
+      ]
+     }
+    },
+    "nowMs": 1789725613000
+   },
+   "expected": {
+    "ok": true,
+    "findings": [],
+    "checkedAtMs": 1789725613000
+   }
+  },
+  {
+   "id": "checkQuote/boundary-just-over-15s",
+   "input": {
+    "raw": {
+     "last_price": 74656.75,
+     "last_trade_time": "18/09/2026 15:29:58",
+     "ohlc": {
+      "open": 74506.75,
+      "high": 74776.75,
+      "low": 74456.75,
+      "close": 74626.75
+     },
+     "volume": 50000,
+     "oi": 120000,
+     "depth": {
+      "buy": [
+       {
+        "price": 74656.25,
+        "quantity": 20,
+        "orders": 1
+       },
+       {
+        "price": 74655.75,
+        "quantity": 40,
+        "orders": 2
+       },
+       {
+        "price": 74655.25,
+        "quantity": 60,
+        "orders": 3
+       },
+       {
+        "price": 74654.75,
+        "quantity": 80,
+        "orders": 4
+       },
+       {
+        "price": 74654.25,
+        "quantity": 100,
+        "orders": 5
+       }
+      ],
+      "sell": [
+       {
+        "price": 74657.25,
+        "quantity": 20,
+        "orders": 1
+       },
+       {
+        "price": 74657.75,
+        "quantity": 40,
+        "orders": 2
+       },
+       {
+        "price": 74658.25,
+        "quantity": 60,
+        "orders": 3
+       },
+       {
+        "price": 74658.75,
+        "quantity": 80,
+        "orders": 4
+       },
+       {
+        "price": 74659.25,
+        "quantity": 100,
+        "orders": 5
+       }
+      ]
+     }
+    },
+    "nowMs": 1789725613000.5
+   },
+   "expected": {
+    "ok": true,
+    "findings": [
+     {
+      "severity": "warn",
+      "code": "QUOTE_STALE",
+      "message": "BSE_FNO:FUT last traded 15.0s ago, beyond the 15.0s freshness window."
+     }
+    ],
+    "checkedAtMs": 1789725613000.5
+   }
+  },
+  {
+   "id": "checkQuote/boundary-future-ltt",
+   "input": {
+    "raw": {
+     "last_price": 74656.75,
+     "last_trade_time": "18/09/2026 15:29:58",
+     "ohlc": {
+      "open": 74506.75,
+      "high": 74776.75,
+      "low": 74456.75,
+      "close": 74626.75
+     },
+     "volume": 50000,
+     "oi": 120000,
+     "depth": {
+      "buy": [
+       {
+        "price": 74656.25,
+        "quantity": 20,
+        "orders": 1
+       },
+       {
+        "price": 74655.75,
+        "quantity": 40,
+        "orders": 2
+       },
+       {
+        "price": 74655.25,
+        "quantity": 60,
+        "orders": 3
+       },
+       {
+        "price": 74654.75,
+        "quantity": 80,
+        "orders": 4
+       },
+       {
+        "price": 74654.25,
+        "quantity": 100,
+        "orders": 5
+       }
+      ],
+      "sell": [
+       {
+        "price": 74657.25,
+        "quantity": 20,
+        "orders": 1
+       },
+       {
+        "price": 74657.75,
+        "quantity": 40,
+        "orders": 2
+       },
+       {
+        "price": 74658.25,
+        "quantity": 60,
+        "orders": 3
+       },
+       {
+        "price": 74658.75,
+        "quantity": 80,
+        "orders": 4
+       },
+       {
+        "price": 74659.25,
+        "quantity": 100,
+        "orders": 5
+       }
+      ]
+     }
+    },
+    "nowMs": 1789725593000
+   },
+   "expected": {
+    "ok": true,
+    "findings": [],
+    "checkedAtMs": 1789725593000
+   }
+  },
+  {
+   "id": "checkChain/gm",
+   "input": {
+    "last_price": 74294.96,
+    "oc": {
+     "74100.000000": {
+      "ce": {
+       "security_id": 900741,
+       "last_price": 713.6,
+       "top_bid_price": 713.55,
+       "top_ask_price": 713.65,
+       "top_bid_quantity": 40,
+       "top_ask_quantity": 60,
+       "oi": 574100,
+       "previous_oi": 480000,
+       "volume": 2000000,
+       "previous_volume": 1000000,
+       "previous_close_price": 699.328,
+       "average_price": 713.6,
+       "implied_volatility": 16,
+       "greeks": {
+        "delta": 0.5,
+        "gamma": 0.0004,
+        "theta": -40,
+        "vega": 30
+       }
+      },
+      "pe": {
+       "security_id": 910741,
+       "last_price": 208.3,
+       "top_bid_price": 208.25,
+       "top_ask_price": 208.35,
+       "top_bid_quantity": 40,
+       "top_ask_quantity": 60,
+       "oi": 574100,
+       "previous_oi": 480000,
+       "volume": 2000000,
+       "previous_volume": 1000000,
+       "previous_close_price": 204.13400000000001,
+       "average_price": 208.3,
+       "implied_volatility": 8.6,
+       "greeks": {
+        "delta": 0.5,
+        "gamma": 0.0004,
+        "theta": -40,
+        "vega": 30
+       }
+      }
+     },
+     "74200.000000": {
+      "ce": {
+       "security_id": 900742,
+       "last_price": 655,
+       "top_bid_price": 654.95,
+       "top_ask_price": 655.05,
+       "top_bid_quantity": 40,
+       "top_ask_quantity": 60,
+       "oi": 574200,
+       "previous_oi": 480000,
+       "volume": 2000000,
+       "previous_volume": 1000000,
+       "previous_close_price": 641.9,
+       "average_price": 655,
+       "implied_volatility": 16,
+       "greeks": {
+        "delta": 0.5,
+        "gamma": 0.0004,
+        "theta": -40,
+        "vega": 30
+       }
+      },
+      "pe": {
+       "security_id": 910742,
+       "last_price": 236.7,
+       "top_bid_price": 236.65,
+       "top_ask_price": 236.75,
+       "top_bid_quantity": 40,
+       "top_ask_quantity": 60,
+       "oi": 574200,
+       "previous_oi": 480000,
+       "volume": 2000000,
+       "previous_volume": 1000000,
+       "previous_close_price": 231.96599999999998,
+       "average_price": 236.7,
+       "implied_volatility": 8.6,
+       "greeks": {
+        "delta": 0.5,
+        "gamma": 0.0004,
+        "theta": -40,
+        "vega": 30
+       }
+      }
+     },
+     "74300.000000": {
+      "ce": {
+       "security_id": 900743,
+       "last_price": 588,
+       "top_bid_price": 587.95,
+       "top_ask_price": 588.05,
+       "top_bid_quantity": 40,
+       "top_ask_quantity": 60,
+       "oi": 574300,
+       "previous_oi": 480000,
+       "volume": 2000000,
+       "previous_volume": 1000000,
+       "previous_close_price": 576.24,
+       "average_price": 588,
+       "implied_volatility": 16,
+       "greeks": {
+        "delta": 0.5,
+        "gamma": 0.0004,
+        "theta": -40,
+        "vega": 30
+       }
+      },
+      "pe": {
+       "security_id": 910743,
+       "last_price": 270.05,
+       "top_bid_price": 270,
+       "top_ask_price": 270.1,
+       "top_bid_quantity": 40,
+       "top_ask_quantity": 60,
+       "oi": 574300,
+       "previous_oi": 480000,
+       "volume": 2000000,
+       "previous_volume": 1000000,
+       "previous_close_price": 264.649,
+       "average_price": 270.05,
+       "implied_volatility": 8.6,
+       "greeks": {
+        "delta": 0.5,
+        "gamma": 0.0004,
+        "theta": -40,
+        "vega": 30
+       }
+      }
+     },
+     "74400.000000": {
+      "ce": {
+       "security_id": 900744,
+       "last_price": 517.1,
+       "top_bid_price": 517.05,
+       "top_ask_price": 517.15,
+       "top_bid_quantity": 40,
+       "top_ask_quantity": 60,
+       "oi": 574400,
+       "previous_oi": 480000,
+       "volume": 2000000,
+       "previous_volume": 1000000,
+       "previous_close_price": 506.75800000000004,
+       "average_price": 517.1,
+       "implied_volatility": 16,
+       "greeks": {
+        "delta": 0.5,
+        "gamma": 0.0004,
+        "theta": -40,
+        "vega": 30
+       }
+      },
+      "pe": {
+       "security_id": 910744,
+       "last_price": 303.7,
+       "top_bid_price": 303.65,
+       "top_ask_price": 303.75,
+       "top_bid_quantity": 40,
+       "top_ask_quantity": 60,
+       "oi": 574400,
+       "previous_oi": 480000,
+       "volume": 2000000,
+       "previous_volume": 1000000,
+       "previous_close_price": 297.626,
+       "average_price": 303.7,
+       "implied_volatility": 8.6,
+       "greeks": {
+        "delta": 0.5,
+        "gamma": 0.0004,
+        "theta": -40,
+        "vega": 30
+       }
+      }
+     },
+     "74500.000000": {
+      "ce": {
+       "security_id": 900745,
+       "last_price": 461.55,
+       "top_bid_price": 461.5,
+       "top_ask_price": 461.6,
+       "top_bid_quantity": 40,
+       "top_ask_quantity": 60,
+       "oi": 574500,
+       "previous_oi": 480000,
+       "volume": 2000000,
+       "previous_volume": 1000000,
+       "previous_close_price": 452.319,
+       "average_price": 461.55,
+       "implied_volatility": 16,
+       "greeks": {
+        "delta": 0.5,
+        "gamma": 0.0004,
+        "theta": -40,
+        "vega": 30
+       }
+      },
+      "pe": {
+       "security_id": 910745,
+       "last_price": 345.1,
+       "top_bid_price": 345.05,
+       "top_ask_price": 345.15,
+       "top_bid_quantity": 40,
+       "top_ask_quantity": 60,
+       "oi": 574500,
+       "previous_oi": 480000,
+       "volume": 2000000,
+       "previous_volume": 1000000,
+       "previous_close_price": 338.19800000000004,
+       "average_price": 345.1,
+       "implied_volatility": 8.6,
+       "greeks": {
+        "delta": 0.5,
+        "gamma": 0.0004,
+        "theta": -40,
+        "vega": 30
+       }
+      }
+     }
+    }
+   },
+   "expected": {
+    "ok": true,
+    "findings": [
+     {
+      "severity": "info",
+      "code": "VENDOR_IV_QUARANTINED",
+      "message": "0/10 legs (0.0%) carry vendor IV that is zero, missing or >60%. All vendor IV and Greeks are quarantined regardless; this server computes its own."
+     },
+     {
+      "severity": "info",
+      "code": "CHAIN_CARRIES_INDEX_LTP",
+      "message": "Chain reports underlying last_price 74294.96. This is the INDEX LTP and is never used as spot for option maths."
+     }
+    ],
+    "checkedAtMs": 1789725600000
+   }
+  },
+  {
+   "id": "checkChain/s21",
+   "input": {
+    "last_price": 74667.55,
+    "oc": {
+     "74500.000000": {
+      "ce": {
+       "security_id": 920745,
+       "last_price": 445.7,
+       "top_bid_price": 445,
+       "top_ask_price": 445.5,
+       "top_bid_quantity": 20,
+       "top_ask_quantity": 20,
+       "oi": 100000,
+       "previous_oi": 90000,
+       "volume": 50000
+      },
+      "pe": {
+       "security_id": 930745,
+       "last_price": 287.3,
+       "top_bid_price": 286.7,
+       "top_ask_price": 287.35,
+       "top_bid_quantity": 20,
+       "top_ask_quantity": 20,
+       "oi": 100000,
+       "previous_oi": 110000,
+       "volume": 50000
+      }
+     },
+     "74600.000000": {
+      "ce": {
+       "security_id": 920746,
+       "last_price": 388.35,
+       "top_bid_price": 387.75,
+       "top_ask_price": 388.35,
+       "top_bid_quantity": 20,
+       "top_ask_quantity": 20,
+       "oi": 100000,
+       "previous_oi": 90000,
+       "volume": 50000
+      },
+      "pe": {
+       "security_id": 930746,
+       "last_price": 329.75,
+       "top_bid_price": 329.35,
+       "top_ask_price": 330,
+       "top_bid_quantity": 20,
+       "top_ask_quantity": 20,
+       "oi": 100000,
+       "previous_oi": 110000,
+       "volume": 50000
+      }
+     },
+     "74700.000000": {
+      "ce": {
+       "security_id": 920747,
+       "last_price": 335,
+       "top_bid_price": 335,
+       "top_ask_price": 335.05,
+       "top_bid_quantity": 20,
+       "top_ask_quantity": 20,
+       "oi": 100000,
+       "previous_oi": 90000,
+       "volume": 50000
+      },
+      "pe": {
+       "security_id": 930747,
+       "last_price": 376.75,
+       "top_bid_price": 376.3,
+       "top_ask_price": 376.9,
+       "top_bid_quantity": 20,
+       "top_ask_quantity": 20,
+       "oi": 100000,
+       "previous_oi": 110000,
+       "volume": 50000
+      }
+     },
+     "74800.000000": {
+      "ce": {
+       "security_id": 920748,
+       "last_price": 286.75,
+       "top_bid_price": 286.35,
+       "top_ask_price": 286.75,
+       "top_bid_quantity": 20,
+       "top_ask_quantity": 20,
+       "oi": 100000,
+       "previous_oi": 90000,
+       "volume": 50000
+      },
+      "pe": {
+       "security_id": 930748,
+       "last_price": 428.5,
+       "top_bid_price": 428,
+       "top_ask_price": 428.55,
+       "top_bid_quantity": 20,
+       "top_ask_quantity": 20,
+       "oi": 100000,
+       "previous_oi": 110000,
+       "volume": 50000
+      }
+     }
+    }
+   },
+   "expected": {
+    "ok": true,
+    "findings": [
+     {
+      "severity": "info",
+      "code": "VENDOR_IV_QUARANTINED",
+      "message": "8/8 legs (100.0%) carry vendor IV that is zero, missing or >60%. All vendor IV and Greeks are quarantined regardless; this server computes its own."
+     },
+     {
+      "severity": "info",
+      "code": "CHAIN_CARRIES_INDEX_LTP",
+      "message": "Chain reports underlying last_price 74667.55. This is the INDEX LTP and is never used as spot for option maths."
+     }
+    ],
+    "checkedAtMs": 1789725600000
+   }
+  },
+  {
+   "id": "checkChain/nullRaw",
+   "input": null,
+   "expected": {
+    "ok": false,
+    "findings": [
+     {
+      "severity": "block",
+      "code": "CHAIN_EMPTY",
+      "message": "Option chain for SENSEX 2026-09-24 has no strikes."
+     }
+    ],
+    "checkedAtMs": 1789725600000
+   }
+  },
+  {
+   "id": "checkChain/emptyObject",
+   "input": {},
+   "expected": {
+    "ok": false,
+    "findings": [
+     {
+      "severity": "block",
+      "code": "CHAIN_EMPTY",
+      "message": "Option chain for SENSEX 2026-09-24 has no strikes."
+     }
+    ],
+    "checkedAtMs": 1789725600000
+   }
+  },
+  {
+   "id": "checkChain/emptyOc",
+   "input": {
+    "last_price": 74300,
+    "oc": {}
+   },
+   "expected": {
+    "ok": false,
+    "findings": [
+     {
+      "severity": "block",
+      "code": "CHAIN_EMPTY",
+      "message": "Option chain for SENSEX 2026-09-24 has no strikes."
+     }
+    ],
+    "checkedAtMs": 1789725600000
+   }
+  },
+  {
+   "id": "checkChain/ocArray",
+   "input": {
+    "last_price": 74300,
+    "oc": [
+     {
+      "ce": {
+       "last_price": 10
+      }
+     }
+    ]
+   },
+   "expected": {
+    "ok": false,
+    "findings": [
+     {
+      "severity": "block",
+      "code": "CHAIN_INSUFFICIENT_PAIRS",
+      "message": "Only 0 strike(s) have both a CE and a PE. Put-call parity needs at least 2 complete pairs to recover a forward."
+     },
+     {
+      "severity": "info",
+      "code": "VENDOR_IV_QUARANTINED",
+      "message": "1/1 legs (100.0%) carry vendor IV that is zero, missing or >60%. All vendor IV and Greeks are quarantined regardless; this server computes its own."
+     },
+     {
+      "severity": "info",
+      "code": "CHAIN_CARRIES_INDEX_LTP",
+      "message": "Chain reports underlying last_price 74300. This is the INDEX LTP and is never used as spot for option maths."
+     }
+    ],
+    "checkedAtMs": 1789725600000
+   }
+  },
+  {
+   "id": "checkChain/ocNotObject",
+   "input": {
+    "oc": "oops"
+   },
+   "expected": {
+    "ok": false,
+    "findings": [
+     {
+      "severity": "block",
+      "code": "CHAIN_INSUFFICIENT_PAIRS",
+      "message": "Only 0 strike(s) have both a CE and a PE. Put-call parity needs at least 2 complete pairs to recover a forward."
+     }
+    ],
+    "checkedAtMs": 1789725600000
+   }
+  },
+  {
+   "id": "checkChain/lastPriceString",
+   "input": {
+    "last_price": "74294.96",
+    "oc": {}
+   },
+   "expected": {
+    "ok": false,
+    "findings": [
+     {
+      "severity": "block",
+      "code": "CHAIN_EMPTY",
+      "message": "Option chain for SENSEX 2026-09-24 has no strikes."
+     }
+    ],
+    "checkedAtMs": 1789725600000
+   }
+  },
+  {
+   "id": "checkChain/oddKeys",
+   "input": {
+    "last_price": 74300,
+    "oc": {
+     "74100": {
+      "ce": {
+       "last_price": 3
+      }
+     },
+     "74200.000000": {
+      "ce": {
+       "last_price": 5
+      },
+      "pe": {
+       "last_price": 6
+      }
+     },
+     "abc": {
+      "ce": {
+       "last_price": 1
+      }
+     },
+     "": {
+      "ce": {
+       "last_price": 2
+      }
+     },
+     "74100.000000": {
+      "pe": {
+       "last_price": 4
+      }
+     },
+     " 74300 ": {
+      "ce": {
+       "last_price": 7
+      }
+     },
+     "1e5": {
+      "ce": {
+       "last_price": 8
+      }
+     },
+     "0x10": {
+      "ce": {
+       "last_price": 9
+      }
+     },
+     "Infinity": {
+      "ce": {
+       "last_price": 10
+      }
+     },
+     "nan": {
+      "ce": {
+       "last_price": 11
+      }
+     },
+     "1_000": {
+      "ce": {
+       "last_price": 12
+      }
+     }
+    }
+   },
+   "expected": {
+    "ok": false,
+    "findings": [
+     {
+      "severity": "block",
+      "code": "CHAIN_INSUFFICIENT_PAIRS",
+      "message": "Only 1 strike(s) have both a CE and a PE. Put-call parity needs at least 2 complete pairs to recover a forward."
+     },
+     {
+      "severity": "info",
+      "code": "VENDOR_IV_QUARANTINED",
+      "message": "8/8 legs (100.0%) carry vendor IV that is zero, missing or >60%. All vendor IV and Greeks are quarantined regardless; this server computes its own."
+     },
+     {
+      "severity": "info",
+      "code": "CHAIN_CARRIES_INDEX_LTP",
+      "message": "Chain reports underlying last_price 74300. This is the INDEX LTP and is never used as spot for option maths."
+     }
+    ],
+    "checkedAtMs": 1789725600000
+   }
+  },
+  {
+   "id": "checkChain/malformedLegs",
+   "input": {
+    "last_price": null,
+    "oc": {
+     "74000": {
+      "ce": {
+       "security_id": 900001,
+       "last_price": "123.5",
+       "oi": "abc",
+       "top_bid_price": true,
+       "top_ask_price": null,
+       "implied_volatility": 0,
+       "greeks": {}
+      },
+      "pe": {
+       "security_id": "900002",
+       "last_price": -5,
+       "top_bid_price": 10,
+       "top_ask_price": 9,
+       "implied_volatility": 75,
+       "greeks": 0
+      }
+     },
+     "74100": {
+      "ce": [],
+      "pe": "not-a-leg"
+     },
+     "74200": {
+      "ce": {
+       "last_price": 0,
+       "implied_volatility": "12.5",
+       "greeks": {
+        "delta": "0.5",
+        "gamma": null
+       }
+      },
+      "pe": null
+     },
+     "74300": null,
+     "74400": 5
+    }
+   },
+   "expected": {
+    "ok": false,
+    "findings": [
+     {
+      "severity": "block",
+      "code": "CHAIN_INSUFFICIENT_PAIRS",
+      "message": "Only 1 strike(s) have both a CE and a PE. Put-call parity needs at least 2 complete pairs to recover a forward."
+     },
+     {
+      "severity": "warn",
+      "code": "CHAIN_CROSSED_LEGS",
+      "message": "1 leg(s) show a crossed top-of-book; they are excluded from parity."
+     },
+     {
+      "severity": "warn",
+      "code": "CHAIN_ZERO_PRICES",
+      "message": "2 leg(s) have a non-positive last price."
+     },
+     {
+      "severity": "info",
+      "code": "VENDOR_IV_QUARANTINED",
+      "message": "3/4 legs (75.0%) carry vendor IV that is zero, missing or >60%. All vendor IV and Greeks are quarantined regardless; this server computes its own."
+     }
+    ],
+    "checkedAtMs": 1789725600000
+   }
+  },
+  {
+   "id": "checkSnapshotSkew/same",
+   "input": {
+    "a": {
+     "fetchId": "a",
+     "epochMs": 1000
+    },
+    "b": {
+     "fetchId": "a",
+     "epochMs": 99999
+    },
+    "max": 3000
+   },
+   "expected": {
+    "ok": true,
+    "skewMs": 98999,
+    "sameFetch": true,
+    "message": "Single atomic fetch."
+   }
+  },
+  {
+   "id": "checkSnapshotSkew/inside",
+   "input": {
+    "a": {
+     "fetchId": "a",
+     "epochMs": 1000
+    },
+    "b": {
+     "fetchId": "b",
+     "epochMs": 4000
+    },
+    "max": 3000
+   },
+   "expected": {
+    "ok": true,
+    "skewMs": 3000,
+    "sameFetch": false,
+    "message": "Distinct fetches 3000ms apart, inside the 3000ms window."
+   }
+  },
+  {
+   "id": "checkSnapshotSkew/outside",
+   "input": {
+    "a": {
+     "fetchId": "a",
+     "epochMs": 1000
+    },
+    "b": {
+     "fetchId": "b",
+     "epochMs": 4001
+    },
+    "max": 3000
+   },
+   "expected": {
+    "ok": false,
+    "skewMs": 3001,
+    "sameFetch": false,
+    "message": "Snapshot skew 3001ms exceeds the 3000ms limit. The chain and the futures leg are not one snapshot; mixing them would price across two timestamps."
+   }
+  },
+  {
+   "id": "checkSnapshotSkew/negative",
+   "input": {
+    "a": {
+     "fetchId": "a",
+     "epochMs": 9000
+    },
+    "b": {
+     "fetchId": "b",
+     "epochMs": 1000
+    },
+    "max": 3000
+   },
+   "expected": {
+    "ok": false,
+    "skewMs": 8000,
+    "sameFetch": false,
+    "message": "Snapshot skew 8000ms exceeds the 3000ms limit. The chain and the futures leg are not one snapshot; mixing them would price across two timestamps."
+   }
+  }
+ ]
+}
