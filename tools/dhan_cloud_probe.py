@@ -1,7 +1,7 @@
 """
 Dhan Cloud runtime probe (BASIC) — read-only, stdlib only, no credentials.
 
-Run this first. It uses only platform, sys, time, datetime and urllib, and
+Run this first. It uses only sys, time, datetime and urllib, and
 touches no files and no environment settings, so that a strict code scanner
 (REPORTED by the community, unverified) has as little as possible to object
 to. If it saves and runs, the runtime baseline is known; then run
@@ -9,7 +9,7 @@ to. If it saves and runs, the runtime baseline is known; then run
 package checks.
 
 What it establishes on its own:
-  * Python version / implementation / platform           -> yes
+  * Python version (no platform/OS details: Cloud forbids them) -> yes
   * container clock, timezone, offset from IST           -> yes
   * HTTPS reachability of Dhan hosts and one outside host -> yes (HEAD only)
   * whether log lines stream while the job runs          -> yes (heartbeat)
@@ -21,14 +21,13 @@ Safety: sends HEAD requests with no headers, no body, no token, to public URLs.
 It never calls an order, account or authentication endpoint.
 """
 
-import platform
 import sys
 import time
 import urllib.error
 import urllib.request
 from datetime import datetime, timedelta, timezone
 
-PROBE_VERSION = "3"
+PROBE_VERSION = "4"
 IST = timezone(timedelta(hours=5, minutes=30))
 TIMEOUT_SECONDS = 10
 HEARTBEAT_SECONDS = 60
@@ -76,14 +75,12 @@ def clock_report():
 
 
 def runtime_report():
+    # Dhan Cloud's scanner rejects host platform/OS queries (observed 9 Oct 2026:
+    # "security violation ... querying host platform/OS details is not allowed"),
+    # so only the Python language version is reported.
     return {
         "probe_version": PROBE_VERSION,
-        "python": sys.version.split()[0],
-        "implementation": platform.python_implementation(),
-        "platform": platform.platform(),
-        "machine": platform.machine(),
-        "executable_name": sys.executable.rsplit("/", 1)[-1] if sys.executable else "",
-        "script_name": (sys.argv[0].rsplit("/", 1)[-1] if sys.argv and sys.argv[0] else ""),
+        "python": "%d.%d.%d" % tuple(sys.version_info[:3]),
     }
 
 

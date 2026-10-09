@@ -8,7 +8,7 @@ Statuses used: PASS / FAIL / UNVERIFIED / BLOCKED.
 | Item | Status | Evidence |
 |---|---|---|
 | Deploy from this coding environment | **NOT POSSIBLE** | This session's network policy denies every Dhan host. `curl -I` to `api.dhan.co`, `docs.dhanhq.co`, `dhanhq.co` and `images.dhan.co` returns `CONNECT tunnel failed, response 403`. Dhan Cloud also needs your interactive Dhan login, which I must not use |
-| Credential-free probe run **in Dhan Cloud** | **NOT RUN** | No Cloud access. Steps P1–P2 below are yours |
+| Credential-free probe run **in Dhan Cloud** | **FAIL (attempt 1), fixed** | 9 Oct 2026, run by you: the save/run of probe v3 was rejected with `security violation at line 83: querying host platform/OS details is not allowed` (`platform.platform()`). Probe v4, the import probe and the observer no longer query platform/OS details (test `Safety` now forbids the `platform` module and `sys.platform`/`implementation`/`executable`/`version`, `os.uname`/`name`/`listdir`/`getcwd`). Re-run P1 with v4 |
 | Scanner uploaded / executed **in Dhan Cloud** | **NOT RUN** | Steps V1–V3 below are yours |
 | Upload files built and tested | PASS (local) | `cloud/dist/` built by `cloud/build_bundle.py`. 20 tests in `engine/tests/test_cloud_package.py` and `test_observation.py`; full results in §7 |
 | Official Cloud docs (`docs.dhanhq.co/cloud/`, execution environment) | **UNVERIFIED** | Not retrievable from here (same 403). UI labels and limits below come from earlier phases (search snippets plus community reports) and must be confirmed in the console |

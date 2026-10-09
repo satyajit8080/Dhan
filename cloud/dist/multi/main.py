@@ -71,8 +71,7 @@ def _stdout_logger(redactor):
 
 
 def _runtime(log):
-    log("info", "runtime", program=PROGRAM, version=VERSION, mode=MODE, python=sys.version.split()[0],
-        implementation=sys.implementation.name, platform=sys.platform,
+    log("info", "runtime", program=PROGRAM, version=VERSION, mode=MODE, python="%d.%d.%d" % tuple(sys.version_info[:3]),
         utc=datetime.now(timezone.utc).isoformat(timespec="seconds"),
         allowList=sorted("%s %s" % k for k in READ_ONLY_ENDPOINTS), orders="NONE (no order code present)")
 

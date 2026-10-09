@@ -2442,7 +2442,7 @@ def _stdout_logger(redactor):
     return JsonLogger(redactor, stream=sys.stdout, prefix='BX|')
 
 def _runtime(log):
-    log('info', 'runtime', program=PROGRAM, version=VERSION, mode=MODE, python=sys.version.split()[0], implementation=sys.implementation.name, platform=sys.platform, utc=datetime.now(timezone.utc).isoformat(timespec='seconds'), allowList=sorted(('%s %s' % k for k in READ_ONLY_ENDPOINTS)), orders='NONE (no order code present)')
+    log('info', 'runtime', program=PROGRAM, version=VERSION, mode=MODE, python='%d.%d.%d' % tuple(sys.version_info[:3]), utc=datetime.now(timezone.utc).isoformat(timespec='seconds'), allowList=sorted(('%s %s' % k for k in READ_ONLY_ENDPOINTS)), orders='NONE (no order code present)')
 
 class _FixedTransport:
     """Serves the embedded MOCK bodies; no network."""

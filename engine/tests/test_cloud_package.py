@@ -174,7 +174,10 @@ FORBIDDEN_IDENTIFIERS = ("place_order", "placeorder", "modify_order", "cancel_or
                          "kill_switch", "generate_token", "generatetoken", "renew_token", "renewtoken", "totp", "pyotp",
                          "super_order", "forever", "slice_order", "convert_position", "margin_calculator")
 FORBIDDEN_CALLS = ("exec", "eval", "compile", "__import__", "input")
-FORBIDDEN_MODULES = ("subprocess", "socket", "importlib", "pickle", "marshal", "ctypes", "shutil", "dhanhq", "requests")
+FORBIDDEN_MODULES = ("subprocess", "socket", "importlib", "pickle", "marshal", "ctypes", "shutil", "dhanhq", "requests",
+                     "platform")   # Dhan Cloud scanner: "querying host platform/OS details is not allowed" (9 Oct 2026)
+HOST_QUERIES = {("sys", "platform"), ("sys", "implementation"), ("sys", "executable"), ("sys", "version"),
+                ("os", "uname"), ("os", "name"), ("os", "listdir"), ("os", "getcwd"), ("os", "cpu_count")}
 
 
 def _bundle_trees():
@@ -193,6 +196,8 @@ class Safety(unittest.TestCase):
                     self.assertFalse(any(f in ident.lower() for f in FORBIDDEN_IDENTIFIERS), "%s: %s" % (label, ident))
                 if isinstance(n, ast.Call) and isinstance(n.func, ast.Name):
                     self.assertNotIn(n.func.id, FORBIDDEN_CALLS, label)
+                if isinstance(n, ast.Attribute) and isinstance(n.value, ast.Name):
+                    self.assertNotIn((n.value.id, n.attr), HOST_QUERIES, "%s: host query %s.%s" % (label, n.value.id, n.attr))
                 if isinstance(n, (ast.Import, ast.ImportFrom)):
                     mods = [a.name for a in n.names] if isinstance(n, ast.Import) else [n.module or ""]
                     for m in mods:
