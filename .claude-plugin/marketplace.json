@@ -1,0 +1,11 @@
+{
+  "name": "bull50",
+  "owner": { "name": "satyajit8080" },
+  "plugins": [
+    {
+      "name": "bull50-dhan",
+      "source": "./plugin",
+      "description": "Read-only Dhan market data for SENSEX options scalping."
+    }
+  ]
+}

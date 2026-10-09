@@ -46,10 +46,28 @@ export function assertReadOnlyPath(path: string): void {
   }
 }
 
-/** Dhan codes that mean "you are throttled", across all their spellings. */
-const THROTTLE_CODES = new Set(['RL001', 'DH-904', '904', 'DH_904']);
-/** Dhan codes that mean "your credentials are bad". */
-const AUTH_CODES = new Set(['DH-901', '901', '808', '809', '810', '811', 'DH-902', '902']);
+/*
+ * Error-code families, per the DhanHQ v2 annexure (Trading API DH-9xx codes and
+ * Data API 8xx codes). The Data API codes are the ones /charts, /marketfeed and
+ * /optionchain actually return.
+ */
+
+/** "You are throttled": DH-904, and Data API 805 (too many requests). */
+const THROTTLE_CODES = new Set(['RL001', 'DH-904', '904', 'DH_904', '805']);
+/**
+ * "Your credentials are bad": DH-901, 807 (token expired), 808 (auth failed),
+ * 809 (token invalid), 810 (client id invalid).
+ *
+ * 811 is NOT here: it means "invalid expiry date", a request error.
+ */
+const AUTH_CODES = new Set(['DH-901', '901', '807', '808', '809', '810']);
+/**
+ * "Your account lacks the API access": DH-902, and Data API 806 (Data APIs not
+ * subscribed). A fresh token does not fix these; activating the data plan does.
+ */
+const SUBSCRIPTION_CODES = new Set(['DH-902', '902', '806']);
+/** Transient server-side failures worth a backoff retry: 800, DH-908, DH-909. */
+const RETRYABLE_CODES = new Set(['800', 'DH-908', '908', 'DH-909', '909']);
 
 export interface DhanEnvelope<T> {
   data?: T;
@@ -106,17 +124,29 @@ export class Transport {
       const timer = setTimeout(() => controller.abort(), timeoutMs);
 
       try {
-        const res = await fetch(url, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Accept: 'application/json',
-            'access-token': token,
-            'client-id': clientId,
-          },
-          body: JSON.stringify(opts.body),
-          signal: controller.signal,
-        });
+        let res: Response;
+        try {
+          res = await fetch(url, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Accept: 'application/json',
+              'access-token': token,
+              'client-id': clientId,
+            },
+            body: JSON.stringify(opts.body),
+            signal: controller.signal,
+          });
+        } catch (err) {
+          // fetch() rejects with a TypeError ("fetch failed") on DNS failure,
+          // connection reset or TLS error. Those are transient network faults
+          // and must be retried like a timeout, not thrown on the first try.
+          if (err instanceof Error && err.name === 'AbortError') throw err;
+          throw new TransportError(`Network error on ${opts.path}: ${(err as Error).message}`, {
+            path: opts.path,
+            cause: String((err as { cause?: unknown }).cause ?? ''),
+          });
+        }
         const receivedAtMs = Date.now();
         clearTimeout(timer);
 
@@ -160,6 +190,17 @@ export class Transport {
           throw lastErr;
         }
 
+        // --- data plan / API access (checked before the HTTP-status auth rule,
+        //     because Dhan can send 806/DH-902 with a 401/403) ----------------
+        if (SUBSCRIPTION_CODES.has(code)) {
+          throw new ApiError(
+            `Dhan refused ${opts.path}: ${msg} (${code}). The account lacks the required ` +
+              `API access — check the Data API plan under My Profile > Access DhanHQ APIs. ` +
+              `A new token alone will not fix this.`,
+            { code, httpStatus: res.status },
+          );
+        }
+
         // --- auth ----------------------------------------------------------
         if (res.status === 401 || res.status === 403 || AUTH_CODES.has(code)) {
           throw new AuthRejectedError(
@@ -170,7 +211,7 @@ export class Transport {
         }
 
         // --- retryable server side ------------------------------------------
-        if (res.status >= 500) {
+        if (res.status >= 500 || RETRYABLE_CODES.has(code)) {
           lastErr = new ApiError(`Dhan server error on ${opts.path}: ${msg}`, {
             httpStatus: res.status,
             code,

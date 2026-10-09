@@ -33,7 +33,7 @@ import type {
 } from './types.js';
 
 export interface SnapshotOptions {
-  /** Expiry. Omitted means "nearest listed", resolved live and cached. */
+  /** Expiry. Omitted means the nearest listed expiry AFTER today (next weekly on expiry day). */
   expiry?: string;
   /** Futures contract month for the cross-check. Defaults to the expiry month. */
   futuresMonth?: string;
@@ -96,8 +96,10 @@ export async function buildSnapshot(
   if (!spec.verified) warnings.push(spec.verificationNote);
 
   // --- resolve the expiry live; never hardcoded -----------------------------
+  // Default scope (RULES.md §6): nearest weekly, but the NEXT weekly on expiry
+  // day. An explicit `expiry` is honoured as given.
   const today = new Date(Date.now() + 5.5 * 3600_000).toISOString().slice(0, 10);
-  const expiry = opts.expiry ?? (await expiries.nearest(spec.scrip, spec.segment, today));
+  const expiry = opts.expiry ?? (await expiries.nextAfter(spec.scrip, spec.segment, today));
   if (opts.expiry) await expiries.assertValid(spec.scrip, spec.segment, opts.expiry);
 
   // --- 1. CHAIN FIRST -------------------------------------------------------

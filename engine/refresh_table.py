@@ -18,11 +18,20 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, asdict
-from datetime import datetime, time
+from datetime import datetime, time, timedelta, timezone
 from typing import Iterable, Optional
 
 MIN_PER_YEAR = 365.0 * 24 * 60
-SKIP_WINDOWS = [(time(9, 15), time(9, 25)), (time(11, 30), time(13, 0)), (time(14, 50), time(15, 30))]
+IST = timezone(timedelta(hours=5, minutes=30))
+# No-trade windows (IST, RULES.md §5): 09:15–09:25, 11:30–13:00, after 14:50.
+# "After 14:50" runs to the end of the day, and nothing before the 09:15 open
+# is tradeable either; the windows below therefore cover the whole closed
+# market, not just 14:50–15:30.
+SKIP_WINDOWS = [
+    (time(0, 0), time(9, 25)),
+    (time(11, 30), time(13, 0)),
+    (time(14, 50), time.max),
+]
 
 
 # ---------------------------------------------------------------- Black-76
@@ -99,8 +108,12 @@ def minutes_to_trigger(distance: float, atr: float, bar_minutes: int) -> float:
 
 
 def in_skip_window(now: datetime) -> bool:
+    """`now` must be IST wall-clock time. A tz-aware datetime is converted to
+    IST first, so a host running in UTC cannot shift the windows by 5h30m."""
+    if now.tzinfo is not None:
+        now = now.astimezone(IST)
     t = now.time()
-    return any(a <= t < b for a, b in SKIP_WINDOWS)
+    return any(a <= t <= b if b == time.max else a <= t < b for a, b in SKIP_WINDOWS)
 
 
 # ---------------------------------------------------------------- main

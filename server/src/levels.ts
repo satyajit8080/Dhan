@@ -19,7 +19,7 @@
  */
 
 import type { Candle } from './endpoints/historical.js';
-import { atr, openingRange, sessions, vwap, istTimeOf } from './indicators.js';
+import { atr, openingRange, sessions, sessionVwap } from './indicators.js';
 import { findSwingPoints } from './structure.js';
 
 export type LevelSource =
@@ -204,7 +204,7 @@ export function collectCandidates(
     out.push({ price: or.low, source: 'opening_range_low' });
   }
 
-  const v = vwap(candles);
+  const v = sessionVwap(candles);
   if (v !== null) out.push({ price: v, source: 'vwap' });
 
   const window = candles.slice(-Math.min(cfg.consolidationWindow, candles.length));
@@ -437,13 +437,16 @@ export interface TradePlan {
   /** Underlying invalidation. */
   stopLevel: number;
   stopSource: string;
-  /** Option premium now. */
+  /** Option premium now, with the underlying at `levels.spot`. */
   entryPremium: number;
   /**
-   * Premium projections, second order in the forward:
-   *   dV ~= delta*dF + 0.5*gamma*dF^2
+   * Premium projections, second order in the underlying move FROM SPOT:
+   *   V(x) ~= V0 + delta*(x - spot) + 0.5*gamma*(x - spot)^2
+   * The Greeks are measured at spot, so the expansion must be centred there.
    * These are ESTIMATES from the Greeks, not quotes.
    */
+  /** Projected premium when the underlying reaches the trigger. */
+  triggerPremium: number | null;
   targetPremium: number | null;
   stopPremium: number | null;
   riskRewardRatio: number | null;
@@ -505,12 +508,13 @@ export function buildTradePlan(
       stopLevel: stop,
       stopSource,
       entryPremium,
-      targetPremium: projectPremium(entryPremium, delta, gamma, target - trigger),
-      stopPremium: projectPremium(entryPremium, delta, gamma, stop - trigger),
+      triggerPremium: projectPremium(entryPremium, delta, gamma, trigger - levels.spot),
+      targetPremium: projectPremium(entryPremium, delta, gamma, target - levels.spot),
+      stopPremium: projectPremium(entryPremium, delta, gamma, stop - levels.spot),
       riskRewardRatio:
         trigger - stop !== 0 ? Math.abs((target - trigger) / (trigger - stop)) : null,
       note:
-        'Premium targets are delta/gamma projections from the trigger, not quotes. ' +
+        'Premium targets are delta/gamma projections from current spot, not quotes. ' +
         'Underlying levels come from confirmed price action.',
     };
   }
@@ -537,12 +541,13 @@ export function buildTradePlan(
     stopSource,
     entryPremium,
     // A put gains as the underlying falls; delta is already negative.
-    targetPremium: projectPremium(entryPremium, delta, gamma, target - trigger),
-    stopPremium: projectPremium(entryPremium, delta, gamma, stop - trigger),
+    triggerPremium: projectPremium(entryPremium, delta, gamma, trigger - levels.spot),
+    targetPremium: projectPremium(entryPremium, delta, gamma, target - levels.spot),
+    stopPremium: projectPremium(entryPremium, delta, gamma, stop - levels.spot),
     riskRewardRatio:
       stop - trigger !== 0 ? Math.abs((trigger - target) / (stop - trigger)) : null,
     note:
-      'Premium targets are delta/gamma projections from the trigger, not quotes. ' +
+      'Premium targets are delta/gamma projections from current spot, not quotes. ' +
       'Underlying levels come from confirmed price action.',
   };
 }

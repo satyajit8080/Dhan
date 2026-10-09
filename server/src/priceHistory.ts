@@ -40,6 +40,18 @@ export interface Observation {
   dayLow: number | null;
 }
 
+/** IST calendar day of an epoch-ms instant. */
+function istDay(epochMs: number): string {
+  return new Date(epochMs + 5.5 * 3600_000).toISOString().slice(0, 10);
+}
+
+/** futures - index on one observation; null when either is missing. */
+function basisOf(o: Observation): number | null {
+  if (o.index === null || o.futures === null) return null;
+  if (!Number.isFinite(o.index) || !Number.isFinite(o.futures)) return null;
+  return o.futures - o.index;
+}
+
 export type LevelSourceQuality = 'candles' | 'rolling_snapshots' | 'reference_only' | 'none';
 
 const DEFAULT_WINDOW_MINUTES = 90;
@@ -139,6 +151,16 @@ export class PriceHistory {
    * Each bucket's open is the first observation, close the last, high/low the
    * extremes actually seen. Volume is null — snapshots carry no traded volume,
    * and reporting zero would let a VWAP be computed from nothing.
+   *
+   * The futures day high/low can widen a bar, under two conditions:
+   *   1. It moved since the previous observation of the same day. The day
+   *      high is the SESSION's extreme; only a NEW extreme tells us price
+   *      went there between this scan and the last one. Applying an
+   *      unchanged day high to every bar stamped the session high onto every
+   *      bar and manufactured a "confirmed" level with one touch per bar.
+   *   2. It can be moved into index space. The day range comes from the
+   *      futures quote and sits a basis (futures - index) away from the index.
+   *      Without both prices on the observation it is not used.
    */
   toSyntheticCandles(bucketMinutes = 1): Candle[] {
     this.ensureLoaded();
@@ -146,6 +168,26 @@ export class PriceHistory {
       .filter((o) => o.index !== null && Number.isFinite(o.index))
       .sort((a, b) => a.t - b.t);
     if (usable.length === 0) return [];
+
+    // Index-space high/low each observation newly revealed, if any.
+    const extensions = new Map<Observation, { high: number | null; low: number | null }>();
+    let prev: Observation | null = null;
+    for (const o of usable) {
+      const sameDay = prev !== null && istDay(prev.t) === istDay(o.t);
+      const basis = basisOf(o);
+      let high: number | null = null;
+      let low: number | null = null;
+      if (sameDay && basis !== null) {
+        if (o.dayHigh !== null && prev!.dayHigh !== null && o.dayHigh > prev!.dayHigh) {
+          high = o.dayHigh - basis;
+        }
+        if (o.dayLow !== null && prev!.dayLow !== null && o.dayLow < prev!.dayLow) {
+          low = o.dayLow - basis;
+        }
+      }
+      extensions.set(o, { high, low });
+      prev = o;
+    }
 
     const bucketMs = Math.max(1, bucketMinutes) * 60_000;
     const out: Candle[] = [];
@@ -158,11 +200,10 @@ export class PriceHistory {
       let high = Math.max(...prices);
       let low = Math.min(...prices);
 
-      // Day high/low from the futures quote widen the bar when the market
-      // moved between scans — otherwise sparse sampling understates the range.
       for (const o of bucket) {
-        if (o.dayHigh !== null && o.dayHigh > high && o.dayHigh < high * 1.02) high = o.dayHigh;
-        if (o.dayLow !== null && o.dayLow < low && o.dayLow > low * 0.98) low = o.dayLow;
+        const ext = extensions.get(o)!;
+        if (ext.high !== null && ext.high > high && ext.high < high * 1.02) high = ext.high;
+        if (ext.low !== null && ext.low < low && ext.low > low * 0.98) low = ext.low;
       }
 
       out.push({
@@ -192,14 +233,30 @@ export class PriceHistory {
   /**
    * Reference levels available even on a first scan, from the futures day
    * range. These are real exchange values, not derived from history.
+   *
+   * Returned in INDEX space (futures day range minus the basis observed on the
+   * same scan), because they are compared against the index LTP. Observations
+   * without both an index and a futures price cannot be converted and are
+   * skipped. Only the most recent IST day is considered.
    */
   referenceLevels(): { dayHigh: number | null; dayLow: number | null; observations: number } {
     this.ensureLoaded();
     let dayHigh: number | null = null;
     let dayLow: number | null = null;
+    const last = this.observations[this.observations.length - 1];
+    const today = last ? istDay(last.t) : null;
     for (const o of this.observations) {
-      if (o.dayHigh !== null && (dayHigh === null || o.dayHigh > dayHigh)) dayHigh = o.dayHigh;
-      if (o.dayLow !== null && (dayLow === null || o.dayLow < dayLow)) dayLow = o.dayLow;
+      if (istDay(o.t) !== today) continue;
+      const basis = basisOf(o);
+      if (basis === null) continue;
+      if (o.dayHigh !== null) {
+        const h = o.dayHigh - basis;
+        if (dayHigh === null || h > dayHigh) dayHigh = h;
+      }
+      if (o.dayLow !== null) {
+        const l = o.dayLow - basis;
+        if (dayLow === null || l < dayLow) dayLow = l;
+      }
     }
     return { dayHigh, dayLow, observations: this.observations.length };
   }

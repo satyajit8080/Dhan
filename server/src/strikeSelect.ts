@@ -148,7 +148,14 @@ export function selectStrike(
     if (leg.ivPct === null) {
       rejectReasons.push('No IV — price outside no-arbitrage bounds, so the quote is untrusted.');
     }
-    if (d && GRADE_RANK[d.grade] < GRADE_RANK[c.minGrade]) {
+    if (!d) {
+      // No Stage-2 depth for this leg (not screened, or no depth returned).
+      // Its liquidity is UNKNOWN, and unknown cannot clear a grade floor:
+      // it must not become `best` just because the assessed legs failed.
+      rejectReasons.push(
+        `No depth assessment — liquidity unverified, cannot meet the ${c.minGrade} floor.`,
+      );
+    } else if (GRADE_RANK[d.grade] < GRADE_RANK[c.minGrade]) {
       rejectReasons.push(`Liquidity grade ${d.grade} is below the ${c.minGrade} floor.`);
     }
     if (d?.roundtripPct != null && d.roundtripPct > c.maxRoundtripPct) {

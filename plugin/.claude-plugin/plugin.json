@@ -1,0 +1,5 @@
+{
+  "name": "bull50-dhan",
+  "version": "1.7.0",
+  "description": "Read-only Dhan market data for SENSEX options scalping: parity forward, Black-76 Greeks, liquidity and breakout levels. Never places orders."
+}

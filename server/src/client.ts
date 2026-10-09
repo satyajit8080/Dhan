@@ -292,14 +292,22 @@ export class Bull50DhanClient {
     const candleErrors: string[] = [];
     let candleData: { candles: Candle[]; indicators: unknown } | null = null;
 
+    const series = params.series ?? 'index';
+    // Futures candles must be the SAME contract the snapshot cross-checked,
+    // so the futures LTP used as their spot below is in the same price space.
+    const snapFutures = series === 'futures'
+      ? this.registry.futuresForExpiry(snap.underlying, snap.expiry)
+      : null;
+
     for (let attempt = 0; attempt < 2 && candleData === null; attempt++) {
       try {
         const r = await this.getCandles({
           underlying: params.underlying,
-          series: params.series ?? 'index',
+          series,
           timeframe: 'intraday',
           interval: params.interval ?? 1,
           maxCandles: 10_000,
+          ...(snapFutures ? { futuresMonth: snapFutures.month } : {}),
         });
         candleData = { candles: r.candles, indicators: r.indicators };
       } catch (err) {
@@ -314,15 +322,21 @@ export class Bull50DhanClient {
 
     // 3b. Record this scan in the rolling history BEFORE deriving levels, so
     //     even a candle-less scan contributes price action for the next one.
-    const spotForLevels =
-      snap.chain.underlyingLtpDoNotUseAsSpot ??
-      (candleData && candleData.candles.length > 0
+    //     Levels are placed relative to a spot in the SAME price space as the
+    //     bars they come from. Index bars (and the rolling history, which is
+    //     index-space) use the index LTP; futures bars use the futures LTP.
+    //     Mixing them misplaces every level by the futures basis.
+    const lastClose =
+      candleData && candleData.candles.length > 0
         ? candleData.candles[candleData.candles.length - 1]!.close
-        : NaN);
+        : NaN;
+    const indexSpot = snap.chain.underlyingLtpDoNotUseAsSpot ?? (series === 'index' ? lastClose : NaN);
+    const futuresSpot =
+      snap.futures && Number.isFinite(snap.futures.ltp) ? snap.futures.ltp : lastClose;
 
     this.history.record({
       t: snap.epochMs,
-      index: Number.isFinite(spotForLevels) ? spotForLevels : null,
+      index: Number.isFinite(indexSpot) ? indexSpot : null,
       forward,
       futures: snap.futures && Number.isFinite(snap.futures.ltp) ? snap.futures.ltp : null,
       dayHigh: snap.futures?.ohlc?.high ?? null,
@@ -347,6 +361,9 @@ export class Bull50DhanClient {
       levelBasis = this.history.toSyntheticCandles(1);
       levelSource = 'rolling_snapshots';
     }
+
+    const spotForLevels =
+      levelSource === 'candles' && series === 'futures' ? futuresSpot : indexSpot;
 
     const fiveMin = levelBasis.length > 0 ? aggregateCandles(levelBasis, 5) : [];
     const structure = levelBasis.length > 0 ? analyzeStructure(levelBasis) : null;
@@ -373,9 +390,11 @@ export class Bull50DhanClient {
     const refs = this.history.referenceLevels();
     if (
       (levels === null || (levels.breakoutAbove === null && levels.breakdownBelow === null)) &&
-      Number.isFinite(spotForLevels) &&
+      Number.isFinite(indexSpot) &&
       (refs.dayHigh !== null || refs.dayLow !== null)
     ) {
+      // Reference levels are index-space (see PriceHistory.referenceLevels).
+      const spotForLevels = indexSpot;
       const buffer = params.levelConfig?.confirmationBuffer ?? 5;
       const round = params.levelConfig?.roundTo ?? 5;
       const r = (v: number) => (round > 0 ? Math.round(v / round) * round : v);
@@ -501,7 +520,8 @@ export class Bull50DhanClient {
         observations: this.history.count(),
         spanMinutes: Number(this.history.spanMinutes().toFixed(1)),
       },
-      spotUsedForLevels: Number.isFinite(spotForLevels) ? spotForLevels : null,
+      spotUsedForLevels: levels && Number.isFinite(levels.spot) ? levels.spot : null,
+      levelPriceSpace: levelSource === 'candles' && series === 'futures' ? 'futures' : 'index',
       strikeRanking: {
         lots,
         lotSize: this.registry.underlying(params.underlying).lotSize,

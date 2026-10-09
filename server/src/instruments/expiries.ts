@@ -77,6 +77,29 @@ export class ExpiryCache {
     return hit;
   }
 
+  /**
+   * Nearest expiry STRICTLY after `today` (YYYY-MM-DD).
+   *
+   * The scalping scope (RULES.md §6) is "nearest weekly expiry, next weekly on
+   * expiry day". `nearest()` returns today's contract on expiry day, which
+   * after 15:30 IST is already expired and cannot be priced (T <= 0).
+   */
+  async nextAfter(
+    scrip: number,
+    segment: ExchangeSegment,
+    today: string,
+  ): Promise<string> {
+    const { expiries } = await this.get(scrip, segment);
+    const hit = expiries.find((e) => e > today);
+    if (!hit) {
+      throw new InstrumentError(
+        `No expiry after ${today} for ${segment}:${scrip}. Available: ${expiries.join(', ')}.`,
+        { today, expiries },
+      );
+    }
+    return hit;
+  }
+
   /** Validate a user-supplied expiry against the live list. */
   async assertValid(
     scrip: number,

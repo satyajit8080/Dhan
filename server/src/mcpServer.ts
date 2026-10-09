@@ -306,7 +306,10 @@ server.registerTool(
       'nothing if the gate blocks — it never falls back to the index LTP.',
     inputSchema: {
       underlying: z.string().describe('SENSEX, NIFTY or BANKNIFTY.'),
-      expiry: z.string().optional().describe('YYYY-MM-DD. Omit for the nearest.'),
+      expiry: z
+        .string()
+        .optional()
+        .describe('YYYY-MM-DD. Omit for the nearest expiry after today (next weekly on expiry day).'),
       include_depth: z
         .boolean()
         .optional()
@@ -475,7 +478,10 @@ server.registerTool(
       'those rules are not configured. Use this as the internal analysis step.',
     inputSchema: {
       underlying: z.string().describe('SENSEX, NIFTY or BANKNIFTY.'),
-      expiry: z.string().optional().describe('YYYY-MM-DD. Omit for the nearest.'),
+      expiry: z
+        .string()
+        .optional()
+        .describe('YYYY-MM-DD. Omit for the nearest expiry after today (next weekly on expiry day).'),
       lots: z.number().int().positive().optional().describe('Size for liquidity. Default 5.'),
       series: z
         .enum(['index', 'futures'])
@@ -484,7 +490,7 @@ server.registerTool(
       interval: z
         .union([z.literal(1), z.literal(5), z.literal(15), z.literal(25), z.literal(60)])
         .optional()
-        .describe('Intraday minutes. Default 5.'),
+        .describe('Intraday minutes. Default 1 (5-minute levels are derived from it).'),
     },
   },
   guard(

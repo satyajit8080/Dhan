@@ -70,8 +70,11 @@ Two cautions when doing this:
 
 ### First, rule out the boring cause
 
-`DH-906 Invalid Token`, `DH-901`, HTTP 401/403 or the plugin reporting
-`present: false` are **authentication failures, not an outage**. Each chat
+`DH-901`, Data API `807` (token expired) / `808` / `809` / `810`, HTTP
+401/403 or the plugin reporting `present: false` are **authentication
+failures, not an outage**. (`DH-906` is an order error, not a token error.)
+`806` / `DH-902` mean the Data API plan is not active — a new token will not
+fix that. Each chat
 session spawns its own server process, so a token set in one chat is NOT set in
 another. Before declaring candles "down", check `dhan_token_status` — if the
 token is missing or expired, the fix is `/dhan-token`, not a fallback.

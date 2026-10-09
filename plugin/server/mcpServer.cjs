@@ -7,11 +7,7 @@ var __getOwnPropNames = Object.getOwnPropertyNames;
 var __getProtoOf = Object.getPrototypeOf;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
 var __commonJS = (cb, mod) => function __require() {
-  try {
-    return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
-  } catch (e) {
-    throw mod = 0, e;
-  }
+  return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
 };
 var __export = (target, all) => {
   for (var name in all)
@@ -11028,7 +11024,7 @@ ZodNaN.create = (params) => {
     ...processCreateParams(params)
   });
 };
-var BRAND = /* @__PURE__ */ Symbol("zod_brand");
+var BRAND = Symbol("zod_brand");
 var ZodBranded = class extends ZodType {
   _parse(input) {
     const { ctx } = this._processInputParams(input);
@@ -11230,14 +11226,14 @@ var ostring = () => stringType().optional();
 var onumber = () => numberType().optional();
 var oboolean = () => booleanType().optional();
 var coerce = {
-  string: ((arg) => ZodString.create({ ...arg, coerce: true })),
-  number: ((arg) => ZodNumber.create({ ...arg, coerce: true })),
-  boolean: ((arg) => ZodBoolean.create({
+  string: (arg) => ZodString.create({ ...arg, coerce: true }),
+  number: (arg) => ZodNumber.create({ ...arg, coerce: true }),
+  boolean: (arg) => ZodBoolean.create({
     ...arg,
     coerce: true
-  })),
-  bigint: ((arg) => ZodBigInt.create({ ...arg, coerce: true })),
-  date: ((arg) => ZodDate.create({ ...arg, coerce: true }))
+  }),
+  bigint: (arg) => ZodBigInt.create({ ...arg, coerce: true }),
+  date: (arg) => ZodDate.create({ ...arg, coerce: true })
 };
 var NEVER = INVALID;
 
@@ -11288,6 +11284,7 @@ function $constructor(name, initializer3, params) {
   Object.defineProperty(_, "name", { value: name });
   return _;
 }
+var $brand = Symbol("zod_brand");
 var $ZodAsyncError = class extends Error {
   constructor() {
     super(`Encountered Promise during synchronous parse. Use .parseAsync() instead.`);
@@ -13791,6 +13788,8 @@ function en_default2() {
 }
 
 // node_modules/zod/v4/core/registries.js
+var $output = Symbol("ZodOutput");
+var $input = Symbol("ZodInput");
 var $ZodRegistry = class {
   constructor() {
     this._map = /* @__PURE__ */ new Map();
@@ -15068,10 +15067,10 @@ var ZodMiniType = /* @__PURE__ */ $constructor("ZodMiniType", (inst, def) => {
   };
   inst.clone = (_def, params) => clone(inst, _def, params);
   inst.brand = () => inst;
-  inst.register = ((reg, meta) => {
+  inst.register = (reg, meta) => {
     reg.add(inst, meta);
     return inst;
-  });
+  };
 });
 var ZodMiniObject = /* @__PURE__ */ $constructor("ZodMiniObject", (inst, def) => {
   $ZodObject.init(inst, def);
@@ -15350,10 +15349,10 @@ var ZodType2 = /* @__PURE__ */ $constructor("ZodType", (inst, def) => {
   };
   inst.clone = (def2, params) => clone(inst, def2, params);
   inst.brand = () => inst;
-  inst.register = ((reg, meta) => {
+  inst.register = (reg, meta) => {
     reg.add(inst, meta);
     return inst;
-  });
+  };
   inst.parse = (data, params) => parse2(inst, data, params, { callee: inst.parse });
   inst.safeParse = (data, params) => safeParse3(inst, data, params);
   inst.parseAsync = async (data, params) => parseAsync2(inst, data, params, { callee: inst.parseAsync });
@@ -17323,13 +17322,11 @@ function assertCompleteRequestPrompt(request) {
   if (request.params.ref.type !== "ref/prompt") {
     throw new TypeError(`Expected CompleteRequestPrompt, but got ${request.params.ref.type}`);
   }
-  void request;
 }
 function assertCompleteRequestResourceTemplate(request) {
   if (request.params.ref.type !== "ref/resource") {
     throw new TypeError(`Expected CompleteRequestResourceTemplate, but got ${request.params.ref.type}`);
   }
-  void request;
 }
 var CompleteResultSchema = ResultSchema.extend({
   completion: looseObject({
@@ -17482,7 +17479,7 @@ function isTerminal(status) {
 }
 
 // node_modules/zod-to-json-schema/dist/esm/Options.js
-var ignoreOverride = /* @__PURE__ */ Symbol("Let zodToJsonSchema decide on which parser to use");
+var ignoreOverride = Symbol("Let zodToJsonSchema decide on which parser to use");
 var defaultOptions = {
   name: void 0,
   $refStrategy: "root",
@@ -18848,6 +18845,9 @@ var Protocol = class {
       this.setRequestHandler(GetTaskPayloadRequestSchema, async (request, extra) => {
         const handleTaskResult = async () => {
           const taskId = request.params.taskId;
+          if (!await this._taskStore.getTask(taskId, extra.sessionId)) {
+            throw new McpError(ErrorCode.InvalidParams, `Task not found: ${taskId}`);
+          }
           if (this._taskMessageQueue) {
             let queuedMessage;
             while (queuedMessage = await this._taskMessageQueue.dequeue(taskId, extra.sessionId)) {
@@ -18878,12 +18878,12 @@ var Protocol = class {
             throw new McpError(ErrorCode.InvalidParams, `Task not found: ${taskId}`);
           }
           if (!isTerminal(task.status)) {
-            await this._waitForTaskUpdate(taskId, extra.signal);
+            await this._waitForTaskUpdate(taskId, extra.signal, extra.sessionId);
             return await handleTaskResult();
           }
           if (isTerminal(task.status)) {
             const result = await this._taskStore.getTaskResult(taskId, extra.sessionId);
-            this._clearTaskQueue(taskId);
+            this._clearTaskQueue(taskId, extra.sessionId);
             return {
               ...result,
               _meta: {
@@ -18920,7 +18920,7 @@ var Protocol = class {
             throw new McpError(ErrorCode.InvalidParams, `Cannot cancel task in terminal status: ${task.status}`);
           }
           await this._taskStore.updateTaskStatus(request.params.taskId, "cancelled", "Client cancelled task execution.", extra.sessionId);
-          this._clearTaskQueue(request.params.taskId);
+          this._clearTaskQueue(request.params.taskId, extra.sessionId);
           const cancelledTask = await this._taskStore.getTask(request.params.taskId, extra.sessionId);
           if (!cancelledTask) {
             throw new McpError(ErrorCode.InvalidParams, `Task not found after cancellation: ${request.params.taskId}`);
@@ -19048,6 +19048,19 @@ var Protocol = class {
     const handler = this._requestHandlers.get(request.method) ?? this.fallbackRequestHandler;
     const capturedTransport = this._transport;
     const relatedTaskId = request.params?._meta?.[RELATED_TASK_META_KEY]?.taskId;
+    const sessionId = capturedTransport?.sessionId;
+    const store = this._taskStore;
+    let relatedTaskFound = true;
+    let relatedTaskLookup;
+    if (relatedTaskId && store && this._taskMessageQueue && sessionId !== void 0) {
+      relatedTaskFound = false;
+      relatedTaskLookup = (async () => {
+        if (!await store.getTask(relatedTaskId, sessionId)) {
+          throw new McpError(ErrorCode.InvalidParams, `Task not found: ${relatedTaskId}`);
+        }
+        relatedTaskFound = true;
+      })();
+    }
     if (handler === void 0) {
       const errorResponse = {
         jsonrpc: "2.0",
@@ -19057,7 +19070,10 @@ var Protocol = class {
           message: "Method not found"
         }
       };
-      if (relatedTaskId && this._taskMessageQueue) {
+      if (relatedTaskId && relatedTaskLookup) {
+        const queuedError = { type: "error", message: errorResponse, timestamp: Date.now() };
+        relatedTaskLookup.then(() => this._enqueueTaskMessage(relatedTaskId, queuedError, sessionId), () => capturedTransport?.send(errorResponse)).catch((error2) => this._onerror(new Error(`Failed to send an error response: ${error2}`)));
+      } else if (relatedTaskId && this._taskMessageQueue) {
         this._enqueueTaskMessage(relatedTaskId, {
           type: "error",
           message: errorResponse,
@@ -19108,7 +19124,10 @@ var Protocol = class {
       closeSSEStream: extra?.closeSSEStream,
       closeStandaloneSSEStream: extra?.closeStandaloneSSEStream
     };
-    Promise.resolve().then(() => {
+    (relatedTaskLookup ?? Promise.resolve()).then(() => {
+      if (relatedTaskLookup && abortController.signal.aborted) {
+        throw new McpError(ErrorCode.ConnectionClosed, "Request was cancelled");
+      }
       if (taskCreationParams) {
         this.assertTaskHandlerCapability(request.method);
       }
@@ -19143,7 +19162,7 @@ var Protocol = class {
           ...error2["data"] !== void 0 && { data: error2["data"] }
         }
       };
-      if (relatedTaskId && this._taskMessageQueue) {
+      if (relatedTaskId && this._taskMessageQueue && relatedTaskFound) {
         await this._enqueueTaskMessage(relatedTaskId, {
           type: "error",
           message: errorResponse,
@@ -19623,7 +19642,7 @@ var Protocol = class {
       throw new Error("Cannot enqueue task message: taskStore and taskMessageQueue are not configured");
     }
     const maxQueueSize = this._options?.maxTaskQueueSize;
-    await this._taskMessageQueue.enqueue(taskId, message, sessionId, maxQueueSize);
+    await this._taskMessageQueue.enqueue(taskId, message, sessionId ?? this._transport?.sessionId, maxQueueSize);
   }
   /**
    * Clears the message queue for a task and rejects any pending request resolvers.
@@ -19652,12 +19671,13 @@ var Protocol = class {
    * Uses polling to check for updates at the task's configured poll interval.
    * @param taskId The task ID to wait for
    * @param signal Abort signal to cancel the wait
+   * @param sessionId Session of the request that waits, passed to the task store
    * @returns Promise that resolves when an update occurs or rejects if aborted
    */
-  async _waitForTaskUpdate(taskId, signal) {
+  async _waitForTaskUpdate(taskId, signal, sessionId) {
     let interval = this._options?.defaultTaskPollInterval ?? 1e3;
     try {
-      const task = await this._taskStore?.getTask(taskId);
+      const task = await this._taskStore?.getTask(taskId, sessionId);
       if (task?.pollInterval) {
         interval = task.pollInterval;
       }
@@ -20449,7 +20469,7 @@ var Server = class extends Protocol {
 };
 
 // node_modules/@modelcontextprotocol/sdk/dist/esm/server/completable.js
-var COMPLETABLE_SYMBOL = /* @__PURE__ */ Symbol.for("mcp.completable");
+var COMPLETABLE_SYMBOL = Symbol.for("mcp.completable");
 function isCompletable(schema) {
   return !!schema && typeof schema === "object" && COMPLETABLE_SYMBOL in schema;
 }
@@ -20536,6 +20556,42 @@ var ExperimentalMcpServerTasks = class {
 };
 
 // node_modules/@modelcontextprotocol/sdk/dist/esm/server/mcp.js
+function toolInputElementCount(value, max) {
+  let count = 0;
+  const stack = [value];
+  while (stack.length > 0) {
+    const node = stack.pop();
+    if (node === null || typeof node !== "object")
+      continue;
+    if (Array.isArray(node)) {
+      for (const child of node) {
+        if (++count > max)
+          return count;
+        if (child !== null && typeof child === "object")
+          stack.push(child);
+      }
+    } else {
+      for (const key in node) {
+        if (!Object.prototype.hasOwnProperty.call(node, key))
+          continue;
+        if (++count > max)
+          return count;
+        const child = node[key];
+        if (child !== null && typeof child === "object")
+          stack.push(child);
+      }
+    }
+  }
+  return count;
+}
+function resolveMaxToolInputElements(value) {
+  if (value === void 0 || value === Infinity)
+    return void 0;
+  if (typeof value !== "number" || Number.isNaN(value) || value < 1) {
+    throw new RangeError(`maxToolInputElements must be a number of at least 1, or Infinity, got ${String(value)}`);
+  }
+  return value;
+}
 var McpServer = class {
   constructor(serverInfo, options) {
     this._registeredResources = {};
@@ -20547,6 +20603,7 @@ var McpServer = class {
     this._resourceHandlersInitialized = false;
     this._promptHandlersInitialized = false;
     this.server = new Server(serverInfo, options);
+    this._maxToolInputElements = resolveMaxToolInputElements(options?.maxToolInputElements);
   }
   /**
    * Access experimental features.
@@ -20677,12 +20734,15 @@ var McpServer = class {
    * Validates tool input arguments against the tool's input schema.
    */
   async validateToolInput(tool, args, toolName) {
+    if (this._maxToolInputElements !== void 0 && toolInputElementCount(args, this._maxToolInputElements) > this._maxToolInputElements) {
+      throw new McpError(ErrorCode.InvalidParams, `Invalid arguments for tool ${toolName}: arguments contain more than the maximum of ${this._maxToolInputElements} elements`);
+    }
     if (!tool.inputSchema) {
       return void 0;
     }
     const inputObj = normalizeObjectSchema(tool.inputSchema);
     const schemaToParse = inputObj ?? tool.inputSchema;
-    const parseResult = await safeParseAsync2(schemaToParse, args);
+    const parseResult = await safeParseAsync2(schemaToParse, args ?? {});
     if (!parseResult.success) {
       const error2 = "error" in parseResult ? parseResult.error : "Unknown error";
       const errorMessage = getParseErrorMessage(error2);
@@ -20920,7 +20980,7 @@ var McpServer = class {
       }
       if (prompt.argsSchema) {
         const argsObj = normalizeObjectSchema(prompt.argsSchema);
-        const parseResult = await safeParseAsync2(argsObj, request.params.arguments);
+        const parseResult = await safeParseAsync2(argsObj, request.params.arguments ?? {});
         if (!parseResult.success) {
           const error2 = "error" in parseResult ? parseResult.error : "Unknown error";
           const errorMessage = getParseErrorMessage(error2);
@@ -21616,7 +21676,6 @@ var TokenProvider = class {
   constructor(log) {
     this.log = log;
   }
-  log;
   memoryToken = null;
   memoryClientId = null;
   fileCache = null;
@@ -21738,7 +21797,6 @@ var TokenBucket = class {
     this.tokens = spec.capacity;
     this.lastRefillMs = Date.now();
   }
-  spec;
   tokens;
   lastRefillMs;
   /** Serialises waiters so they drain in arrival order. */
@@ -21788,8 +21846,6 @@ var RateLimiter = class _RateLimiter {
       note: "Brief specifies 7000/day; Dhan publishes a higher figure. Conservative default in force."
     });
   }
-  dailyQuota;
-  log;
   buckets = /* @__PURE__ */ new Map();
   /** For optionchain: last request time per unique key. */
   lastByKey = /* @__PURE__ */ new Map();
@@ -21869,8 +21925,10 @@ function assertReadOnlyPath(path) {
     }
   }
 }
-var THROTTLE_CODES = /* @__PURE__ */ new Set(["RL001", "DH-904", "904", "DH_904"]);
-var AUTH_CODES = /* @__PURE__ */ new Set(["DH-901", "901", "808", "809", "810", "811", "DH-902", "902"]);
+var THROTTLE_CODES = /* @__PURE__ */ new Set(["RL001", "DH-904", "904", "DH_904", "805"]);
+var AUTH_CODES = /* @__PURE__ */ new Set(["DH-901", "901", "807", "808", "809", "810"]);
+var SUBSCRIPTION_CODES = /* @__PURE__ */ new Set(["DH-902", "902", "806"]);
+var RETRYABLE_CODES = /* @__PURE__ */ new Set(["800", "DH-908", "908", "DH-909", "909"]);
 var Transport = class {
   constructor(settings, tokens, limiter, log) {
     this.settings = settings;
@@ -21878,10 +21936,6 @@ var Transport = class {
     this.limiter = limiter;
     this.log = log;
   }
-  settings;
-  tokens;
-  limiter;
-  log;
   get rateLimiter() {
     return this.limiter;
   }
@@ -21904,17 +21958,26 @@ var Transport = class {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), timeoutMs);
       try {
-        const res = await fetch(url, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Accept: "application/json",
-            "access-token": token,
-            "client-id": clientId
-          },
-          body: JSON.stringify(opts.body),
-          signal: controller.signal
-        });
+        let res;
+        try {
+          res = await fetch(url, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Accept: "application/json",
+              "access-token": token,
+              "client-id": clientId
+            },
+            body: JSON.stringify(opts.body),
+            signal: controller.signal
+          });
+        } catch (err) {
+          if (err instanceof Error && err.name === "AbortError") throw err;
+          throw new TransportError(`Network error on ${opts.path}: ${err.message}`, {
+            path: opts.path,
+            cause: String(err.cause ?? "")
+          });
+        }
         const receivedAtMs = Date.now();
         clearTimeout(timer);
         const text = await res.text();
@@ -21950,13 +22013,19 @@ var Transport = class {
           }
           throw lastErr;
         }
+        if (SUBSCRIPTION_CODES.has(code)) {
+          throw new ApiError(
+            `Dhan refused ${opts.path}: ${msg} (${code}). The account lacks the required API access \u2014 check the Data API plan under My Profile > Access DhanHQ APIs. A new token alone will not fix this.`,
+            { code, httpStatus: res.status }
+          );
+        }
         if (res.status === 401 || res.status === 403 || AUTH_CODES.has(code)) {
           throw new AuthRejectedError(
             `Dhan rejected the credentials on ${opts.path}: ${msg}. The token may have expired \u2014 run /dhan-token with a fresh one.`,
             { code, httpStatus: res.status }
           );
         }
-        if (res.status >= 500) {
+        if (res.status >= 500 || RETRYABLE_CODES.has(code)) {
           lastErr = new ApiError(`Dhan server error on ${opts.path}: ${msg}`, {
             httpStatus: res.status,
             code
@@ -22061,7 +22130,6 @@ var InstrumentRegistry = class {
   constructor(log) {
     this.log = log;
   }
-  log;
   underlying(name) {
     const key = name.trim().toUpperCase();
     const spec = UNDERLYINGS[key];
@@ -22167,9 +22235,6 @@ var ExpiryCache = class {
     this.ttlMs = ttlMs;
     this.log = log;
   }
-  transport;
-  ttlMs;
-  log;
   cache = /* @__PURE__ */ new Map();
   key(scrip, segment) {
     return `${segment}:${scrip}`;
@@ -22201,6 +22266,24 @@ var ExpiryCache = class {
       throw new InstrumentError(
         `No expiry on or after ${fromDate} for ${segment}:${scrip}. Available: ${expiries.join(", ")}.`,
         { fromDate, expiries }
+      );
+    }
+    return hit;
+  }
+  /**
+   * Nearest expiry STRICTLY after `today` (YYYY-MM-DD).
+   *
+   * The scalping scope (RULES.md §6) is "nearest weekly expiry, next weekly on
+   * expiry day". `nearest()` returns today's contract on expiry day, which
+   * after 15:30 IST is already expired and cannot be priced (T <= 0).
+   */
+  async nextAfter(scrip, segment, today) {
+    const { expiries } = await this.get(scrip, segment);
+    const hit = expiries.find((e) => e > today);
+    if (!hit) {
+      throw new InstrumentError(
+        `No expiry after ${today} for ${segment}:${scrip}. Available: ${expiries.join(", ")}.`,
+        { today, expiries }
       );
     }
     return hit;
@@ -22251,8 +22334,6 @@ var ScripMaster = class {
     this.ttlMs = ttlMs;
     this.log = log;
   }
-  ttlMs;
-  log;
   rows = null;
   fetchedAtMs = 0;
   async load(force = false) {
@@ -22649,6 +22730,11 @@ function vwap(candles) {
   }
   return vol > 0 ? pv / vol : null;
 }
+function sessionVwap(candles) {
+  if (candles.length === 0) return null;
+  const lastDate = istDateOf(candles[candles.length - 1].timestampMs);
+  return vwap(candles.filter((c) => istDateOf(c.timestampMs) === lastDate));
+}
 function sessions(candles) {
   const byDate = /* @__PURE__ */ new Map();
   for (const c of candles) {
@@ -22732,7 +22818,7 @@ function computeIndicators(candles) {
   const closes = candles.map((c) => c.close);
   const last = candles[candles.length - 1];
   const sess = sessions(candles);
-  const v = vwap(candles);
+  const v = sessionVwap(candles);
   const vols = candles.map((c) => c.volume ?? 0);
   const hasVolume = vols.some((x) => x > 0);
   const avg20 = hasVolume ? sma(vols, Math.min(20, vols.length)) : null;
@@ -23119,7 +23205,11 @@ function selectStrike(legs, side, forward, depth, positioning, criteria = {}) {
     if (leg.ivPct === null) {
       rejectReasons.push("No IV \u2014 price outside no-arbitrage bounds, so the quote is untrusted.");
     }
-    if (d && GRADE_RANK[d.grade] < GRADE_RANK[c.minGrade]) {
+    if (!d) {
+      rejectReasons.push(
+        `No depth assessment \u2014 liquidity unverified, cannot meet the ${c.minGrade} floor.`
+      );
+    } else if (GRADE_RANK[d.grade] < GRADE_RANK[c.minGrade]) {
       rejectReasons.push(`Liquidity grade ${d.grade} is below the ${c.minGrade} floor.`);
     }
     if (d?.roundtripPct != null && d.roundtripPct > c.maxRoundtripPct) {
@@ -23256,7 +23346,7 @@ function collectCandidates(candles, cfg) {
     out.push({ price: or.high, source: "opening_range_high" });
     out.push({ price: or.low, source: "opening_range_low" });
   }
-  const v = vwap(candles);
+  const v = sessionVwap(candles);
   if (v !== null) out.push({ price: v, source: "vwap" });
   const window = candles.slice(-Math.min(cfg.consolidationWindow, candles.length));
   if (window.length > 0) {
@@ -23431,10 +23521,11 @@ function buildTradePlan(side, levels, entryPremium, delta, gamma) {
       stopLevel: stop2,
       stopSource: stopSource2,
       entryPremium,
-      targetPremium: projectPremium(entryPremium, delta, gamma, target2 - trigger2),
-      stopPremium: projectPremium(entryPremium, delta, gamma, stop2 - trigger2),
+      triggerPremium: projectPremium(entryPremium, delta, gamma, trigger2 - levels.spot),
+      targetPremium: projectPremium(entryPremium, delta, gamma, target2 - levels.spot),
+      stopPremium: projectPremium(entryPremium, delta, gamma, stop2 - levels.spot),
       riskRewardRatio: trigger2 - stop2 !== 0 ? Math.abs((target2 - trigger2) / (trigger2 - stop2)) : null,
-      note: "Premium targets are delta/gamma projections from the trigger, not quotes. Underlying levels come from confirmed price action."
+      note: "Premium targets are delta/gamma projections from current spot, not quotes. Underlying levels come from confirmed price action."
     };
   }
   if (levels.breakdownBelow === null) return null;
@@ -23452,10 +23543,11 @@ function buildTradePlan(side, levels, entryPremium, delta, gamma) {
     stopSource,
     entryPremium,
     // A put gains as the underlying falls; delta is already negative.
-    targetPremium: projectPremium(entryPremium, delta, gamma, target - trigger),
-    stopPremium: projectPremium(entryPremium, delta, gamma, stop - trigger),
+    triggerPremium: projectPremium(entryPremium, delta, gamma, trigger - levels.spot),
+    targetPremium: projectPremium(entryPremium, delta, gamma, target - levels.spot),
+    stopPremium: projectPremium(entryPremium, delta, gamma, stop - levels.spot),
     riskRewardRatio: stop - trigger !== 0 ? Math.abs((trigger - target) / (stop - trigger)) : null,
-    note: "Premium targets are delta/gamma projections from the trigger, not quotes. Underlying levels come from confirmed price action."
+    note: "Premium targets are delta/gamma projections from current spot, not quotes. Underlying levels come from confirmed price action."
   };
 }
 
@@ -23464,6 +23556,14 @@ var import_node_fs2 = require("node:fs");
 var import_node_path = require("node:path");
 var import_node_os = require("node:os");
 var import_node_path2 = require("node:path");
+function istDay(epochMs) {
+  return new Date(epochMs + 5.5 * 36e5).toISOString().slice(0, 10);
+}
+function basisOf(o) {
+  if (o.index === null || o.futures === null) return null;
+  if (!Number.isFinite(o.index) || !Number.isFinite(o.futures)) return null;
+  return o.futures - o.index;
+}
 var DEFAULT_WINDOW_MINUTES = 90;
 var MAX_ENTRIES = 5e3;
 function defaultStorePath() {
@@ -23474,7 +23574,6 @@ var PriceHistory = class {
     this.windowMinutes = windowMinutes;
     this.path = path ?? defaultStorePath();
   }
-  windowMinutes;
   observations = [];
   path;
   loaded = false;
@@ -23547,11 +23646,39 @@ var PriceHistory = class {
    * Each bucket's open is the first observation, close the last, high/low the
    * extremes actually seen. Volume is null — snapshots carry no traded volume,
    * and reporting zero would let a VWAP be computed from nothing.
+   *
+   * The futures day high/low can widen a bar, under two conditions:
+   *   1. It moved since the previous observation of the same day. The day
+   *      high is the SESSION's extreme; only a NEW extreme tells us price
+   *      went there between this scan and the last one. Applying an
+   *      unchanged day high to every bar stamped the session high onto every
+   *      bar and manufactured a "confirmed" level with one touch per bar.
+   *   2. It can be moved into index space. The day range comes from the
+   *      futures quote and sits a basis (futures - index) away from the index.
+   *      Without both prices on the observation it is not used.
    */
   toSyntheticCandles(bucketMinutes = 1) {
     this.ensureLoaded();
     const usable = this.observations.filter((o) => o.index !== null && Number.isFinite(o.index)).sort((a, b) => a.t - b.t);
     if (usable.length === 0) return [];
+    const extensions = /* @__PURE__ */ new Map();
+    let prev = null;
+    for (const o of usable) {
+      const sameDay = prev !== null && istDay(prev.t) === istDay(o.t);
+      const basis = basisOf(o);
+      let high = null;
+      let low = null;
+      if (sameDay && basis !== null) {
+        if (o.dayHigh !== null && prev.dayHigh !== null && o.dayHigh > prev.dayHigh) {
+          high = o.dayHigh - basis;
+        }
+        if (o.dayLow !== null && prev.dayLow !== null && o.dayLow < prev.dayLow) {
+          low = o.dayLow - basis;
+        }
+      }
+      extensions.set(o, { high, low });
+      prev = o;
+    }
     const bucketMs = Math.max(1, bucketMinutes) * 6e4;
     const out = [];
     let bucket = [];
@@ -23562,8 +23689,9 @@ var PriceHistory = class {
       let high = Math.max(...prices);
       let low = Math.min(...prices);
       for (const o of bucket) {
-        if (o.dayHigh !== null && o.dayHigh > high && o.dayHigh < high * 1.02) high = o.dayHigh;
-        if (o.dayLow !== null && o.dayLow < low && o.dayLow > low * 0.98) low = o.dayLow;
+        const ext = extensions.get(o);
+        if (ext.high !== null && ext.high > high && ext.high < high * 1.02) high = ext.high;
+        if (ext.low !== null && ext.low < low && ext.low > low * 0.98) low = ext.low;
       }
       out.push({
         timestampMs: bucket[0].t,
@@ -23590,14 +23718,30 @@ var PriceHistory = class {
   /**
    * Reference levels available even on a first scan, from the futures day
    * range. These are real exchange values, not derived from history.
+   *
+   * Returned in INDEX space (futures day range minus the basis observed on the
+   * same scan), because they are compared against the index LTP. Observations
+   * without both an index and a futures price cannot be converted and are
+   * skipped. Only the most recent IST day is considered.
    */
   referenceLevels() {
     this.ensureLoaded();
     let dayHigh = null;
     let dayLow = null;
+    const last = this.observations[this.observations.length - 1];
+    const today = last ? istDay(last.t) : null;
     for (const o of this.observations) {
-      if (o.dayHigh !== null && (dayHigh === null || o.dayHigh > dayHigh)) dayHigh = o.dayHigh;
-      if (o.dayLow !== null && (dayLow === null || o.dayLow < dayLow)) dayLow = o.dayLow;
+      if (istDay(o.t) !== today) continue;
+      const basis = basisOf(o);
+      if (basis === null) continue;
+      if (o.dayHigh !== null) {
+        const h = o.dayHigh - basis;
+        if (dayHigh === null || h > dayHigh) dayHigh = h;
+      }
+      if (o.dayLow !== null) {
+        const l = o.dayLow - basis;
+        if (dayLow === null || l < dayLow) dayLow = l;
+      }
     }
     return { dayHigh, dayLow, observations: this.observations.length };
   }
@@ -24544,7 +24688,7 @@ async function buildSnapshot(deps, underlyingName, opts = {}) {
   const warnings = [];
   if (!spec.verified) warnings.push(spec.verificationNote);
   const today = new Date(Date.now() + 5.5 * 36e5).toISOString().slice(0, 10);
-  const expiry = opts.expiry ?? await expiries.nearest(spec.scrip, spec.segment, today);
+  const expiry = opts.expiry ?? await expiries.nextAfter(spec.scrip, spec.segment, today);
   if (opts.expiry) await expiries.assertValid(spec.scrip, spec.segment, opts.expiry);
   const chainFetchId = newFetchId();
   const rawChain = await fetchOptionChain(transport, {
@@ -24842,14 +24986,17 @@ var Bull50DhanClient = class {
     const chainAnalysis = analyzeChain(snap.chain.strikes, forward);
     const candleErrors = [];
     let candleData = null;
+    const series = params.series ?? "index";
+    const snapFutures = series === "futures" ? this.registry.futuresForExpiry(snap.underlying, snap.expiry) : null;
     for (let attempt = 0; attempt < 2 && candleData === null; attempt++) {
       try {
         const r = await this.getCandles({
           underlying: params.underlying,
-          series: params.series ?? "index",
+          series,
           timeframe: "intraday",
           interval: params.interval ?? 1,
-          maxCandles: 1e4
+          maxCandles: 1e4,
+          ...snapFutures ? { futuresMonth: snapFutures.month } : {}
         });
         candleData = { candles: r.candles, indicators: r.indicators };
       } catch (err) {
@@ -24860,10 +25007,12 @@ var Bull50DhanClient = class {
         if (attempt === 0) await new Promise((r) => setTimeout(r, 750));
       }
     }
-    const spotForLevels = snap.chain.underlyingLtpDoNotUseAsSpot ?? (candleData && candleData.candles.length > 0 ? candleData.candles[candleData.candles.length - 1].close : NaN);
+    const lastClose = candleData && candleData.candles.length > 0 ? candleData.candles[candleData.candles.length - 1].close : NaN;
+    const indexSpot = snap.chain.underlyingLtpDoNotUseAsSpot ?? (series === "index" ? lastClose : NaN);
+    const futuresSpot = snap.futures && Number.isFinite(snap.futures.ltp) ? snap.futures.ltp : lastClose;
     this.history.record({
       t: snap.epochMs,
-      index: Number.isFinite(spotForLevels) ? spotForLevels : null,
+      index: Number.isFinite(indexSpot) ? indexSpot : null,
       forward,
       futures: snap.futures && Number.isFinite(snap.futures.ltp) ? snap.futures.ltp : null,
       dayHigh: snap.futures?.ohlc?.high ?? null,
@@ -24879,45 +25028,47 @@ var Bull50DhanClient = class {
       levelBasis = this.history.toSyntheticCandles(1);
       levelSource = "rolling_snapshots";
     }
+    const spotForLevels = levelSource === "candles" && series === "futures" ? futuresSpot : indexSpot;
     const fiveMin = levelBasis.length > 0 ? aggregateCandles(levelBasis, 5) : [];
     const structure = levelBasis.length > 0 ? analyzeStructure(levelBasis) : null;
     const cfg = levelSource === "rolling_snapshots" ? { minTouches: 2, ...params.levelConfig } : params.levelConfig;
     let levels = levelBasis.length > 0 && Number.isFinite(spotForLevels) ? deriveLevels(levelBasis, spotForLevels, cfg) : null;
     const levels5m = fiveMin.length > 0 && Number.isFinite(spotForLevels) ? deriveLevels(fiveMin, spotForLevels, cfg) : null;
     const refs = this.history.referenceLevels();
-    if ((levels === null || levels.breakoutAbove === null && levels.breakdownBelow === null) && Number.isFinite(spotForLevels) && (refs.dayHigh !== null || refs.dayLow !== null)) {
+    if ((levels === null || levels.breakoutAbove === null && levels.breakdownBelow === null) && Number.isFinite(indexSpot) && (refs.dayHigh !== null || refs.dayLow !== null)) {
+      const spotForLevels2 = indexSpot;
       const buffer = params.levelConfig?.confirmationBuffer ?? 5;
       const round2 = params.levelConfig?.roundTo ?? 5;
       const r = (v) => round2 > 0 ? Math.round(v / round2) * round2 : v;
       levels = {
-        spot: spotForLevels,
+        spot: spotForLevels2,
         atr14: null,
         toleranceUsed: 0,
         confirmationBuffer: buffer,
-        resistance: refs.dayHigh !== null && refs.dayHigh > spotForLevels ? {
+        resistance: refs.dayHigh !== null && refs.dayHigh > spotForLevels2 ? {
           price: refs.dayHigh,
           kind: "resistance",
           touches: 1,
           sources: ["session_high"],
           structural: true,
           tolerance: 0,
-          distanceFromSpot: refs.dayHigh - spotForLevels,
+          distanceFromSpot: refs.dayHigh - spotForLevels2,
           distanceInAtr: null,
           note: "Exchange day high from the futures quote (reference level)."
         } : null,
-        support: refs.dayLow !== null && refs.dayLow < spotForLevels ? {
+        support: refs.dayLow !== null && refs.dayLow < spotForLevels2 ? {
           price: refs.dayLow,
           kind: "support",
           touches: 1,
           sources: ["session_low"],
           structural: true,
           tolerance: 0,
-          distanceFromSpot: refs.dayLow - spotForLevels,
+          distanceFromSpot: refs.dayLow - spotForLevels2,
           distanceInAtr: null,
           note: "Exchange day low from the futures quote (reference level)."
         } : null,
-        breakoutAbove: refs.dayHigh !== null && refs.dayHigh > spotForLevels ? r(refs.dayHigh + buffer) : null,
-        breakdownBelow: refs.dayLow !== null && refs.dayLow < spotForLevels ? r(refs.dayLow - buffer) : null,
+        breakoutAbove: refs.dayHigh !== null && refs.dayHigh > spotForLevels2 ? r(refs.dayHigh + buffer) : null,
+        breakdownBelow: refs.dayLow !== null && refs.dayLow < spotForLevels2 ? r(refs.dayLow - buffer) : null,
         nextResistance: null,
         nextSupport: null,
         allResistance: [],
@@ -24989,7 +25140,8 @@ var Bull50DhanClient = class {
         observations: this.history.count(),
         spanMinutes: Number(this.history.spanMinutes().toFixed(1))
       },
-      spotUsedForLevels: Number.isFinite(spotForLevels) ? spotForLevels : null,
+      spotUsedForLevels: levels && Number.isFinite(levels.spot) ? levels.spot : null,
+      levelPriceSpace: levelSource === "candles" && series === "futures" ? "futures" : "index",
       strikeRanking: {
         lots,
         lotSize: this.registry.underlying(params.underlying).lotSize,
@@ -25444,7 +25596,7 @@ server.registerTool(
     description: "The main tool. Fetches the chain FIRST, then the futures cross-check, enforces the single-timestamp rule, recovers the forward from put-call parity, runs the integrity gate, and computes Black-76 IV and Greeks internally. Publishes nothing if the gate blocks \u2014 it never falls back to the index LTP.",
     inputSchema: {
       underlying: external_exports.string().describe("SENSEX, NIFTY or BANKNIFTY."),
-      expiry: external_exports.string().optional().describe("YYYY-MM-DD. Omit for the nearest."),
+      expiry: external_exports.string().optional().describe("YYYY-MM-DD. Omit for the nearest expiry after today (next weekly on expiry day)."),
       include_depth: external_exports.boolean().optional().describe("Run Stage-2 depth on screened candidates. One extra quote call."),
       lots: external_exports.number().int().positive().optional().describe("Size for depth costing. Default 1."),
       max_candidates: external_exports.number().int().positive().optional(),
@@ -25552,10 +25704,10 @@ server.registerTool(
     description: "One call assembling everything a decision rule could need: gated parity pricing and Greeks, executable liquidity at size, full chain positioning (PCR, max pain, OI buildup, OI concentration, support/resistance peaks), price structure (swings, higher-highs/lower-lows, consolidation, candidate breakout levels), chart indicators, and ranked strike candidates for BOTH CE and PE. Produces NO directional verdict and NO trigger level, because those rules are not configured. Use this as the internal analysis step.",
     inputSchema: {
       underlying: external_exports.string().describe("SENSEX, NIFTY or BANKNIFTY."),
-      expiry: external_exports.string().optional().describe("YYYY-MM-DD. Omit for the nearest."),
+      expiry: external_exports.string().optional().describe("YYYY-MM-DD. Omit for the nearest expiry after today (next weekly on expiry day)."),
       lots: external_exports.number().int().positive().optional().describe("Size for liquidity. Default 5."),
       series: external_exports.enum(["index", "futures"]).optional().describe("Candle series for structure. futures gives volume and VWAP."),
-      interval: external_exports.union([external_exports.literal(1), external_exports.literal(5), external_exports.literal(15), external_exports.literal(25), external_exports.literal(60)]).optional().describe("Intraday minutes. Default 5.")
+      interval: external_exports.union([external_exports.literal(1), external_exports.literal(5), external_exports.literal(15), external_exports.literal(25), external_exports.literal(60)]).optional().describe("Intraday minutes. Default 1 (5-minute levels are derived from it).")
     }
   },
   guard(

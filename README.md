@@ -10,7 +10,7 @@ forward recovery and an internal Black-76 pricing core. Never places orders.
 | Path | What |
 |---|---|
 | `plugin/` | Installable Claude plugin `bull50-dhan` v1.7.0: MCP server bundle, `/dhan-token`, `/sensex-snapshot`, `sensex-scalp` skill |
-| `server/` | TypeScript source of the MCP server + 204 tests |
+| `server/` | TypeScript source of the MCP server + 222 tests |
 | `engine/` | Python `refresh_table.py` (option breakout premiums), `commodity_engine.py` (MCX), sample data |
 | `docs/` | Signal log |
 | `.claude-plugin/marketplace.json` | Lets Claude install the plugin straight from this repo |
@@ -25,19 +25,26 @@ Needs Node 20+. Then each morning: `/dhan-token <token> <client_id>`.
 ```bash
 cd server
 npm ci
-npm test          # 204 tests, offline
+npm test          # 222 tests, offline
 npm run build     # tsc -> dist/
 npm run bundle    # rebuild plugin/server/mcpServer.cjs
 ```
 
-Copy `server/.env.example` to `server/.env` for local config. Never commit `.env`.
+Copy `server/.env.example` to `server/.env` for local config and export the
+variables (the server does not load `.env` itself). Never commit `.env`.
 
 ## Run the refresh engine
 
 ```bash
 cd engine
-python3 run_refresh.py   # self-check on a saved 21 Sep snapshot
+python3 run_refresh.py               # self-check on a saved 21 Sep snapshot
+python3 -m unittest -v test_refresh_table   # regression tests, stdlib only
 ```
+
+The plugin manifest (`plugin/.claude-plugin/plugin.json`, `plugin/.mcp.json`)
+and `.claude-plugin/marketplace.json` were reconstructed on 9 Oct 2026 after
+the original dot-files were lost in a web upload. Verify them before relying
+on the marketplace install.
 
 ## MCP tools
 
@@ -48,3 +55,8 @@ python3 run_refresh.py   # self-check on a saved 21 Sep snapshot
 ## Disclaimer
 
 Analytics only, not investment advice. Projected premiums are model estimates.
+
+## Audit
+
+Phase-1 audit, bug fixes and the Dhan Cloud automation assessment:
+[docs/PHASE1_AUDIT.md](docs/PHASE1_AUDIT.md).

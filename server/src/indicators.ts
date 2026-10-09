@@ -236,6 +236,20 @@ export function vwap(candles: Candle[]): number | null {
   return vol > 0 ? pv / vol : null;
 }
 
+/**
+ * VWAP of the MOST RECENT IST session only.
+ *
+ * VWAP resets every session. Callers routinely pass several days of bars (the
+ * default intraday window is five days), and `vwap()` over that series is a
+ * multi-day VWAP, not the session VWAP traders watch. Null when the current
+ * session carries no volume.
+ */
+export function sessionVwap(candles: Candle[]): number | null {
+  if (candles.length === 0) return null;
+  const lastDate = istDateOf(candles[candles.length - 1]!.timestampMs);
+  return vwap(candles.filter((c) => istDateOf(c.timestampMs) === lastDate));
+}
+
 // ---------------------------------------------------------------------------
 // Structure
 // ---------------------------------------------------------------------------
@@ -396,7 +410,7 @@ export function computeIndicators(candles: Candle[]): IndicatorSet | null {
   const closes = candles.map((c) => c.close);
   const last = candles[candles.length - 1]!;
   const sess = sessions(candles);
-  const v = vwap(candles);
+  const v = sessionVwap(candles);
 
   const vols = candles.map((c) => c.volume ?? 0);
   const hasVolume = vols.some((x) => x > 0);
