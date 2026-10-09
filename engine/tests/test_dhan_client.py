@@ -10,6 +10,7 @@ import unittest
 from sensex.dhan_client import (AuthError, Credentials, DhanClient, ForbiddenEndpointError, PlanError,
                                 RateLimitedError, RateLimiter, RawResponse, Redactor, RequestRejectedError,
                                 ResponseFormatError, TransientError)
+from sensex.localio import credentials_from_environment
 from sensex.mock_dhan import MockTransport
 from sensex.scanner import JsonLogger
 
@@ -215,12 +216,12 @@ class CredentialsNeverLeak(unittest.TestCase):
         self.assertNotIn(TOKEN, repr(CREDS))
         self.assertNotIn(CID, repr(CREDS))
         with self.assertRaises(AuthError) as cm:
-            Credentials.from_environment({"DHAN_CLIENT_ID": CID})
+            credentials_from_environment({"DHAN_CLIENT_ID": CID})
         self.assertNotIn(CID, str(cm.exception))
         with tempfile.NamedTemporaryFile("w", delete=False) as f:
             f.write(TOKEN + "\n")
         try:
-            c = Credentials.from_environment({"DHAN_CLIENT_ID": CID, "DHAN_TOKEN_FILE": f.name})
+            c = credentials_from_environment({"DHAN_CLIENT_ID": CID, "DHAN_TOKEN_FILE": f.name})
             self.assertEqual(c.access_token, TOKEN)
             self.assertEqual(c.token_expiry_ms(), 4102444800000)
         finally:

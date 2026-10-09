@@ -26,20 +26,6 @@ def to_ist(now: datetime) -> datetime:
     return now.astimezone(IST)
 
 
-def load_holidays(path: str | None) -> frozenset:
-    if not path:
-        return frozenset()
-    out = set()
-    with open(path, "r", encoding="utf-8") as f:
-        for n, line in enumerate(f, 1):
-            s = line.split("#", 1)[0].strip()
-            if not s:
-                continue
-            try:
-                out.add(date.fromisoformat(s))
-            except ValueError:
-                raise ValueError("holiday file line %d is not YYYY-MM-DD: %r" % (n, s)) from None
-    return frozenset(out)
 
 
 @dataclass(frozen=True)

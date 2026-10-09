@@ -17,7 +17,8 @@ Edit ONLY the CONFIG block below, then run in this order:
   3. MODE = "OBSERVE"     scan every INTERVAL_S seconds until STOP_TIME IST.
 
 Log lines start with "BX|" (one JSON object each). Replay records start with
-"BX|REC|". Download the log and decode it with tools/decode_cloud_log.py.
+"BX|REC|" (gzip, hex-encoded). Download the log and decode it with
+tools/decode_cloud_log.py.
 """
 
 # ============================== CONFIG ======================================
@@ -51,16 +52,16 @@ POLL_S = 5                        # seconds between fast read-only price polls (
 LOT_SIZE = None                   # e.g. the SENSEX lot size, to report rupees (verify; never guessed)
 COST_PER_TRADE_RS = None          # brokerage + taxes per round trip, if you want net rupees
 
-# Names of the environment variables that hold your credentials. Set the
-# VALUES in the Dhan Cloud interface only, never in this file.
-ENV_CLIENT_ID = "DHAN_CLIENT_ID"
-ENV_ACCESS_TOKEN = "DHAN_ACCESS_TOKEN"
+# Credentials: Dhan Cloud fills these {{NAME}} placeholders from the strategy's
+# Env Variables (the program never reads the environment: Cloud blocks that).
+# Create Env Variables named DHAN_CLIENT_ID and DHAN_ACCESS_TOKEN in the Cloud
+# interface. NEVER replace the placeholders with real values in this file.
+CLIENT_ID = "{{DHAN_CLIENT_ID}}"
+ACCESS_TOKEN = "{{DHAN_ACCESS_TOKEN}}"
 # ============================================================================
 
-import base64
 import gzip
 import json
-import os
 import sys
 import time
 from datetime import datetime, time as dtime, timezone
@@ -76,7 +77,7 @@ from bx_session import IST
 from bx_selftest_data import SELFTEST
 
 PROGRAM = "sensex-readonly-observer"
-VERSION = "6.1"
+VERSION = "6.2"
 EXIT_OK, EXIT_CONFIG, EXIT_AUTH, EXIT_SELFTEST = 0, 2, 3, 4
 
 
@@ -130,8 +131,7 @@ def validate(log) -> int:
     log("info" if paper_ok else "error", "paper_selftest", result="PASS" if paper_ok else "FAIL",
         data="synthetic ticks (not market data)")
     ok = ok and paper_ok
-    cred_names = {n: (n in os.environ) for n in (ENV_CLIENT_ID, ENV_ACCESS_TOKEN)}
-    log("info", "credential_names_present", **cred_names)   # names and presence only, never values
+    log("info", "credential_placeholders", **_placeholder_status())   # filled or not, never values
     return EXIT_OK if ok else EXIT_SELFTEST
 
 
@@ -155,6 +155,15 @@ def _paper_selftest() -> bool:
     return out == ["TAKE_PROFIT", "STOP_LOSS"] and t.closed[0]["pnlPts"] == 6.0 and t.closed[1]["pnlPts"] == -12.0
 
 
+def _filled(value: str) -> bool:
+    return bool(value) and not (value.startswith("{" + "{") and value.endswith("}" + "}"))
+
+
+def _placeholder_status() -> dict:
+    return {"DHAN_CLIENT_ID": "filled" if _filled(CLIENT_ID) else "NOT filled",
+            "DHAN_ACCESS_TOKEN": "filled" if _filled(ACCESS_TOKEN) else "NOT filled"}
+
+
 def _config_errors():
     errs = []
     if not STRIKES:
@@ -169,12 +178,12 @@ def _config_errors():
 
 
 def _emit_record(scanner_rec, recorder, cfg, clock_utc, log_line):
-    """Chunked, gzip+base64 replay record: market-data bodies only."""
+    """Chunked, gzip+hex replay record: market-data bodies only."""
     payload = {"scanId": scanner_rec["scanId"], "meta": {"strikes": cfg.strikes,
                "futuresSecurityId": cfg.futures_security_id, "futuresExpiry": cfg.futures_expiry,
                "clockUtc": clock_utc}}
     payload.update(recorder.take())
-    blob = base64.b64encode(gzip.compress(json.dumps(payload).encode("utf-8"))).decode("ascii")
+    blob = gzip.compress(json.dumps(payload).encode("utf-8")).hex()
     parts = [blob[i:i + RECORD_CHUNK] for i in range(0, len(blob), RECORD_CHUNK)] or [""]
     for i, part in enumerate(parts, 1):
         log_line("BX|REC|%s|%d/%d|%s" % (scanner_rec["scanId"], i, len(parts), part))
@@ -185,19 +194,17 @@ def live(log, redactor, loop: bool) -> int:
     if errs:
         log("error", "config_blocked", errors=errs)
         return EXIT_CONFIG
-    try:
-        creds = Credentials.from_environment({"DHAN_CLIENT_ID": os.environ.get(ENV_CLIENT_ID, ""),
-                                              "DHAN_ACCESS_TOKEN": os.environ.get(ENV_ACCESS_TOKEN, "")})
-    except AuthError:
-        log("error", "credentials_missing", expected_names=[ENV_CLIENT_ID, ENV_ACCESS_TOKEN],
-            present={n: (n in os.environ) for n in (ENV_CLIENT_ID, ENV_ACCESS_TOKEN)})
+    if not (_filled(CLIENT_ID) and _filled(ACCESS_TOKEN)):
+        log("error", "credentials_missing", placeholders=_placeholder_status(),
+            action="Create Env Variables DHAN_CLIENT_ID and DHAN_ACCESS_TOKEN in this strategy")
         return EXIT_AUTH
+    creds = Credentials(CLIENT_ID.strip(), ACCESS_TOKEN.strip())
     redactor.register(creds.access_token, creds.client_id)
     exp = creds.token_expiry_ms()
     now_ms = time.time() * 1000
     if exp is not None and exp <= now_ms:
         log("error", "token_expired", hours_ago=round((now_ms - exp) / 3.6e6, 2),
-            action="Generate a new token in Dhan web and update the Cloud variable %s" % ENV_ACCESS_TOKEN)
+            action="Generate a new token in Dhan web and update the Cloud Env Variable DHAN_ACCESS_TOKEN")
         return EXIT_AUTH
     log("info", "token_status", hours_left=None if exp is None else round((exp - now_ms) / 3.6e6, 2))
 
@@ -249,4 +256,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    main()

@@ -9,7 +9,8 @@ from datetime import date, datetime, time, timedelta, timezone
 from sensex.instruments import (DuplicateContractError, FuturesContract, InstrumentMapping, MappingMismatchError,
                                 MappingMissingError, NoEligibleContractError, explicit_future, parse_futures,
                                 select_future)
-from sensex.session import IST, load_holidays, session_state
+from sensex.localio import load_holidays, load_mapping
+from sensex.session import IST, session_state
 from sensex.validation import (DataValidationError, snapshot_fingerprint, validate_candles, validate_chain,
                                validate_expiry_list, validate_quote)
 
@@ -52,14 +53,14 @@ class InstrumentParsing(unittest.TestCase):
 
     def test_mapping_must_be_explicit_and_verified(self):
         with self.assertRaises(MappingMissingError):
-            InstrumentMapping.load(None)
+            load_mapping(None)
         for bad in [{}, {"columns": SYN.columns, "values": SYN.values, "expiry_format": "%d-%m-%Y"},
                     {"columns": {}, "values": SYN.values, "expiry_format": "x", "verified_from": "y"}]:
             with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
                 json.dump(bad, f)
             try:
                 with self.assertRaises(MappingMissingError):
-                    InstrumentMapping.load(f.name)
+                    load_mapping(f.name)
             finally:
                 os.unlink(f.name)
 

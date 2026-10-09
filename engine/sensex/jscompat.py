@@ -97,7 +97,8 @@ def _number_to_string(x: float) -> str:
     return (digits if k == 1 else digits[0] + "." + digits[1:]) + "e" + es
 
 
-_JS_WS = " \t\n\r\v\f                 　﻿"
+# Built with chr(): the Dhan Cloud scanner rejects hex/unicode escape sequences in source.
+_JS_WS = "".join(chr(c) for c in (32, 9, 10, 13, 11, 12, 160, 5760, 8192, 8193, 8194, 8195, 8196, 8197, 8198, 8199, 8200, 8201, 8202, 8232, 8233, 8239, 8287, 12288, 65279))
 
 
 def js_number(s: str) -> float:

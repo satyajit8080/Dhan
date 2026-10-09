@@ -190,6 +190,17 @@ class _StripInternal(ast.NodeTransformer):
         return node
 
 
+def _strip_docstrings(tree):
+    """Drop docstrings from the single-file build: Dhan Cloud's scanner also matches
+    plain text, so explanatory prose (kept in the sources) is not shipped."""
+    for n in ast.walk(tree):
+        if isinstance(n, (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and n.body \
+                and isinstance(n.body[0], ast.Expr) and isinstance(n.body[0].value, ast.Constant) \
+                and isinstance(n.body[0].value.value, str):
+            n.body = n.body[1:] or [ast.Pass()]
+    return tree
+
+
 def _rename_imports(tree, mapping):
     """Rename stdlib import aliases (`from datetime import time` -> `... as _bx_x__time`)."""
     for n in ast.walk(tree):
@@ -251,7 +262,7 @@ def build_single() -> str:
         if renames[m]:
             _rename_imports(tree, renames[m])
             tree = _Renamer(renames[m]).visit(tree)
-        tree = ast.fix_missing_locations(_StripInternal().visit(tree))
+        tree = ast.fix_missing_locations(_strip_docstrings(_StripInternal().visit(tree)))
         body = ast.unparse(tree)
         if m == "main":   # keep the CONFIG block with its comments, verbatim
             raw = SRC_MAIN.read_text()

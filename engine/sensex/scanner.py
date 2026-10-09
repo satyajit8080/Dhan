@@ -39,8 +39,10 @@ SENSEX_SCRIP, SENSEX_SEG, FUT_SEG = 51, "IDX_I", "BSE_FNO"
 class JsonLogger:
     """One JSON object per line, every string passed through the redactor."""
 
-    def __init__(self, redactor: Redactor, stream=None, path: str | None = None, clock=None, prefix: str = ""):
-        self.redact, self.stream, self.path, self.prefix = redactor, stream or sys.stderr, path, prefix
+    def __init__(self, redactor: Redactor, stream=None, sink=None, clock=None, prefix: str = ""):
+        """`sink`: optional callable receiving each redacted line (e.g. a local file
+        appender from sensex.localio); this module itself never writes files."""
+        self.redact, self.stream, self.sink, self.prefix = redactor, stream or sys.stderr, sink, prefix
         self.clock = clock or (lambda: datetime.now(timezone.utc))
 
     def __call__(self, level: str, event: str, **fields):
@@ -49,9 +51,8 @@ class JsonLogger:
         line = self.redact(json.dumps(rec, default=str, ensure_ascii=False))
         self.stream.write(self.prefix + line + "\n")
         self.stream.flush()
-        if self.path:
-            with open(self.path, "a", encoding="utf-8") as f:
-                f.write(line + "\n")
+        if self.sink is not None:
+            self.sink(line)
 
 
 @dataclass

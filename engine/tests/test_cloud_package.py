@@ -181,7 +181,10 @@ FORBIDDEN_IDENTIFIERS = ("place_order", "placeorder", "modify_order", "cancel_or
                          "super_order", "forever", "slice_order", "convert_position", "margin_calculator")
 FORBIDDEN_CALLS = ("exec", "eval", "compile", "__import__", "input")
 FORBIDDEN_MODULES = ("subprocess", "socket", "importlib", "pickle", "marshal", "ctypes", "shutil", "dhanhq", "requests",
-                     "platform")   # Dhan Cloud scanner: "querying host platform/OS details is not allowed" (9 Oct 2026)
+                     "platform", "os", "pathlib", "base64", "code")
+# Patterns the Dhan Cloud scanner reported as blocked on 9 Oct 2026 (Security Violation [CRITICAL]).
+BLOCKED_TEXT = [r"\bpathlib\b", r"compile\(", r"os\.environ", r"\bbase64\b", r"sys\.exit\(", r"\\x",
+                r"getattr\(", r"os\.getenv", r"os\.path", r"(?<![A-Za-z_.])open\(", r"\\u[0-9a-fA-F]{4}"]   # Dhan Cloud scanner: "querying host platform/OS details is not allowed" (9 Oct 2026)
 HOST_QUERIES = {("sys", "platform"), ("sys", "implementation"), ("sys", "executable"), ("sys", "version"),
                 ("os", "uname"), ("os", "name"), ("os", "listdir"), ("os", "getcwd"), ("os", "cpu_count")}
 
@@ -208,6 +211,14 @@ class Safety(unittest.TestCase):
                     mods = [a.name for a in n.names] if isinstance(n, ast.Import) else [n.module or ""]
                     for m in mods:
                         self.assertNotIn(m.split(".")[0], FORBIDDEN_MODULES, "%s imports %s" % (label, m))
+
+    def test_no_pattern_the_cloud_scanner_blocked(self):
+        import re
+        for f in [SINGLE] + sorted(MULTI.glob("*.py")):
+            text = f.read_text()
+            for pat in BLOCKED_TEXT:
+                m = re.search(pat, text)
+                self.assertIsNone(m, "%s contains blocked pattern %s: %r" % (f.name, pat, m and text[max(0, m.start() - 40):m.end() + 20]))
 
     def test_every_request_site_is_on_the_allow_list(self):
         single = load_single()
@@ -257,6 +268,8 @@ def run_main(bundle, *, mode, env, clock_start=None, script=None, cfg=None, poll
         return real_client(creds, **kw)
     over = dict(MODE=mode, STRIKES=ref["strikes"], FUTURES_SECURITY_ID="844615", FUTURES_EXPIRY="2026-09-24",
                 STOP_TIME="10:45", RECORD_EVERY_N=4, RECORD_CHUNK=500)
+    over["CLIENT_ID"] = env.get("DHAN_CLIENT_ID", "{{DHAN_CLIENT_ID}}")      # what Cloud substitutes
+    over["ACCESS_TOKEN"] = env.get("DHAN_ACCESS_TOKEN", "{{DHAN_ACCESS_TOKEN}}")
     over.update(cfg or {})
     out = io.StringIO()
     with contextlib.ExitStack() as st:
@@ -265,7 +278,6 @@ def run_main(bundle, *, mode, env, clock_start=None, script=None, cfg=None, poll
         st.enter_context(mock.patch.object(bundle, "Scanner", scanner))
         st.enter_context(mock.patch.object(bundle, "DhanClient", client))
         st.enter_context(mock.patch.object(bundle, "UrllibTransport", lambda: t))
-        st.enter_context(mock.patch.dict(os.environ, env, clear=False))
         st.enter_context(contextlib.redirect_stdout(out))
         code = bundle.main()
     return code, out.getvalue(), t
@@ -348,8 +360,7 @@ class EndToEnd(unittest.TestCase):
         code, text, t = run_main(load_single(), mode="LIVE_CHECK", env=self.env, cfg={"STRIKES": []})
         self.assertEqual((code, t.calls), (2, []))
         self.assertIn("config_blocked", text)
-        with mock.patch.dict(os.environ, {}, clear=True):
-            code, text, t = run_main(load_single(), mode="LIVE_CHECK", env={})
+        code, text, t = run_main(load_single(), mode="LIVE_CHECK", env={})
         self.assertEqual((code, t.calls), (3, []))
         self.assertIn("credentials_missing", text)
 

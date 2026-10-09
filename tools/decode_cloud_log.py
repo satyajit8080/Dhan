@@ -29,6 +29,7 @@ from pathlib import Path
 
 JWT = re.compile(r"eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}")
 SECRET_HINTS = re.compile(r"access[-_]?token[\"']?\s*[:=]\s*[\"']?[A-Za-z0-9]{12,}", re.I)
+HEX = re.compile(r"(?:[0-9a-f]{2})+")
 REC = re.compile(r"BX\|REC\|([^|]+)\|(\d+)/(\d+)\|([A-Za-z0-9+/=]*)")
 
 
@@ -60,7 +61,9 @@ def decode_lines(lines):
             incomplete.append({"scanId": sid, "have": sorted(c["parts"]), "total": c["total"]})
             continue
         try:
-            records[sid] = json.loads(gzip.decompress(base64.b64decode("".join(c["parts"][k] for k in sorted(c["parts"])))))
+            blob = "".join(c["parts"][k] for k in sorted(c["parts"]))
+            raw = bytes.fromhex(blob) if HEX.fullmatch(blob) else base64.b64decode(blob)   # 6.2+: hex; 6.0/6.1: base64
+            records[sid] = json.loads(gzip.decompress(raw))
         except (ValueError, OSError) as e:
             incomplete.append({"scanId": sid, "error": type(e).__name__})
     return events, records, bad, incomplete, secret_lines

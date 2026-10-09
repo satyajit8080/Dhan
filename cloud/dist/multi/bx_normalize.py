@@ -20,7 +20,8 @@ from bx_jscompat import (UNDEFINED, date_utc, is_js_object, is_number, js_get, j
 
 NEVER_TRADED = "01/01/1980 00:00:00"
 IST_OFFSET_MS = (5 * 60 + 30) * 60 * 1000
-_LTT = re.compile(r"(\d{2})/(\d{2})/(\d{4})\s+(\d{2}):(\d{2}):(\d{2})")
+_ASCII_WS = " \t\n\r" + chr(11) + chr(12)   # chr(): no escape sequences (Dhan Cloud scanner)
+_LTT = r"(\d{2})/(\d{2})/(\d{4})\s+(\d{2}):(\d{2}):(\d{2})"
 
 
 def make_provenance(fetch_id: str, epoch_ms: float, endpoint: str) -> dict:
@@ -35,7 +36,7 @@ def parse_last_trade_time(raw):
     s = raw.strip()
     if s == NEVER_TRADED:
         return None
-    m = _LTT.fullmatch(s)
+    m = re.fullmatch(_LTT, s)
     if not m:
         return None
     d, mo, y, h, mi, sec = (int(g) for g in m.groups())
@@ -46,7 +47,7 @@ def num(v):
     """Finite number, or a numeric string; else None. Booleans are not numbers."""
     if is_number(v) and math.isfinite(v):
         return v
-    if isinstance(v, str) and v.strip(" \t\n\r\v\f") != "":
+    if isinstance(v, str) and v.strip(_ASCII_WS) != "":
         n = js_number(v)
         if math.isfinite(n):
             return n

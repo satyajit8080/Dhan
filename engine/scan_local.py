@@ -32,10 +32,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from sensex.dhan_client import AuthError, Credentials, DhanClient, DhanClientError, Redactor  # noqa: E402
-from sensex.instruments import InstrumentMapping, InstrumentResolutionError, parse_futures  # noqa: E402
+from sensex.dhan_client import AuthError, DhanClient, DhanClientError, Redactor  # noqa: E402
+from sensex.instruments import InstrumentResolutionError, parse_futures  # noqa: E402
+from sensex.localio import (RecordingTransport, credentials_from_environment, file_sink, load_holidays,  # noqa: E402
+                            load_mapping)
 from sensex.scanner import JsonLogger, Scanner, ScannerConfig  # noqa: E402
-from sensex.session import IST, load_holidays  # noqa: E402
+from sensex.session import IST  # noqa: E402
 
 
 def _strikes(text: str) -> list:
@@ -84,18 +86,17 @@ def main(argv=None) -> int:
         return 0 if rec["status"] == "OK" else 1
 
     try:
-        creds = Credentials.from_environment()
+        creds = credentials_from_environment()
     except (AuthError, OSError) as e:
         print("credentials: %s" % type(e).__name__ + (": " + str(e) if isinstance(e, AuthError) else ""), file=sys.stderr)
         return 2
     redactor.register(creds.access_token, creds.client_id)
     log_path = args.log_file or "scan-logs/scan-%s.jsonl" % datetime.now(IST).strftime("%Y%m%d")
     Path(log_path).parent.mkdir(parents=True, exist_ok=True)
-    log = JsonLogger(redactor, path=log_path)
+    log = JsonLogger(redactor, sink=file_sink(log_path))
     recorder = None
     if args.record:
         from sensex.dhan_client import UrllibTransport
-        from sensex.recording import RecordingTransport
         recorder = RecordingTransport(UrllibTransport(), args.record)
     client = DhanClient(creds, transport=recorder, redactor=redactor, logger=log)
 
@@ -125,7 +126,7 @@ def main(argv=None) -> int:
     contracts = None
     if args.instrument_mapping or args.instrument_csv:
         try:
-            mapping = InstrumentMapping.load(args.instrument_mapping)
+            mapping = load_mapping(args.instrument_mapping)
             contracts, report = parse_futures(Path(args.instrument_csv).read_text(encoding="utf-8"), mapping)
             log("info", "instrument_master", matching=report.rows_matching, malformed_expiry=report.malformed_expiry,
                 malformed_lot=report.malformed_lot, verified_from=mapping.verified_from)

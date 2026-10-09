@@ -11,22 +11,6 @@ from __future__ import annotations
 # ----------------------------------------------------------------------
 # module: engine/refresh_table.py
 # ----------------------------------------------------------------------
-"""
-refresh_table.py — corrected SENSEX "refresh" table for bull50_dhan.
-
-Fixes vs the 21-Sep v1 method:
-  1. Levels converted into forward space (index/futures basis removed).
-  2. CE -> breakout ABOVE, PE -> breakdown BELOW.
-  3. Levels with < min_touches are skipped in favour of the next stronger level.
-  4. VWAP-only / index-volume levels are not trusted (use futures candles).
-  5. Snapshot and candles must be within max_skew_s of each other.
-  6. Entry = ask; target = repriced premium minus half the spread.
-  7. Full Black-76 reprice (not Taylor) with theta decay for expected
-     time-to-trigger and an optional IV shift scenario.
-  8. Trading-window filter from v3 rules.
-
-Pure functions; no I/O. Feed it get_market_snapshot + compute_levels + chain quotes.
-"""
 import math
 from dataclasses import dataclass, asdict
 from datetime import datetime, time, timedelta, timezone
@@ -77,8 +61,6 @@ def _round_to(x: float, step: float) -> float:
     return round(x / step) * step
 
 def pick_level(levels: Iterable[Level], spot: float, above: bool, min_touches: int) -> tuple[Optional[Level], bool]:
-    """Nearest level on the correct side with >= min_touches.
-    Returns (level, weak). Falls back to the nearest 1-touch level flagged weak."""
     side = sorted((l for l in levels if (l.price > spot if above else l.price < spot)), key=lambda l: abs(l.price - spot))
     side = [l for l in side if set(l.sources) != {'vwap'}]
     strong = [l for l in side if l.touches >= min_touches]
@@ -94,8 +76,6 @@ def minutes_to_trigger(distance: float, atr: float, bar_minutes: int) -> float:
     return min(max(abs(distance) / atr * bar_minutes, 5.0), 60.0)
 
 def in_skip_window(now: datetime) -> bool:
-    """`now` must be IST wall-clock time. A tz-aware datetime is converted to
-    IST first, so a host running in UTC cannot shift the windows by 5h30m."""
     if now.tzinfo is not None:
         now = now.astimezone(_bx_refresh_table__IST)
     t = now.time()
@@ -144,8 +124,6 @@ def to_markdown(rows: list[Row]) -> str:
     return '\n'.join(out)
 
 def to_compact(rows: list[Row]) -> str:
-    """User-facing 'refresh' format: Strike | Type | LTP | Breakout Above.
-    Non-OK rows show the status in place of the premium level."""
     out = ['| Strike | Type | LTP | Breakout Above |', '|---|---|---|---|']
     for r in rows:
         val = f'{r.target:.0f}' if r.target is not None and r.status == 'OK' else r.status
@@ -157,22 +135,6 @@ _BX_RT = _bx_types.SimpleNamespace(Leg=Leg, Level=Level, build_refresh_table=bui
 # ----------------------------------------------------------------------
 # module: engine/sensex/jscompat.py
 # ----------------------------------------------------------------------
-"""
-JavaScript semantics the TypeScript implementation relies on.
-
-Porting JS arithmetic and formatting to Python looks trivial and isn't: each
-helper below reproduces one JS behaviour that differs from the obvious Python
-spelling, and each difference would surface as a parity mismatch.
-
-  js_round       Math.round rounds .5 UP (toward +inf); Python round() is banker's.
-  to_fixed       Number#toFixed breaks exact binary ties away from zero; '%.nf' is half-even.
-  js_str         String(2.0) is "2" in JS, "2.0" in Python.
-  js_number      Number("") is 0, Number(" 12 ") is 12, Number("nan") is NaN-invalid.
-  is_number      typeof v === 'number': Python bool is an int, JS boolean is not.
-  object_keys    Object.keys order: array-index keys ascending, then insertion order.
-  date_utc       Date.UTC normalises overflow (31 Feb -> 3 Mar); datetime raises.
-  iso_date_of    new Date(ms).toISOString().slice(...) on epoch milliseconds.
-"""
 import math
 from decimal import ROUND_HALF_UP, Decimal
 _MS_PER_DAY = 86400000
@@ -181,11 +143,9 @@ def is_number(v) -> bool:
     return isinstance(v, (int, float)) and (not isinstance(v, bool))
 
 def is_finite(v) -> bool:
-    """Number.isFinite: a number (not bool) that is not NaN/±Infinity."""
     return is_number(v) and math.isfinite(v)
 
 def js_round(x: float) -> float:
-    """Math.round: nearest integer, exact .5 rounds toward +Infinity."""
     if not math.isfinite(x):
         return x
     if abs(x) >= 2 ** 52:
@@ -194,7 +154,6 @@ def js_round(x: float) -> float:
     return float(r + 1) if x - r >= 0.5 else float(r)
 
 def to_fixed(x: float, digits: int) -> str:
-    """Number#toFixed for |x| < 1e21."""
     if math.isnan(x):
         return 'NaN'
     if math.isinf(x):
@@ -206,7 +165,6 @@ def to_fixed(x: float, digits: int) -> str:
     return s
 
 def js_str(v) -> str:
-    """String(v) for the values the TS code interpolates (numbers, strings, null)."""
     if v is None:
         return 'null'
     if isinstance(v, bool):
@@ -218,8 +176,6 @@ def js_str(v) -> str:
     return str(v)
 
 def _number_to_string(x: float) -> str:
-    """ECMAScript Number::toString(x) (radix 10), from the same shortest
-    round-trip digits Python's repr() produces."""
     if math.isnan(x):
         return 'NaN'
     if x == 0:
@@ -241,10 +197,9 @@ def _number_to_string(x: float) -> str:
     e = n - 1
     es = ('+' if e > 0 else '-') + str(abs(e))
     return (digits if k == 1 else digits[0] + '.' + digits[1:]) + 'e' + es
-_JS_WS = ' \t\n\r\x0b\x0c\xa0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff'
+_JS_WS = ''.join((chr(c) for c in (32, 9, 10, 13, 11, 12, 160, 5760, 8192, 8193, 8194, 8195, 8196, 8197, 8198, 8199, 8200, 8201, 8202, 8232, 8233, 8239, 8287, 12288, 65279)))
 
 def js_number(s: str) -> float:
-    """Number(string). Returns NaN where JS returns NaN."""
     t = s.strip(_JS_WS)
     if t == '':
         return 0.0
@@ -274,13 +229,11 @@ def _is_array_index(k: str) -> bool:
     return int(k) < 2 ** 32 - 1
 
 def object_keys(d: dict) -> list:
-    """Object.keys / Object.entries order for a plain JSON object."""
     idx = sorted((k for k in d if _is_array_index(k)), key=int)
     rest = [k for k in d if not _is_array_index(k)]
     return idx + rest
 
 def _days_from_civil(y: int, m: int, d: int) -> int:
-    """Days since 1970-01-01 for proleptic Gregorian y-m-d (m 1..12)."""
     y -= m <= 2
     era = y // 400
     yoe = y - era * 400
@@ -289,22 +242,17 @@ def _days_from_civil(y: int, m: int, d: int) -> int:
     return era * 146097 + doe - 719468
 
 def date_utc(year: int, month0: int, day: int, h: int=0, mi: int=0, s: int=0) -> int:
-    """Date.UTC with JS overflow normalisation (month0 is 0-based).
-    Like JS, a year in 0..99 means 1900..1999."""
     if 0 <= year <= 99:
         year += 1900
     return civil_ms(year, month0, day, h, mi, s)
 
 def civil_ms(year: int, month0: int, day: int, h: int=0, mi: int=0, s: int=0) -> int:
-    """Epoch ms for a proleptic-Gregorian date, overflow normalised, NO 1900 mapping
-    (what `new Date('YYYY-MM-DDT…Z')` parsing does)."""
     ym = year + month0 // 12
     mn = month0 % 12
     days = _days_from_civil(ym, mn + 1, 1) + (day - 1)
     return days * _MS_PER_DAY + ((h * 60 + mi) * 60 + s) * 1000
 
 def iso_of(epoch_ms: float) -> str:
-    """new Date(ms).toISOString() for an integral-millisecond epoch."""
     ms = int(epoch_ms)
     days, rem = divmod(ms, _MS_PER_DAY)
     z = days + 719468
@@ -323,19 +271,12 @@ def iso_of(epoch_ms: float) -> str:
     return '%04d-%02d-%02dT%02d:%02d:%02d.%03dZ' % (y, m, d, hh, mm, ss, msr)
 
 def js_sum(values):
-    """`values.reduce((a, b) => a + b, 0)`: plain left-to-right addition.
-
-    NOT Python's sum(): since 3.12 it uses compensated summation for floats,
-    which differs from JS in the last bits."""
     t = 0
     for v in values:
         t = t + v
     return t
 
 class _Undefined:
-    """JS `undefined`, distinct from `null` (None). JSON.stringify drops
-    object properties whose value is undefined; the parity encoder writes them
-    as {"$undefined": true} so the difference stays visible."""
     _inst = None
 
     def __new__(cls):
@@ -351,7 +292,6 @@ class _Undefined:
 UNDEFINED = _Undefined()
 
 def js_truthy(v) -> bool:
-    """JS truthiness: false, 0, -0, NaN, "", null, undefined are falsy; {} and [] are truthy."""
     if v is None or v is UNDEFINED or v is False:
         return False
     if is_number(v):
@@ -361,11 +301,9 @@ def js_truthy(v) -> bool:
     return True
 
 def is_js_object(v) -> bool:
-    """typeof v === 'object' && v !== null (arrays included)."""
     return isinstance(v, (dict, list))
 
 def js_get(o, key):
-    """o[key] for a parsed-JSON value: dict lookup, array index, else undefined."""
     if isinstance(o, dict):
         return o[key] if key in o else UNDEFINED
     if isinstance(o, list) and key.isdigit():
@@ -374,7 +312,6 @@ def js_get(o, key):
     return UNDEFINED
 
 def js_max(*xs):
-    """Math.max: NaN if any argument is NaN (Python's max() would ignore it)."""
     if not xs:
         return -math.inf
     if any((isinstance(x, float) and math.isnan(x) for x in xs)):
@@ -382,7 +319,6 @@ def js_max(*xs):
     return max(xs)
 
 def js_min(*xs):
-    """Math.min: NaN if any argument is NaN."""
     if not xs:
         return math.inf
     if any((isinstance(x, float) and math.isnan(x) for x in xs)):
@@ -392,8 +328,6 @@ def js_min(*xs):
 # ----------------------------------------------------------------------
 # module: engine/sensex/errors.py
 # ----------------------------------------------------------------------
-"""Typed errors mirroring server/src/errors.ts (only those the ported code raises)."""
-
 class Bull50Error(Exception):
     code = 'ERROR'
 
@@ -403,7 +337,6 @@ class Bull50Error(Exception):
         self.details = details or {}
 
 class PricingValidationError(Bull50Error):
-    """TS ValidationError (e.g. expired contract, T <= 0)."""
     code = 'VALIDATION'
 
 class SnapshotSkewError(Bull50Error):
@@ -419,17 +352,9 @@ class GateBlockedError(Bull50Error):
 # ----------------------------------------------------------------------
 # module: engine/sensex/pricing.py
 # ----------------------------------------------------------------------
-"""
-Pricing core. Port of server/src/pricing/{normal,black76,time,forward}.ts.
-
-PURE: no I/O, no clock. Formulas, constants and operation order follow the
-TypeScript source line by line so results agree to floating-point noise.
-Black-76 on the FORWARD; the index LTP is never an input here.
-"""
 import math
 
 def norm_cdf(x: float) -> float:
-    """Hart (1968) / West (2005) cumulative normal, as in normal.ts."""
     if math.isnan(x):
         return math.nan
     if x < 0:
@@ -469,8 +394,6 @@ DAY_MS = 86400000
 YEAR_DAYS = 365
 
 def expiry_stamp_ms(expiry_date: str) -> int:
-    """Epoch ms of 15:30 IST on YYYY-MM-DD. Like Date.UTC, out-of-range
-    days roll over (2026-02-30 -> 2 Mar) — a TS behaviour kept for parity."""
     import re
     m = re.fullmatch('(\\d{4})-(\\d{2})-(\\d{2})', expiry_date.strip())
     if not m:
@@ -518,7 +441,6 @@ def b76_price(F: float, K: float, T: float, sigma: float, r: float, typ: str) ->
     return js_max(DF * _intrinsic(F, K, typ), raw)
 
 def b76_iv(price, F, K, T, r, typ, lo=1e-09, hi=5.0, iterations=200, tolerance=1e-08):
-    """Bisection IV. None outside no-arbitrage bounds — never a fabricated IV."""
     if not (isinstance(price, (int, float)) and math.isfinite(price)) or not T > 0 or (not F > 0) or (not K > 0):
         return None
     lower, upper = no_arb_bounds(F, K, T, r, typ)
@@ -581,7 +503,6 @@ def _least_squares_slope(xs, ys):
     return num / den
 
 def parity_forward(legs, atm_hint, r, T, band_pct=0.015, slope_tolerance=0.02) -> dict:
-    """legs: [{'strike','callPrice','putPrice'}]. Returns the ForwardResult shape."""
     df = discount_factor(r, T)
     lower = atm_hint * (1 - band_pct)
     upper = atm_hint * (1 + band_pct)
@@ -604,12 +525,6 @@ def _tf2(x):
 # ----------------------------------------------------------------------
 # module: engine/sensex/gate.py
 # ----------------------------------------------------------------------
-"""
-The data-integrity gate. Port of server/src/pricing/gate.ts.
-
-A wrong forward is worse than no forward: when inputs disagree, nothing is
-published. There is deliberately no fallback to the index LTP. PURE.
-"""
 import math
 GATE_DEFAULTS = {'maxFutureDivergence': 75, 'maxPerStrikeSpread': 40, 'indexDivergenceWarn': 50, 'minCarryAnnual': -0.05, 'maxCarryAnnual': 0.15, 'sameExpiryGapYears': 1.5 / 365}
 
@@ -651,43 +566,32 @@ def check_gate(parity_forward: float, listed_future, per_strike_spread: float, i
 # ----------------------------------------------------------------------
 # module: engine/sensex/normalize.py
 # ----------------------------------------------------------------------
-"""
-Raw Dhan v2 JSON -> canonical dicts. Port of server/src/normalize.ts.
-
-Keys of the returned dicts are the TypeScript schema's camelCase names
-(types.ts), so outputs compare one-to-one with the TS implementation.
-Vendor IV and Greeks are moved into `vendorQuarantined` and are never read by
-any pricing function. PURE (no I/O, no clock); the caller supplies fetch id
-and receipt time.
-"""
 import math
 import re
 NEVER_TRADED = '01/01/1980 00:00:00'
 _bx_normalize__IST_OFFSET_MS = (5 * 60 + 30) * 60 * 1000
-_LTT = re.compile('(\\d{2})/(\\d{2})/(\\d{4})\\s+(\\d{2}):(\\d{2}):(\\d{2})')
+_ASCII_WS = ' \t\n\r' + chr(11) + chr(12)
+_LTT = '(\\d{2})/(\\d{2})/(\\d{4})\\s+(\\d{2}):(\\d{2}):(\\d{2})'
 
 def make_provenance(fetch_id: str, epoch_ms: float, endpoint: str) -> dict:
     return {'fetchId': fetch_id, 'epochMs': epoch_ms, 'source': 'dhan-rest-v2', 'endpoint': endpoint}
 
 def parse_last_trade_time(raw):
-    """'DD/MM/YYYY HH:MM:SS' IST wall clock -> epoch ms; None for the 1980
-    'never traded' sentinel or anything unparseable."""
     if not isinstance(raw, str) or not raw.strip():
         return None
     s = raw.strip()
     if s == NEVER_TRADED:
         return None
-    m = _LTT.fullmatch(s)
+    m = re.fullmatch(_LTT, s)
     if not m:
         return None
     d, mo, y, h, mi, sec = (int(g) for g in m.groups())
     return date_utc(y, mo - 1, d, h, mi, sec) - _bx_normalize__IST_OFFSET_MS
 
 def num(v):
-    """Finite number, or a numeric string; else None. Booleans are not numbers."""
     if is_number(v) and math.isfinite(v):
         return v
-    if isinstance(v, str) and v.strip(' \t\n\r\x0b\x0c') != '':
+    if isinstance(v, str) and v.strip(_ASCII_WS) != '':
         n = js_number(v)
         if math.isfinite(n):
             return n
@@ -774,8 +678,6 @@ def normalize_chain(raw, underlying: str, underlying_scrip: int, underlying_seg:
     return {'underlying': underlying, 'underlyingScrip': underlying_scrip, 'underlyingSeg': underlying_seg, 'expiry': expiry, 'underlyingLtpDoNotUseAsSpot': num(js_get(o, 'last_price')), 'strikes': strikes, 'provenance': make_provenance(fetch_id, received_at_ms, endpoint), 'quarantined': quarantined}
 
 def to_candles(raw) -> list:
-    """Port of endpoints/historical.ts toCandles: zip Dhan's parallel arrays
-    (timestamp in epoch SECONDS), drop a ragged tail, sort oldest-first."""
     raw = raw if isinstance(raw, dict) else {}
 
     def arr(k):
@@ -797,11 +699,6 @@ def to_candles(raw) -> list:
 # ----------------------------------------------------------------------
 # module: engine/sensex/integrity.py
 # ----------------------------------------------------------------------
-"""
-Structural and staleness checks plus the snapshot-skew rule.
-Port of server/src/integrity.ts. PURE: the caller supplies `now_ms`.
-"""
-
 def _report(findings, checked_at_ms):
     return {'ok': not any((f['severity'] == 'block' for f in findings)), 'findings': findings, 'checkedAtMs': checked_at_ms}
 
@@ -873,17 +770,9 @@ def check_snapshot_skew(a: dict, b: dict, max_skew_ms) -> dict:
 # ----------------------------------------------------------------------
 # module: engine/sensex/pricing_bridge.py
 # ----------------------------------------------------------------------
-"""
-Forward, gate and per-leg Black-76 for ONE snapshot.
-Port of server/src/pricingBridge.ts (fairPrice, attachPricing).
-
-Refuses (raises) when the chain and futures quote are not one snapshot, when
-the contract has expired, or when the gate blocks. No path to the index LTP.
-"""
 MAX_MID_SPREAD_FRAC = 0.05
 
 def fair_price(leg):
-    """Tight two-sided mid, else LTP, else None."""
     if not leg:
         return None
     b, a = (leg['topBidPrice'], leg['topAskPrice'])
@@ -956,16 +845,6 @@ def attach_pricing(chain: dict, futures, risk_free_rate: float, max_snapshot_ske
 # ----------------------------------------------------------------------
 # module: engine/sensex/levels.py
 # ----------------------------------------------------------------------
-"""
-Breakout / breakdown levels from underlying price action.
-
-Port of server/src/levels.ts plus the helpers it uses from indicators.ts
-(trueRanges, wilderSmooth, atr, vwap, sessionVwap, sessions, openingRange,
-istDateOf, istTimeOf) and structure.ts (findSwingPoints). PURE.
-
-Candles are dicts: timestampMs, open, high, low, close, volume, openInterest.
-Option-chain data is never an input: a trigger must come from price action.
-"""
 _bx_levels__IST_OFFSET_MS = (5 * 60 + 30) * 60 * 1000
 STRUCTURAL = {'previous_session_high', 'previous_session_low', 'opening_range_high', 'opening_range_low', 'vwap'}
 
@@ -1248,25 +1127,19 @@ def build_trade_plan(side, levels, entry, delta, gamma):
 # ----------------------------------------------------------------------
 # module: engine/sensex/expiries.py
 # ----------------------------------------------------------------------
-"""
-Expiry selection. Port of the pure parts of server/src/instruments/expiries.ts
-(ExpiryCache.get filtering, nearest, nextAfter, isIsoDate). No I/O, no cache.
-"""
 import re
-_ISO = re.compile('\\d{4}-\\d{2}-\\d{2}')
+_ISO = '\\d{4}-\\d{2}-\\d{2}'
 
 class ExpirySelectionError(Exception):
     pass
 
 def is_iso_date(v) -> bool:
-    """A real calendar date in YYYY-MM-DD form (rejects 2026-02-30, 'N/A', 15-10-2026)."""
-    if not isinstance(v, str) or not _ISO.fullmatch(v):
+    if not isinstance(v, str) or not re.fullmatch(_ISO, v):
         return False
     y, m, d = (int(v[:4]), int(v[5:7]), int(v[8:10]))
     return iso_of(civil_ms(y, m - 1, d))[:10] == v
 
 def clean_expiries(raw, label: str) -> list:
-    """`get()`: keep real dates, sort; raise when nothing usable is left."""
     items = raw if isinstance(raw, list) else []
     out = sorted((x for x in items if is_iso_date(x)))
     if not out:
@@ -1280,7 +1153,6 @@ def nearest(expiries: list, from_date: str, label: str) -> str:
     raise ExpirySelectionError('No expiry on or after %s for %s. Available: %s.' % (from_date, label, ', '.join(expiries)))
 
 def next_after(expiries: list, today: str, label: str) -> str:
-    """Scalping default (RULES.md §6): next weekly on expiry day."""
     for e in expiries:
         if e > today:
             return e
@@ -1289,36 +1161,10 @@ def next_after(expiries: list, today: str, label: str) -> str:
 # ----------------------------------------------------------------------
 # module: engine/sensex/scan.py
 # ----------------------------------------------------------------------
-"""
-One read-only refresh scan, composed from the ported modules and the EXISTING
-engine/refresh_table.py (reused unchanged, not duplicated).
-
-Pipeline (SKILL.md §0, "refresh"):
-  raw chain + raw futures quote  -> normalize -> attach_pricing (skew rule,
-  parity forward, gate, Black-76 IV)
-  5-minute index candles         -> derive_levels (spot = index LTP;
-  buffer 5, min touches 2, round 5 — the compute_levels defaults)
-  -> refresh_table.build_refresh_table
-
-PURE: every input, including `now`, is passed in. No network, no clock, no
-credentials, no order code.
-
-Deliberately NOT decided here (documented as BLOCKED in docs/PHASE4_PORT_PLAN.md):
-  * which strikes form "ATM±2" — callers pass `strikes` explicitly;
-  * what to show for a leg with no computable IV — it is excluded and listed
-    in `excludedLegs`, never filled with an invented value.
-"""
 import math
 BLANK_TABLE = '| Strike | Type | LTP | Breakout Above |\n|---|---|---|---|\n| — | — | — | — |'
 
 def build_scan(*, raw_chain, raw_futures, candles, expiry, strikes, chain_received_ms, futures_received_ms, futures_security_id='FUT', futures_expiry=None, risk_free_rate=0.065, max_snapshot_skew_ms=3000, chain_fetch_id='chain', futures_fetch_id='futures', detail_out: dict | None=None) -> dict:
-    """Return the refresh_table inputs for `strikes`, or a BLOCKED/ERROR result.
-
-    `raw_futures=None` models a failed futures fetch (the gate then blocks).
-    `detail_out`, when given, receives the intermediate results already
-    computed here (normalised chain, futures quote, pricing context or gate
-    error, levels) for observation logging. The return value is unaffected.
-    """
     d = detail_out if detail_out is not None else {}
     chain = normalize_chain(raw_chain, 'SENSEX', 51, 'IDX_I', expiry, chain_fetch_id, chain_received_ms, '/optionchain')
     futures = None
@@ -1355,8 +1201,6 @@ def build_scan(*, raw_chain, raw_futures, candles, expiry, strikes, chain_receiv
     return {'status': 'OK', 'forward': p['forward'], 'T': p['T'], 'df': p['discountFactor'], 'atmStrike': p['atmStrike'], 'candleRefPrice': spot, 'resistances': [{'price': l['price'], 'touches': l['touches'], 'sources': list(l['sources'])} for l in lv['allResistance']], 'supports': [{'price': l['price'], 'touches': l['touches'], 'sources': list(l['sources'])} for l in lv['allSupport']], 'atr': lv['atr14'], 'barMinutes': lv['timeframeMinutes'], 'legs': legs, 'excludedLegs': excluded, 'snapshotMs': p['asOfMs'], 'candlesMs': candles[-1]['timestampMs'] if candles else None, 'gateWarnings': p['gate']['warnings']}
 
 def run_refresh(scan: dict, now):
-    """Feed a scan into the existing refresh_table. Blank table when the scan
-    is not OK, exactly as RULES.md §5 requires."""
     if scan.get('status') != 'OK' or scan.get('candlesMs') is None:
         return (None, BLANK_TABLE)
     rt = _BX_RT
@@ -1364,38 +1208,13 @@ def run_refresh(scan: dict, now):
     return (rows, rt.to_compact(rows))
 
 def in_no_trade_window(now) -> bool:
-    """RULES.md §5 no-trade windows, from the existing refresh_table (unchanged)."""
     rt = _BX_RT
     return rt.in_skip_window(now)
 
 # ----------------------------------------------------------------------
 # module: engine/sensex/dhan_client.py
 # ----------------------------------------------------------------------
-"""
-Read-only Dhan v2 REST client (stdlib only).
-
-Why not the official SDK: it pulls in pandas/numpy (a reported dependency
-conflict on Dhan Cloud), hides HTTP status inside `remarks`, and its
-`generate_token` logs the PIN/TOTP on network errors (Phase 3, tested). The
-request shapes below are taken from the SDK source (dhan-oss/DhanHQ-py @
-8c6583e) and match the TypeScript client that has been used live.
-
-SAFETY
-  * Allow-list: only the exact (method, path) pairs in READ_ONLY_ENDPOINTS can
-    be requested. Anything else — orders, positions, kill switch, P&L exit, IP
-    whitelist, token renewal, … — is refused before a socket is opened.
-  * Credentials are read from the environment or a file on THIS machine, are
-    sent only as headers (never in a URL), and are redacted from every log line
-    and exception message.
-  * No login, no token generation, no token renewal.
-
-Transport, normalisation and calculation stay separate: this module returns
-raw payloads plus receipt time; sensex.validation / sensex.normalize / the
-engine do the rest.
-"""
-import base64
 import json
-import os
 import random
 import re
 import time as _bx_dhan_client__time
@@ -1414,6 +1233,7 @@ RETRYABLE_CODES = {'800', 'DH-908', 'DH-909'}
 class DhanClientError(Exception):
     retryable = False
     attempts = None
+    retry_after_s = None
 
     def __init__(self, message: str, *, code: str='', http_status: int | None=None):
         super().__init__(message)
@@ -1421,26 +1241,25 @@ class DhanClientError(Exception):
         self.http_status = http_status
 
 class ForbiddenEndpointError(DhanClientError):
-    """The request is not on the read-only allow-list."""
+    pass
 
 class AuthError(DhanClientError):
-    """Bad or expired credentials. Not retried: a person must supply a new token."""
+    pass
 
 class PlanError(DhanClientError):
-    """Account lacks Data API access. Not retried."""
+    pass
 
 class RateLimitedError(DhanClientError):
     retryable = True
 
 class TransientError(DhanClientError):
-    """Network fault, timeout, 5xx or a retryable Dhan code."""
     retryable = True
 
 class RequestRejectedError(DhanClientError):
-    """4xx for a bad request (e.g. 811 invalid expiry). Not retried."""
+    pass
 
 class ResponseFormatError(DhanClientError):
-    """Not JSON, or not a recognisable envelope."""
+    pass
 
 @dataclass(frozen=True)
 class Credentials:
@@ -1450,36 +1269,32 @@ class Credentials:
     def __repr__(self) -> str:
         return 'Credentials(client_id=<redacted>, access_token=<redacted>)'
 
-    @staticmethod
-    def from_environment(env=None) -> 'Credentials':
-        """DHAN_CLIENT_ID plus either DHAN_ACCESS_TOKEN or DHAN_TOKEN_FILE (a file
-        containing only the token). Same variables as the TypeScript server."""
-        env = os.environ if env is None else env
-        cid = (env.get('DHAN_CLIENT_ID') or '').strip()
-        tok = (env.get('DHAN_ACCESS_TOKEN') or '').strip()
-        path = (env.get('DHAN_TOKEN_FILE') or '').strip()
-        if not tok and path:
-            with open(path, 'r', encoding='utf-8') as f:
-                tok = f.read().strip()
-        if not cid or not tok:
-            raise AuthError('No Dhan credentials: set DHAN_CLIENT_ID and DHAN_ACCESS_TOKEN or DHAN_TOKEN_FILE in your local environment (see docs/PHASE5_DATA_CLIENT_DESIGN.md).')
-        return Credentials(cid, tok)
-
     def token_expiry_ms(self):
-        """JWT `exp` claim in epoch ms (decoded WITHOUT verification); None if not a JWT."""
         parts = self.access_token.split('.')
         if len(parts) != 3:
             return None
         try:
-            pad = '=' * (-len(parts[1]) % 4)
-            payload = json.loads(base64.urlsafe_b64decode(parts[1] + pad))
+            payload = json.loads(_b64url_decode(parts[1]))
             return int(payload['exp']) * 1000 if isinstance(payload.get('exp'), (int, float)) else None
         except Exception:
             return None
-_JWT = re.compile('eyJ[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]+')
+_JWT = 'eyJ[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]+'
+_B64URL = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_'
+
+def _b64url_decode(text: str) -> bytes:
+    bits = nbits = 0
+    out = bytearray()
+    for ch in text.rstrip('='):
+        v = _B64URL.find(ch)
+        if v < 0:
+            raise ValueError('not base64url')
+        bits, nbits = (bits << 6 | v, nbits + 6)
+        if nbits >= 8:
+            nbits -= 8
+            out.append(bits >> nbits & 255)
+    return bytes(out)
 
 class Redactor:
-    """Removes registered secrets and anything JWT-shaped from text."""
 
     def __init__(self):
         self._secrets: set[str] = set()
@@ -1493,11 +1308,9 @@ class Redactor:
         s = text if isinstance(text, str) else str(text)
         for secret in sorted(self._secrets, key=len, reverse=True):
             s = s.replace(secret, '[REDACTED]')
-        return _JWT.sub('[REDACTED_JWT]', s)
+        return re.sub(_JWT, '[REDACTED_JWT]', s)
 
 class RateLimiter:
-    """Token buckets per class, plus Dhan's '1 unique option-chain request per
-    3 s' rule per key. Clock and sleep are injectable (tests never wait)."""
 
     def __init__(self, clock=_bx_dhan_client__time.monotonic, sleep=_bx_dhan_client__time.sleep):
         self.clock, self.sleep = (clock, sleep)
@@ -1506,7 +1319,6 @@ class RateLimiter:
         self._last_key: dict[str, float] = {}
 
     def acquire(self, cls: str, unique_key: str | None=None) -> float:
-        """Block until a permit is available. Returns seconds waited."""
         waited = 0.0
         if cls == 'optionchain' and unique_key in self._last_key:
             gap = 3.0 - (self.clock() - self._last_key[unique_key])
@@ -1537,7 +1349,6 @@ class RawResponse:
     received_at_ms: int
 
 class UrllibTransport:
-    """The only code that opens a socket. HTTPS to BASE_URL only."""
 
     def send(self, method: str, url: str, headers: dict, body: bytes | None, timeout: float) -> RawResponse:
         req = urllib.request.Request(url, data=body, method=method, headers=headers)
@@ -1597,7 +1408,7 @@ class DhanClient:
             out.update(ok=True, attempts=r.attempts, envelope=r.envelope, receivedAtMs=r.received_at_ms)
             return r
         except DhanClientError as e:
-            out.update(error=type(e).__name__, code=e.code, httpStatus=e.http_status, attempts=getattr(e, 'attempts', None), message=self.redact(str(e))[:300])
+            out.update(error=type(e).__name__, code=e.code, httpStatus=e.http_status, attempts=e.attempts, message=self.redact(str(e))[:300])
             raise
         finally:
             out['durationMs'] = round((_bx_dhan_client__time.monotonic() - t0) * 1000, 1)
@@ -1625,7 +1436,7 @@ class DhanClient:
                 last.attempts = attempt
                 self._emit('error', 'request_failed', path=path, attempt=attempt, error=type(last).__name__, code=last.code, http_status=last.http_status, message=str(last))
                 raise last
-            wait = getattr(last, 'retry_after_s', None) or min(20.0, 0.5 * 2 ** (attempt - 1)) * (0.5 + self.jitter() / 2)
+            wait = last.retry_after_s or min(20.0, 0.5 * 2 ** (attempt - 1)) * (0.5 + self.jitter() / 2)
             self._emit('warn', 'request_retry', path=path, attempt=attempt, error=type(last).__name__, code=last.code, wait_s=round(wait, 3))
             self.sleep(wait)
         raise last
@@ -1675,7 +1486,6 @@ class DhanClient:
         return self.request('POST', '/optionchain', {'UnderlyingScrip': scrip, 'UnderlyingSeg': segment, 'Expiry': expiry}, unique_key='%s:%s:%s' % (segment, scrip, expiry), accept_bare=lambda p: isinstance(p, dict) and 'oc' in p)
 
     def quote(self, instruments: dict) -> DhanResponse:
-        """{segment: [security_id, ...]} -> 5-level depth, LTP, OI, OHLC, last_trade_time."""
         total = sum((len(v) for v in instruments.values()))
         if total == 0 or total > 1000:
             raise RequestRejectedError('marketfeed/quote needs 1..1000 instruments, got %d' % total)
@@ -1687,7 +1497,6 @@ class DhanClient:
         return self.request('POST', '/charts/intraday', {'securityId': str(security_id), 'exchangeSegment': segment, 'instrument': instrument, 'interval': interval, 'oi': oi, 'fromDate': from_datetime, 'toDate': to_datetime}, accept_bare=lambda p: isinstance(p, dict) and 'timestamp' in p)
 
     def profile(self) -> DhanResponse:
-        """Read-only token/plan check (tokenValidity, dataPlan, dataValidity)."""
         return self.request('GET', '/profile', None, accept_bare=lambda p: isinstance(p, dict))
 
     def daily_candles(self, security_id: str, segment: str, instrument: str, from_date: str, to_date: str, expiry_code: int=0, oi: bool=False) -> DhanResponse:
@@ -1696,15 +1505,6 @@ class DhanClient:
 # ----------------------------------------------------------------------
 # module: engine/sensex/validation.py
 # ----------------------------------------------------------------------
-"""
-Input validation between the Dhan client and the calculation engine.
-
-Checks STRUCTURE, COMPLETENESS, CONSISTENCY and FRESHNESS of raw payloads.
-It decides whether a scan may proceed; it never alters prices and never makes
-a trading decision. Field names checked here are the ones the existing
-normaliser reads (verified against the Dhan v2 reference in dhanhq-skills
-`references/option-chain.md` and the TypeScript client).
-"""
 import hashlib
 import json
 import math
@@ -1728,7 +1528,6 @@ def validate_expiry_list(payload) -> list:
     return sorted(good)
 
 def validate_chain(payload, min_pairs: int=2) -> list:
-    """Raise on a chain the engine cannot price; return non-fatal warnings."""
     if not isinstance(payload, dict):
         raise DataValidationError('CHAIN_SCHEMA', 'option chain payload is not an object')
     oc = payload.get('oc')
@@ -1756,7 +1555,6 @@ def validate_chain(payload, min_pairs: int=2) -> list:
     return warnings
 
 def validate_quote(payload, segment: str, security_id) -> dict:
-    """Return the instrument's raw quote object or raise."""
     if not isinstance(payload, dict):
         raise DataValidationError('QUOTE_SCHEMA', 'quote payload is not an object')
     seg = payload.get(segment)
@@ -1770,7 +1568,6 @@ def validate_quote(payload, segment: str, security_id) -> dict:
     return q
 
 def validate_candles(payload) -> list:
-    """Parallel arrays (epoch-second timestamps). Returns warnings; raises on unusable."""
     if not isinstance(payload, dict):
         raise DataValidationError('CANDLE_SCHEMA', 'candle payload is not an object')
     arrays = {k: payload.get(k) for k in ('timestamp', 'open', 'high', 'low', 'close')}
@@ -1786,21 +1583,11 @@ def validate_candles(payload) -> list:
     return warnings
 
 def snapshot_fingerprint(chain_payload) -> str:
-    """Stable hash of the chain body, to detect a feed returning the same snapshot twice."""
     return hashlib.sha256(json.dumps(chain_payload, sort_keys=True, separators=(',', ':')).encode()).hexdigest()[:16]
 
 # ----------------------------------------------------------------------
 # module: engine/sensex/session.py
 # ----------------------------------------------------------------------
-"""
-Market-session rules for the local scanner (Asia/Kolkata, UTC+05:30, no DST).
-
-Weekends are closed. Exchange HOLIDAYS are not hard-coded: no official
-holiday source has been verified in this project, so the user supplies a file
-of YYYY-MM-DD dates. Without one, a holiday is still caught at run time
-because the scan sees no fresh data (see scanner.py), but it is not known in
-advance — documented, not guessed.
-"""
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone
 IST = timezone(timedelta(hours=5, minutes=30))
@@ -1811,21 +1598,6 @@ def to_ist(now: datetime) -> datetime:
     if now.tzinfo is None:
         raise ValueError('scanner clock must be timezone-aware')
     return now.astimezone(IST)
-
-def load_holidays(path: str | None) -> frozenset:
-    if not path:
-        return frozenset()
-    out = set()
-    with open(path, 'r', encoding='utf-8') as f:
-        for n, line in enumerate(f, 1):
-            s = line.split('#', 1)[0].strip()
-            if not s:
-                continue
-            try:
-                out.add(date.fromisoformat(s))
-            except ValueError:
-                raise ValueError('holiday file line %d is not YYYY-MM-DD: %r' % (n, s)) from None
-    return frozenset(out)
 
 @dataclass(frozen=True)
 class SessionState:
@@ -1849,22 +1621,6 @@ def session_state(now: datetime, holidays=frozenset(), stop: time=DEFAULT_STOP) 
 # ----------------------------------------------------------------------
 # module: engine/sensex/instruments.py
 # ----------------------------------------------------------------------
-"""
-SENSEX futures resolution from Dhan's instrument master — STATUS: BLOCKED
-until a real header and sample rows are verified.
-
-Nothing here guesses the file format. The parser only runs with an explicit
-`InstrumentMapping` that names the real column headers, the real cell values
-(exchange, instrument type, underlying) and the real expiry date format. No
-mapping is shipped: the user creates one from the verified header
-(docs/PHASE5_DATA_CLIENT_DESIGN.md §4). Until then the scanner needs the
-futures contract passed explicitly and refuses an expired one.
-
-Selection rule = the existing approved rule in
-server/src/instruments/registry.ts `futuresForExpiry`: the nearest futures
-contract that expires ON OR AFTER the option expiry. Expired contracts
-(expiry before today) are never eligible.
-"""
 import csv
 import io
 import json
@@ -1896,11 +1652,7 @@ class InstrumentMapping:
     verified_from: str = ''
 
     @staticmethod
-    def load(path: str | None) -> 'InstrumentMapping':
-        if not path:
-            raise MappingMissingError('No verified instrument-master mapping. Futures lookup is BLOCKED until the real header is verified; pass --futures-security-id/--futures-expiry instead.')
-        with open(path, 'r', encoding='utf-8') as f:
-            raw = json.load(f)
+    def from_dict(raw: dict) -> 'InstrumentMapping':
         m = InstrumentMapping(raw.get('columns') or {}, raw.get('values') or {}, raw.get('expiry_format') or '', raw.get('verified_from') or '')
         missing = [c for c in REQUIRED_COLUMNS if not m.columns.get(c)] + ['values.' + v for v in REQUIRED_VALUES if not m.values.get(v)] + (['expiry_format'] if not m.expiry_format else [])
         if missing:
@@ -1927,8 +1679,6 @@ class ParseReport:
     notes: list = field(default_factory=list)
 
 def parse_futures(csv_text: str, mapping: InstrumentMapping):
-    """Return (contracts, report) for rows matching the mapping's exchange,
-    instrument and underlying values. Malformed rows are counted, not guessed."""
     reader = csv.reader(io.StringIO(csv_text))
     try:
         header = [h.strip() for h in next(reader)]
@@ -1975,7 +1725,6 @@ def parse_futures(csv_text: str, mapping: InstrumentMapping):
     return (out, rep)
 
 def select_future(contracts, option_expiry: date, today: date) -> FuturesContract:
-    """Nearest contract with expiry >= option_expiry (and not before today)."""
     eligible = [c for c in contracts if c.expiry >= option_expiry and c.expiry >= today]
     if not eligible:
         raise NoEligibleContractError('No unexpired futures contract expires on or after %s (candidates: %s)' % (option_expiry, sorted({str(c.expiry) for c in contracts})[:6]))
@@ -1986,7 +1735,6 @@ def select_future(contracts, option_expiry: date, today: date) -> FuturesContrac
     return next(iter(at.values()))
 
 def explicit_future(security_id: str, expiry: str, today: date, option_expiry: date) -> FuturesContract:
-    """The contract the user passed on the command line, validated the same way."""
     if not str(security_id).strip().isdigit():
         raise InstrumentResolutionError('futures security id must be digits')
     exp = date.fromisoformat(expiry)
@@ -1996,15 +1744,6 @@ def explicit_future(security_id: str, expiry: str, today: date, option_expiry: d
 # ----------------------------------------------------------------------
 # module: engine/sensex/observation.py
 # ----------------------------------------------------------------------
-"""
-Structured per-scan observation record (Phase 6). PURE: built from data the
-scan already fetched and computed; nothing is fetched or recalculated here.
-
-Records what the EXISTING rules decided and why. It never produces a CE/PE
-verdict: the direction thresholds are not configured (RULES.md §6,
-docs/PHASE3_STRATEGY_GAPS.md D1–D15), and that is stated in every record.
-No credentials, headers or account identifiers are ever included.
-"""
 import math
 STRATEGY_VERDICT = {'verdict': 'NO_SIGNAL', 'reason': 'Direction thresholds not configured (RULES.md §6; PHASE3_STRATEGY_GAPS D1–D8). Levels and the refresh table are computed; no CE/PE decision is made.', 'unresolved': ['D1-D8 direction rules', 'ATM±2 strike selection (PHASE4 P1)', 'display of legs without IV (PHASE4 P2)']}
 
@@ -2020,7 +1759,6 @@ def chain_completeness(chain: dict) -> dict:
     return {'strikes': len(strikes), 'legs': len(legs), 'legsWithLtp': len(priced), 'legsTwoSided': len(two_sided), 'completePairs': pairs, 'legsWithoutOi': sum((1 for l in legs if l['oi'] is None)), 'legsWithoutPreviousOi': sum((1 for l in legs if l['previousOi'] is None)), 'quarantinedKeys': sorted((chain or {}).get('quarantined', {}).keys())[:10]}
 
 def leg_rows(chain: dict, pricing: dict, atm, band_strikes: int=5) -> list:
-    """IV, Greeks, OI, bid/ask and quoted spread for strikes within ±band of ATM."""
     if not chain or not pricing or atm is None:
         return []
     ladder = sorted((s['strike'] for s in chain['strikes']))
@@ -2046,7 +1784,6 @@ def _closed(candles, now_ms, bar_ms=60000):
     return [c for c in candles or [] if c['timestampMs'] + bar_ms <= now_ms]
 
 def futures_flow(fut: dict | None, fut1m, now_ms) -> dict | None:
-    """Futures volume / VWAP facts (index candles carry no volume, D3). No rule is applied."""
     if fut is None and (not fut1m):
         return None
     out = {'dayVolume': fut['volume'] if fut else None, 'dayAvgPrice': _r(fut['averagePrice'], 2) if fut else None, 'futLtpMinusDayAvg': _r(fut['ltp'] - fut['averagePrice'], 2) if fut and is_number(fut['averagePrice']) and (fut['averagePrice'] > 0) and is_number(fut['ltp']) else None}
@@ -2061,7 +1798,6 @@ def futures_flow(fut: dict | None, fut1m, now_ms) -> dict | None:
     return out
 
 def one_minute_index(idx1m, levels, now_ms) -> dict | None:
-    """Last closed 1-min index bars vs the published triggers: raw facts for D1/D2 (undecided)."""
     bars = _closed(idx1m, now_ms)
     if not bars:
         return None
@@ -2125,25 +1861,6 @@ def build_observation(*, rec: dict, detail: dict, endpoints: list, rows, contrac
 # ----------------------------------------------------------------------
 # module: engine/sensex/paper.py
 # ----------------------------------------------------------------------
-"""
-PAPER tracker for the user's exit rule: take profit +6 / stop loss -11 option
-premium points (user, 9 Oct 2026), time stop 10 min (RULES.md §6).
-
-OBSERVATION ONLY. Nothing here talks to a broker: it receives prices that the
-read-only scanner already fetched and records what WOULD have happened. There
-is no order, position or account code anywhere in this module.
-
-Entry event (exploratory, NOT a CE/PE signal; D1-D8 are undecided):
-  the SENSEX index CROSSES a refresh-table trigger of a row whose status is OK
-  (CE: from below to >= breakoutAbove; PE: from above to <= breakdownBelow),
-  outside the no-trade windows. Each (side, trigger) fires once per session,
-  for every configured strike of that side (one paper trade per strike).
-Fill model: entry at the option's ASK at the first poll after the crossing;
-  exits evaluated on the BID (what a sell would get). Both sides of the spread
-  are therefore already inside the result. Polling is discrete (every few
-  seconds), so a move that hits both levels between two polls cannot be
-  ordered; such a case is impossible to see and is not invented.
-"""
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
@@ -2194,7 +1911,6 @@ class PaperTracker:
         self.seq = 0
 
     def arm(self, rows, legs: dict, scan_ok: bool):
-        """Replace the armed triggers with the latest scan's OK rows."""
         self.legs = dict(legs)
         self.arms = {}
         if not scan_ok or not rows:
@@ -2215,7 +1931,6 @@ class PaperTracker:
         return sorted(ids)
 
     def on_tick(self, now_ms: int, index_ltp, quotes: dict):
-        """quotes: security_id -> (bid, ask). Returns nothing; logs events."""
         for t in list(self.open):
             self._update(t, now_ms, quotes.get(t.security_id))
         prev, self.last_index = (self.last_index, index_ltp)
@@ -2293,12 +2008,6 @@ class PaperTracker:
 # ----------------------------------------------------------------------
 # module: engine/sensex/fastpoll.py
 # ----------------------------------------------------------------------
-"""
-Fast read-only poll between scans (Phase 6b): one /marketfeed/quote call for
-the SENSEX index LTP plus the configured option legs (and any open paper legs),
-fed to the PAPER tracker. Read-only; uses the same allow-listed client and
-rate limiter as the scanner. No order code.
-"""
 INDEX_SEG, INDEX_ID, LEG_SEG = ('IDX_I', 51, 'BSE_FNO')
 
 def _top(depth, side):
@@ -2327,7 +2036,6 @@ class FastPoller:
         self.tracker.arm(rows, legs, rec.get('status') == 'OK')
 
     def tick(self) -> bool:
-        """One poll. Returns False when the scanner must stop (auth/plan)."""
         ids = self.tracker.watch_ids()
         body = {INDEX_SEG: [INDEX_ID]}
         if ids:
@@ -2364,21 +2072,6 @@ class FastPoller:
 # ----------------------------------------------------------------------
 # module: engine/sensex/scanner.py
 # ----------------------------------------------------------------------
-"""
-Local read-only scanner: Dhan data -> validation -> Phase-4 engine -> refresh table.
-
-One cycle (`run_once`) mirrors the TypeScript snapshot order:
-  expiry list -> next weekly after today (RULES.md §6)
-  -> option chain FIRST -> futures quote immediately after (skew rule)
-  -> today's 5-minute SENSEX index candles
-  -> sensex.scan.build_scan -> refresh_table (existing engine, unchanged)
-and returns one timestamped record. `run_loop` repeats it on an interval and
-stops at the session stop time (default 15:30 IST), on Ctrl-C / SIGTERM, on
-`max_scans`, or on an authentication / data-plan failure.
-
-Never: orders, position exits, token generation or renewal, invented
-thresholds, CE/PE signals, or a table built from data that failed validation.
-"""
 import json
 import sys
 import threading
@@ -2388,10 +2081,9 @@ from datetime import date, datetime, time as dtime, timedelta, timezone
 SENSEX_SCRIP, SENSEX_SEG, FUT_SEG = (51, 'IDX_I', 'BSE_FNO')
 
 class JsonLogger:
-    """One JSON object per line, every string passed through the redactor."""
 
-    def __init__(self, redactor: Redactor, stream=None, path: str | None=None, clock=None, prefix: str=''):
-        self.redact, self.stream, self.path, self.prefix = (redactor, stream or sys.stderr, path, prefix)
+    def __init__(self, redactor: Redactor, stream=None, sink=None, clock=None, prefix: str=''):
+        self.redact, self.stream, self.sink, self.prefix = (redactor, stream or sys.stderr, sink, prefix)
         self.clock = clock or (lambda: datetime.now(timezone.utc))
 
     def __call__(self, level: str, event: str, **fields):
@@ -2400,9 +2092,8 @@ class JsonLogger:
         line = self.redact(json.dumps(rec, default=str, ensure_ascii=False))
         self.stream.write(self.prefix + line + '\n')
         self.stream.flush()
-        if self.path:
-            with open(self.path, 'a', encoding='utf-8') as f:
-                f.write(line + '\n')
+        if self.sink is not None:
+            self.sink(line)
 
 @dataclass
 class ScannerConfig:
@@ -2500,7 +2191,6 @@ class Scanner:
         return 'MORNING' if t < dtime(11, 30) else 'AFTERNOON'
 
     def _scan(self, rec, now, ist, detail):
-        """One cycle; fills `rec` and `detail`, returns refresh rows (or None)."""
         st = session_state(now, self.cfg.holidays, self.cfg.stop_time)
         if not st.open and (not self.cfg.ignore_session):
             rec.update(status='SKIPPED', reason=st.reason)
@@ -2555,7 +2245,6 @@ class Scanner:
         return rows
 
     def _optional_candles(self, rec, security_id, segment, instrument, day, label):
-        """1-minute series for observation only: failure is a warning, never a scan failure."""
         try:
             r = self.client.intraday_candles(str(security_id), segment, instrument, 1, day + ' 09:15:00', day + ' 15:30:00')
             validate_candles(r.payload)
@@ -2577,8 +2266,6 @@ class Scanner:
         self.stop_event.set()
 
     def run_loop(self, on_record=None) -> str:
-        """Run until stop time, a stop request, max_scans, or an auth failure.
-        Returns the stop reason. Must be started explicitly by the user."""
         self.log('info', 'scanner_start', interval_s=self.cfg.interval_s, stop=self.cfg.stop_time.isoformat(), strikes=self.cfg.strikes, max_scans=self.cfg.max_scans)
         while not self.stop_event.is_set():
             st = session_state(self.clock(), self.cfg.holidays, self.cfg.stop_time)
@@ -2617,54 +2304,10 @@ class Scanner:
 # ----------------------------------------------------------------------
 # module: engine/sensex/recording.py
 # ----------------------------------------------------------------------
-"""
-Record a live read-only scan so it can be replayed OFFLINE through both the
-Python scanner and the TypeScript functions (exact live-data parity).
-
-Saved per scan, under <dir>/scan-NNN/:
-  bodies.json    response bodies of the four market-data calls (parsed JSON)
-  receipts.json  receive time (epoch ms) per path
-  meta.json      strikes, futures contract, scan clock
-Never saved: request headers, credentials, /profile, or anything else.
-"""
 import json
-from pathlib import Path
 RECORDED_PATHS = ('/optionchain/expirylist', '/optionchain', '/marketfeed/quote', '/charts/intraday')
 
-class RecordingTransport:
-
-    def __init__(self, inner, directory: str):
-        self.inner, self.root = (inner, Path(directory))
-        self.scan_dir = None
-        self.bodies, self.receipts = ({}, {})
-
-    def begin_scan(self, n: int, meta: dict):
-        self.flush()
-        self.scan_dir = self.root / ('scan-%03d' % n)
-        self.scan_dir.mkdir(parents=True, exist_ok=True)
-        (self.scan_dir / 'meta.json').write_text(json.dumps(meta, indent=1))
-        self.bodies, self.receipts = ({}, {})
-
-    def send(self, method, url, headers, body, timeout):
-        r = self.inner.send(method, url, headers, body, timeout)
-        path = url.split('/v2', 1)[1]
-        if path in RECORDED_PATHS and r.status == 200:
-            try:
-                self.bodies[path] = json.loads(r.body.decode('utf-8'))
-                self.receipts[path] = r.received_at_ms
-            except ValueError:
-                pass
-        return r
-
-    def flush(self):
-        if self.scan_dir is not None and self.bodies:
-            (self.scan_dir / 'bodies.json').write_text(json.dumps({'note': 'RECORDED live market data', 'bodies': self.bodies}))
-            (self.scan_dir / 'receipts.json').write_text(json.dumps(self.receipts))
-
 class MemoryRecorder:
-    """Same capture rule as RecordingTransport, kept in memory (for runtimes
-    without a usable filesystem, e.g. Dhan Cloud). `take()` returns and clears
-    the current scan's bodies and receipts."""
 
     def __init__(self, inner):
         self.inner = inner
@@ -2689,7 +2332,6 @@ class MemoryRecorder:
 # ----------------------------------------------------------------------
 # module: parity/stage_a/s21Sep
 # ----------------------------------------------------------------------
-"""Embedded MOCK self-test snapshot (Stage A s21Sep). Not market data."""
 SELFTEST = {'note': 'MOCK DATA (Stage A s21Sep) - not market data', 'bodies': {'/optionchain/expirylist': {'status': 'success', 'data': ['2026-09-24', '2026-10-01', '2026-10-29']}, '/optionchain': {'status': 'success', 'data': {'last_price': 74667.55, 'oc': {'74500.000000': {'ce': {'security_id': 920745, 'last_price': 445.7, 'top_bid_price': 445, 'top_ask_price': 445.5, 'top_bid_quantity': 20, 'top_ask_quantity': 20, 'oi': 100000, 'previous_oi': 90000, 'volume': 50000}, 'pe': {'security_id': 930745, 'last_price': 287.3, 'top_bid_price': 286.7, 'top_ask_price': 287.35, 'top_bid_quantity': 20, 'top_ask_quantity': 20, 'oi': 100000, 'previous_oi': 110000, 'volume': 50000}}, '74600.000000': {'ce': {'security_id': 920746, 'last_price': 388.35, 'top_bid_price': 387.75, 'top_ask_price': 388.35, 'top_bid_quantity': 20, 'top_ask_quantity': 20, 'oi': 100000, 'previous_oi': 90000, 'volume': 50000}, 'pe': {'security_id': 930746, 'last_price': 329.75, 'top_bid_price': 329.35, 'top_ask_price': 330, 'top_bid_quantity': 20, 'top_ask_quantity': 20, 'oi': 100000, 'previous_oi': 110000, 'volume': 50000}}, '74700.000000': {'ce': {'security_id': 920747, 'last_price': 335, 'top_bid_price': 335, 'top_ask_price': 335.05, 'top_bid_quantity': 20, 'top_ask_quantity': 20, 'oi': 100000, 'previous_oi': 90000, 'volume': 50000}, 'pe': {'security_id': 930747, 'last_price': 376.75, 'top_bid_price': 376.3, 'top_ask_price': 376.9, 'top_bid_quantity': 20, 'top_ask_quantity': 20, 'oi': 100000, 'previous_oi': 110000, 'volume': 50000}}, '74800.000000': {'ce': {'security_id': 920748, 'last_price': 286.75, 'top_bid_price': 286.35, 'top_ask_price': 286.75, 'top_bid_quantity': 20, 'top_ask_quantity': 20, 'oi': 100000, 'previous_oi': 90000, 'volume': 50000}, 'pe': {'security_id': 930748, 'last_price': 428.5, 'top_bid_price': 428, 'top_ask_price': 428.55, 'top_bid_quantity': 20, 'top_ask_quantity': 20, 'oi': 100000, 'previous_oi': 110000, 'volume': 50000}}}}}, '/marketfeed/quote': {'status': 'success', 'data': {'BSE_FNO': {'844615': {'last_price': 74680, 'last_trade_time': '21/09/2026 10:33:50', 'ohlc': {'open': 74530, 'high': 74800, 'low': 74480, 'close': 74650}, 'volume': 50000, 'oi': 120000, 'depth': {'buy': [{'price': 74679.5, 'quantity': 20, 'orders': 1}, {'price': 74679, 'quantity': 40, 'orders': 2}, {'price': 74678.5, 'quantity': 60, 'orders': 3}, {'price': 74678, 'quantity': 80, 'orders': 4}, {'price': 74677.5, 'quantity': 100, 'orders': 5}], 'sell': [{'price': 74680.5, 'quantity': 20, 'orders': 1}, {'price': 74681, 'quantity': 40, 'orders': 2}, {'price': 74681.5, 'quantity': 60, 'orders': 3}, {'price': 74682, 'quantity': 80, 'orders': 4}, {'price': 74682.5, 'quantity': 100, 'orders': 5}]}}}}}, '/charts/intraday': {'status': 'success', 'data': {'timestamp': [1789962300, 1789962600, 1789962900, 1789963200, 1789963500, 1789963800, 1789964100, 1789964400, 1789964700, 1789965000, 1789965300, 1789965600, 1789965900, 1789966200, 1789966500, 1789966800], 'open': [74659.15, 74721.7, 74725, 74750, 74750.3, 74736.9, 74725, 74734.15, 74743.45, 74743.45, 74725.5, 74689.15, 74719.95, 74673.75, 74705, 74680], 'high': [74734.65, 74755, 74750, 74780, 74775, 74736.9, 74739.9, 74754.3, 74743.45, 74743.45, 74725.5, 74725, 74719.95, 74705, 74705, 74680], 'low': [74594.2, 74700, 74699.75, 74750, 74725.3, 74723.5, 74725, 74734.15, 74743.45, 74720, 74683.45, 74689.15, 74666.6, 74673.75, 74655.7, 74662.35], 'close': [74721.7, 74725, 74750, 74750.3, 74736.9, 74725, 74734.15, 74743.45, 74743.45, 74725.5, 74689.15, 74719.95, 74673.75, 74705, 74680, 74667.55], 'volume': [820, 280, 340, 600, 160, 80, 60, 100, 20, 40, 400, 60, 320, 20, 140, 40]}}}, 'receipts': {'/optionchain': 1789967036615, '/marketfeed/quote': 1789967036616, '/optionchain/expirylist': 1789967036615, '/charts/intraday': 1789967036615}, 'strikes': [74500, 74600, 74700, 74800], 'futuresSecurityId': '844615', 'futuresExpiry': '2026-09-24', 'clockUtc': '2026-09-21T05:03:56.615000+00:00', 'expectedTable': '| Strike | Type | LTP | Breakout Above |\n|---|---|---|---|\n| 74500 | CE | 445.50 | 478 |\n| 74500 | PE | 287.35 | WEAK_LEVEL |\n| 74600 | CE | 388.35 | 419 |\n| 74600 | PE | 330.00 | WEAK_LEVEL |\n| 74700 | CE | 335.05 | 363 |\n| 74700 | PE | 376.90 | WEAK_LEVEL |\n| 74800 | CE | 286.75 | 312 |\n| 74800 | PE | 428.55 | WEAK_LEVEL |'}
 
 # ----------------------------------------------------------------------
@@ -2727,40 +2369,21 @@ POLL_S = 5                        # seconds between fast read-only price polls (
 LOT_SIZE = None                   # e.g. the SENSEX lot size, to report rupees (verify; never guessed)
 COST_PER_TRADE_RS = None          # brokerage + taxes per round trip, if you want net rupees
 
-# Names of the environment variables that hold your credentials. Set the
-# VALUES in the Dhan Cloud interface only, never in this file.
-ENV_CLIENT_ID = "DHAN_CLIENT_ID"
-ENV_ACCESS_TOKEN = "DHAN_ACCESS_TOKEN"
+# Credentials: Dhan Cloud fills these {{NAME}} placeholders from the strategy's
+# Env Variables (the program never reads the environment: Cloud blocks that).
+# Create Env Variables named DHAN_CLIENT_ID and DHAN_ACCESS_TOKEN in the Cloud
+# interface. NEVER replace the placeholders with real values in this file.
+CLIENT_ID = "{{DHAN_CLIENT_ID}}"
+ACCESS_TOKEN = "{{DHAN_ACCESS_TOKEN}}"
 # ============================================================================
 
-"""
-SENSEX read-only observation scanner for Dhan Cloud (Phase 6).
-
-READ-ONLY. This program contains no order, modify, cancel, exit, position,
-kill-switch, login or token-renewal code. Every Dhan request goes through an
-allow-list of 8 market-data/profile endpoints and is refused before any
-network access otherwise. It never makes a CE/PE decision: the direction
-thresholds are not configured (RULES.md §6).
-
-Edit ONLY the CONFIG block below, then run in this order:
-  1. MODE = "VALIDATE"    offline self-test on embedded, labelled MOCK data.
-                          No network, no credentials. Proves the code runs
-                          on this runtime and produces a log.
-  2. MODE = "LIVE_CHECK"  ONE live read-only scan (4 market-data calls).
-  3. MODE = "OBSERVE"     scan every INTERVAL_S seconds until STOP_TIME IST.
-
-Log lines start with "BX|" (one JSON object each). Replay records start with
-"BX|REC|". Download the log and decode it with tools/decode_cloud_log.py.
-"""
-import base64
 import gzip
 import json
-import os
 import sys
 import time as _bx_main__time
 from datetime import datetime, time as dtime, timezone
 PROGRAM = 'sensex-readonly-observer'
-VERSION = '6.1'
+VERSION = '6.2'
 EXIT_OK, EXIT_CONFIG, EXIT_AUTH, EXIT_SELFTEST = (0, 2, 3, 4)
 
 def _stdout_logger(redactor):
@@ -2770,7 +2393,6 @@ def _runtime(log):
     log('info', 'runtime', program=PROGRAM, version=VERSION, mode=MODE, python='%d.%d.%d' % tuple(sys.version_info[:3]), utc=datetime.now(timezone.utc).isoformat(timespec='seconds'), allowList=sorted(('%s %s' % k for k in READ_ONLY_ENDPOINTS)), orders='NONE (no order code present)')
 
 class _FixedTransport:
-    """Serves the embedded MOCK bodies; no network."""
 
     def __init__(self, bodies, receipts, default_ms):
         self.bodies, self.receipts, self.default_ms = (bodies, receipts, default_ms)
@@ -2782,8 +2404,6 @@ class _FixedTransport:
         return RawResponse(200, json.dumps(self.bodies[path]).encode(), {}, self.receipts.get(path, self.default_ms))
 
 def validate(log) -> int:
-    """Offline self-test: the bundled engine must reproduce the expected table
-    on the embedded MOCK snapshot (Stage A scenario s21Sep)."""
     st = SELFTEST
     t = _FixedTransport(st['bodies'], {k: int(v) for k, v in st['receipts'].items()}, int(st['receipts']['/optionchain']))
     sim = [0.0]
@@ -2803,12 +2423,10 @@ def validate(log) -> int:
     paper_ok = _paper_selftest()
     log('info' if paper_ok else 'error', 'paper_selftest', result='PASS' if paper_ok else 'FAIL', data='synthetic ticks (not market data)')
     ok = ok and paper_ok
-    cred_names = {n: n in os.environ for n in (ENV_CLIENT_ID, ENV_ACCESS_TOKEN)}
-    log('info', 'credential_names_present', **cred_names)
+    log('info', 'credential_placeholders', **_placeholder_status())
     return EXIT_OK if ok else EXIT_SELFTEST
 
 def _paper_selftest() -> bool:
-    """Synthetic crossing at 10:00 IST: one CE trade must hit take-profit, one PE trade stop-loss."""
     events = []
 
     class _Row:
@@ -2826,6 +2444,12 @@ def _paper_selftest() -> bool:
     out = [r['outcome'] for r in t.closed]
     return out == ['TAKE_PROFIT', 'STOP_LOSS'] and t.closed[0]['pnlPts'] == 6.0 and (t.closed[1]['pnlPts'] == -12.0)
 
+def _filled(value: str) -> bool:
+    return bool(value) and (not (value.startswith('{' + '{') and value.endswith('}' + '}')))
+
+def _placeholder_status() -> dict:
+    return {'DHAN_CLIENT_ID': 'filled' if _filled(CLIENT_ID) else 'NOT filled', 'DHAN_ACCESS_TOKEN': 'filled' if _filled(ACCESS_TOKEN) else 'NOT filled'}
+
 def _config_errors():
     errs = []
     if not STRIKES:
@@ -2839,10 +2463,9 @@ def _config_errors():
     return errs
 
 def _emit_record(scanner_rec, recorder, cfg, clock_utc, log_line):
-    """Chunked, gzip+base64 replay record: market-data bodies only."""
     payload = {'scanId': scanner_rec['scanId'], 'meta': {'strikes': cfg.strikes, 'futuresSecurityId': cfg.futures_security_id, 'futuresExpiry': cfg.futures_expiry, 'clockUtc': clock_utc}}
     payload.update(recorder.take())
-    blob = base64.b64encode(gzip.compress(json.dumps(payload).encode('utf-8'))).decode('ascii')
+    blob = gzip.compress(json.dumps(payload).encode('utf-8')).hex()
     parts = [blob[i:i + RECORD_CHUNK] for i in range(0, len(blob), RECORD_CHUNK)] or ['']
     for i, part in enumerate(parts, 1):
         log_line('BX|REC|%s|%d/%d|%s' % (scanner_rec['scanId'], i, len(parts), part))
@@ -2852,16 +2475,15 @@ def live(log, redactor, loop: bool) -> int:
     if errs:
         log('error', 'config_blocked', errors=errs)
         return EXIT_CONFIG
-    try:
-        creds = Credentials.from_environment({'DHAN_CLIENT_ID': os.environ.get(ENV_CLIENT_ID, ''), 'DHAN_ACCESS_TOKEN': os.environ.get(ENV_ACCESS_TOKEN, '')})
-    except AuthError:
-        log('error', 'credentials_missing', expected_names=[ENV_CLIENT_ID, ENV_ACCESS_TOKEN], present={n: n in os.environ for n in (ENV_CLIENT_ID, ENV_ACCESS_TOKEN)})
+    if not (_filled(CLIENT_ID) and _filled(ACCESS_TOKEN)):
+        log('error', 'credentials_missing', placeholders=_placeholder_status(), action='Create Env Variables DHAN_CLIENT_ID and DHAN_ACCESS_TOKEN in this strategy')
         return EXIT_AUTH
+    creds = Credentials(CLIENT_ID.strip(), ACCESS_TOKEN.strip())
     redactor.register(creds.access_token, creds.client_id)
     exp = creds.token_expiry_ms()
     now_ms = _bx_main__time.time() * 1000
     if exp is not None and exp <= now_ms:
-        log('error', 'token_expired', hours_ago=round((now_ms - exp) / 3600000.0, 2), action='Generate a new token in Dhan web and update the Cloud variable %s' % ENV_ACCESS_TOKEN)
+        log('error', 'token_expired', hours_ago=round((now_ms - exp) / 3600000.0, 2), action='Generate a new token in Dhan web and update the Cloud Env Variable DHAN_ACCESS_TOKEN')
         return EXIT_AUTH
     log('info', 'token_status', hours_left=None if exp is None else round((exp - now_ms) / 3600000.0, 2))
     recorder = MemoryRecorder(UrllibTransport())
@@ -2899,4 +2521,4 @@ def main() -> int:
     log('error', 'config_blocked', errors=['MODE must be VALIDATE, LIVE_CHECK or OBSERVE'])
     return EXIT_CONFIG
 if __name__ == '__main__':
-    sys.exit(main())
+    main()

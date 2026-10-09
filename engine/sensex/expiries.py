@@ -9,7 +9,7 @@ import re
 
 from .jscompat import iso_of
 
-_ISO = re.compile(r"\d{4}-\d{2}-\d{2}")
+_ISO = r"\d{4}-\d{2}-\d{2}"
 
 
 class ExpirySelectionError(Exception):
@@ -18,7 +18,7 @@ class ExpirySelectionError(Exception):
 
 def is_iso_date(v) -> bool:
     """A real calendar date in YYYY-MM-DD form (rejects 2026-02-30, 'N/A', 15-10-2026)."""
-    if not isinstance(v, str) or not _ISO.fullmatch(v):
+    if not isinstance(v, str) or not re.fullmatch(_ISO, v):
         return False
     from .jscompat import civil_ms
 

@@ -57,13 +57,8 @@ class InstrumentMapping:
     verified_from: str = ""  # where the header was verified (who/when/sample)
 
     @staticmethod
-    def load(path: str | None) -> "InstrumentMapping":
-        if not path:
-            raise MappingMissingError(
-                "No verified instrument-master mapping. Futures lookup is BLOCKED until the real "
-                "header is verified; pass --futures-security-id/--futures-expiry instead.")
-        with open(path, "r", encoding="utf-8") as f:
-            raw = json.load(f)
+    def from_dict(raw: dict) -> "InstrumentMapping":
+        """Validate a mapping already read from a VERIFIED file (sensex.localio.load_mapping reads it)."""
         m = InstrumentMapping(raw.get("columns") or {}, raw.get("values") or {}, raw.get("expiry_format") or "",
                               raw.get("verified_from") or "")
         missing = [c for c in REQUIRED_COLUMNS if not m.columns.get(c)] + \

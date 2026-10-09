@@ -270,7 +270,7 @@ class Recording(unittest.TestCase):
     def test_recorder_saves_market_data_only(self):
         import tempfile
         from pathlib import Path
-        from sensex.recording import RecordingTransport
+        from sensex.localio import RecordingTransport
         bodies, ref = load_scenario("s21Sep")
         bodies = dict(bodies, **{"/profile": {"status": "success", "data": {"dhanClientId": "1100999999"}}})
         with tempfile.TemporaryDirectory() as d:
