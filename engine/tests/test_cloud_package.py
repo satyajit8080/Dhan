@@ -409,6 +409,34 @@ class EndToEnd(unittest.TestCase):
         self.assertEqual([p for _, p in t.calls], ["/optionchain/expirylist", "/optionchain", "/marketfeed/quote",
                                                    "/charts/intraday", "/charts/intraday", "/charts/intraday"])
 
+    def test_profile_check_logs_plan_fields_but_never_the_client_id(self):
+        body = json.dumps({"dhanClientId": FAKE_CLIENT, "tokenValidity": "10/10/2026 22:00", "dataPlan": "Active",
+                           "dataValidity": "2026-12-31", "activeSegment": "Equity, Derivative"}).encode()
+        for loader in (load_single, load_multi):
+            code, text, t = run_main(loader(), mode="PROFILE_CHECK", env=self.env, script={"/profile": [(200, body)]})
+            self.assertEqual((code, [p for _, p in t.calls]), (0, ["/profile"]))
+            ev = [json.loads(l[3:]) for l in text.splitlines() if '"profile_check"' in l][0]
+            self.assertEqual((ev["dataPlan"], ev["dataValidity"]), ("Active", "2026-12-31"))
+            self.assertNotIn(FAKE_CLIENT, text)
+            self.assertNotIn(self.token, text)
+
+    def test_instruments_prints_real_header_and_sensex_future_rows(self):
+        lines = [b"COL_A,COL_B,COL_C\n", b"BSE,123,SENSEX-Oct2026-FUT\n", b"NSE,456,NIFTY-Oct2026-FUT\n",
+                 b"BSE,789,SENSEX-30OCT2026-80000-CE\n"]
+
+        class Resp:
+            def __enter__(self):
+                return iter(lines)
+
+            def __exit__(self, *a):
+                return False
+        for loader in (load_single, load_multi):
+            with mock.patch("urllib.request.urlopen", lambda req, timeout: Resp()):
+                code, text, t = run_main(loader(), mode="INSTRUMENTS", env={})
+            ev = [json.loads(l[3:]) for l in text.splitlines() if '"instrument_file"' in l][0]
+            self.assertEqual((code, ev["header"], ev["sensexFutureRows"], ev["rowsScanned"], t.calls),
+                             (0, "COL_A,COL_B,COL_C", ["BSE,123,SENSEX-Oct2026-FUT"], 3, []))
+
     def test_decoder_refuses_a_log_containing_a_token(self):
         events, records, bad, incomplete, secrets = decode_cloud_log.decode_lines(
             ['BX|{"event": "x", "m": "%s"}' % self.token])

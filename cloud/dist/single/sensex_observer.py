@@ -2357,7 +2357,7 @@ SELFTEST = {'note': 'MOCK DATA (Stage A s21Sep) - not market data', 'bodies': {'
 # ----------------------------------------------------------------------
 # ======================================================================
 # ============================== CONFIG ======================================
-MODE = "VALIDATE"                 # "VALIDATE" | "LIVE_CHECK" | "OBSERVE"
+MODE = "VALIDATE"                 # "VALIDATE" | "PROFILE_CHECK" | "INSTRUMENTS" | "LIVE_CHECK" | "OBSERVE"
 
 # Strikes shown in the refresh table. Explicit, because the ATM±2 rule is not
 # defined yet (PHASE4_PORT_PLAN P1). Each scan logs atmStrike to help you pick.
@@ -2398,10 +2398,11 @@ ACCESS_TOKEN = "{{ACCESS_TOKEN}}"
 import gzip
 import json
 import sys
+import urllib.request
 import time as _bx_main__time
 from datetime import datetime, time as dtime, timezone
 PROGRAM = 'sensex-readonly-observer'
-VERSION = '6.8'
+VERSION = '6.9'
 EXIT_OK, EXIT_CONFIG, EXIT_AUTH, EXIT_SELFTEST = (0, 2, 3, 4)
 
 def _stdout_logger(redactor):
@@ -2487,6 +2488,51 @@ def _emit_record(scanner_rec, recorder, cfg, clock_utc, log_line):
     parts = [blob[i:i + RECORD_CHUNK] for i in range(0, len(blob), RECORD_CHUNK)] or ['']
     for i, part in enumerate(parts, 1):
         log_line('BX|REC|%s|%d/%d|%s' % (scanner_rec['scanId'], i, len(parts), part))
+INSTRUMENT_FILE = 'https://images.dhan.co/api-data/api-scrip-master.csv'
+
+def instruments(log) -> int:
+    req = urllib.request.Request(INSTRUMENT_FILE, method='GET', headers={'User-Agent': 'sensex-readonly-observer'})
+    header, rows, total = (None, [], 0)
+    with urllib.request.urlopen(req, timeout=120) as resp:
+        for raw in resp:
+            text = raw.decode('utf-8', 'replace').rstrip('\r\n')
+            if header is None:
+                header = text
+                continue
+            total += 1
+            up = text.upper()
+            if 'SENSEX' in up and 'FUT' in up and (len(rows) < 20):
+                rows.append(text)
+    log('info', 'instrument_file', source=INSTRUMENT_FILE, header=header, rowsScanned=total, sensexFutureRows=rows, note='public data; verify the contract before use')
+    return EXIT_OK if header else EXIT_CONFIG
+
+def _managed_credentials(log, redactor):
+    if not (_filled(CLIENT_ID) and _filled(ACCESS_TOKEN)):
+        log('error', 'credentials_missing', placeholders=_placeholder_status(), action='Dhan Cloud did not substitute the two credential placeholders: check the account connection on the Cloud home screen')
+        return None
+    creds = Credentials(CLIENT_ID.strip(), ACCESS_TOKEN.strip())
+    redactor.register(creds.access_token, creds.client_id)
+    exp = creds.token_expiry_ms()
+    now_ms = _bx_main__time.time() * 1000
+    if exp is not None and exp <= now_ms:
+        log('error', 'token_expired', hours_ago=round((now_ms - exp) / 3600000.0, 2), action='The managed access token has expired: re-connect / refresh the Dhan account in Dhan Cloud')
+        return None
+    log('info', 'token_status', hours_left=None if exp is None else round((exp - now_ms) / 3600000.0, 2))
+    return creds
+
+def profile_check(log, redactor) -> int:
+    creds = _managed_credentials(log, redactor)
+    if creds is None:
+        return EXIT_AUTH
+    client = DhanClient(creds, transport=UrllibTransport(), redactor=redactor, logger=log)
+    try:
+        r = client.profile()
+    except DhanClientError as e:
+        log('error', 'profile_check_failed', error=type(e).__name__, errorCode=e.error_code, httpStatus=e.http_status)
+        return EXIT_AUTH
+    body = r.payload if isinstance(r.payload, dict) else {}
+    log('info', 'profile_check', ok=True, envelope=r.envelope, fieldsPresent=sorted(body.keys()), dataPlan=body.get('dataPlan'), dataValidity=body.get('dataValidity'), tokenValidity=body.get('tokenValidity'))
+    return EXIT_OK
 
 def live(log, redactor, loop: bool) -> int:
     errs = _config_errors()
@@ -2534,9 +2580,13 @@ def main() -> int:
     _runtime(log)
     if MODE == 'VALIDATE':
         return validate(log)
+    if MODE == 'PROFILE_CHECK':
+        return profile_check(log, redactor)
+    if MODE == 'INSTRUMENTS':
+        return instruments(log)
     if MODE in ('LIVE_CHECK', 'OBSERVE'):
         return live(log, redactor, loop=MODE == 'OBSERVE')
-    log('error', 'config_blocked', errors=['MODE must be VALIDATE, LIVE_CHECK or OBSERVE'])
+    log('error', 'config_blocked', errors=['MODE must be VALIDATE, PROFILE_CHECK, INSTRUMENTS, LIVE_CHECK or OBSERVE'])
     return EXIT_CONFIG
 if __name__ == '__main__':
     main()

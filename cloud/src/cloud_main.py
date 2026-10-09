@@ -11,6 +11,10 @@ Edit ONLY the CONFIG block below, then run in this order:
   1. MODE = "VALIDATE"    offline self-test on embedded, labelled MOCK data.
                           No network, no credentials. Proves the program runs
                           on this runtime and produces a log.
+  1b. MODE = "PROFILE_CHECK"  ONE read-only GET /profile: proves the managed
+                          token works; logs plan/validity fields, never ids.
+  1c. MODE = "INSTRUMENTS"    reads Dhan's PUBLIC instrument file and prints its
+                          header plus the SENSEX futures rows (no credentials).
   2. MODE = "LIVE_CHECK"  ONE live read-only scan (4 market-data calls).
   3. MODE = "OBSERVE"     scan every INTERVAL_S seconds until STOP_TIME IST.
 
@@ -20,7 +24,7 @@ tools/decode_cloud_log.py.
 """
 
 # ============================== CONFIG ======================================
-MODE = "VALIDATE"                 # "VALIDATE" | "LIVE_CHECK" | "OBSERVE"
+MODE = "VALIDATE"                 # "VALIDATE" | "PROFILE_CHECK" | "INSTRUMENTS" | "LIVE_CHECK" | "OBSERVE"
 
 # Strikes shown in the refresh table. Explicit, because the ATM±2 rule is not
 # defined yet (PHASE4_PORT_PLAN P1). Each scan logs atmStrike to help you pick.
@@ -61,10 +65,11 @@ ACCESS_TOKEN = "{{ACCESS_TOKEN}}"
 import gzip
 import json
 import sys
+import urllib.request
 import time
 from datetime import datetime, time as dtime, timezone
 
-from sensex.dhan_client import (AuthError, Credentials, DhanClient, Redactor, READ_ONLY_ENDPOINTS,
+from sensex.dhan_client import (AuthError, Credentials, DhanClient, DhanClientError, Redactor, READ_ONLY_ENDPOINTS,
                                 RawResponse, UrllibTransport)
 from sensex.fastpoll import FastPoller
 from sensex.paper import PaperConfig, PaperTracker
@@ -75,7 +80,7 @@ from sensex.session import IST
 from bx_selftest_data import SELFTEST
 
 PROGRAM = "sensex-readonly-observer"
-VERSION = "6.8"
+VERSION = "6.9"
 EXIT_OK, EXIT_CONFIG, EXIT_AUTH, EXIT_SELFTEST = 0, 2, 3, 4
 
 
@@ -187,6 +192,64 @@ def _emit_record(scanner_rec, recorder, cfg, clock_utc, log_line):
         log_line("BX|REC|%s|%d/%d|%s" % (scanner_rec["scanId"], i, len(parts), part))
 
 
+INSTRUMENT_FILE = "https://images.dhan.co/api-data/api-scrip-master.csv"   # public, no credentials
+
+
+def instruments(log) -> int:
+    """Print the real header of Dhan's public instrument file and its SENSEX futures rows, so the
+    futures contract and the column names come from Dhan's own data (never guessed)."""
+    req = urllib.request.Request(INSTRUMENT_FILE, method="GET", headers={"User-Agent": "sensex-readonly-observer"})
+    header, rows, total = None, [], 0
+    with urllib.request.urlopen(req, timeout=120) as resp:
+        for raw in resp:
+            text = raw.decode("utf-8", "replace").rstrip("\r\n")
+            if header is None:
+                header = text
+                continue
+            total += 1
+            up = text.upper()
+            if "SENSEX" in up and "FUT" in up and len(rows) < 20:
+                rows.append(text)
+    log("info", "instrument_file", source=INSTRUMENT_FILE, header=header, rowsScanned=total,
+        sensexFutureRows=rows, note="public data; verify the contract before use")
+    return EXIT_OK if header else EXIT_CONFIG
+
+
+def _managed_credentials(log, redactor):
+    if not (_filled(CLIENT_ID) and _filled(ACCESS_TOKEN)):
+        log("error", "credentials_missing", placeholders=_placeholder_status(),
+            action="Dhan Cloud did not substitute the two credential placeholders: check the account connection "
+                   "on the Cloud home screen")
+        return None
+    creds = Credentials(CLIENT_ID.strip(), ACCESS_TOKEN.strip())
+    redactor.register(creds.access_token, creds.client_id)
+    exp = creds.token_expiry_ms()
+    now_ms = time.time() * 1000
+    if exp is not None and exp <= now_ms:
+        log("error", "token_expired", hours_ago=round((now_ms - exp) / 3.6e6, 2),
+            action="The managed access token has expired: re-connect / refresh the Dhan account in Dhan Cloud")
+        return None
+    log("info", "token_status", hours_left=None if exp is None else round((exp - now_ms) / 3.6e6, 2))
+    return creds
+
+
+def profile_check(log, redactor) -> int:
+    creds = _managed_credentials(log, redactor)
+    if creds is None:
+        return EXIT_AUTH
+    client = DhanClient(creds, transport=UrllibTransport(), redactor=redactor, logger=log)
+    try:
+        r = client.profile()
+    except DhanClientError as e:
+        log("error", "profile_check_failed", error=type(e).__name__, errorCode=e.error_code, httpStatus=e.http_status)
+        return EXIT_AUTH
+    body = r.payload if isinstance(r.payload, dict) else {}
+    # Plan and validity only; never the client id or any personal field.
+    log("info", "profile_check", ok=True, envelope=r.envelope, fieldsPresent=sorted(body.keys()),
+        dataPlan=body.get("dataPlan"), dataValidity=body.get("dataValidity"), tokenValidity=body.get("tokenValidity"))
+    return EXIT_OK
+
+
 def live(log, redactor, loop: bool) -> int:
     errs = _config_errors()
     if errs:
@@ -248,9 +311,13 @@ def main() -> int:
     _runtime(log)
     if MODE == "VALIDATE":
         return validate(log)
+    if MODE == "PROFILE_CHECK":
+        return profile_check(log, redactor)
+    if MODE == "INSTRUMENTS":
+        return instruments(log)
     if MODE in ("LIVE_CHECK", "OBSERVE"):
         return live(log, redactor, loop=MODE == "OBSERVE")
-    log("error", "config_blocked", errors=["MODE must be VALIDATE, LIVE_CHECK or OBSERVE"])
+    log("error", "config_blocked", errors=["MODE must be VALIDATE, PROFILE_CHECK, INSTRUMENTS, LIVE_CHECK or OBSERVE"])
     return EXIT_CONFIG
 
 
