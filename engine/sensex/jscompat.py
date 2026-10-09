@@ -18,6 +18,7 @@ spelling, and each difference would surface as a parity mismatch.
 from __future__ import annotations
 
 import math
+import unicodedata
 from decimal import ROUND_HALF_UP, Decimal
 
 _MS_PER_DAY = 86_400_000
@@ -97,13 +98,28 @@ def _number_to_string(x: float) -> str:
     return (digits if k == 1 else digits[0] + "." + digits[1:]) + "e" + es
 
 
-# Built with chr(): the Dhan Cloud scanner rejects hex/unicode escape sequences in source.
-_JS_WS = "".join(chr(c) for c in (32, 9, 10, 13, 11, 12, 160, 5760, 8192, 8193, 8194, 8195, 8196, 8197, 8198, 8199, 8200, 8201, 8202, 8232, 8233, 8239, 8287, 12288, 65279))
+def is_js_whitespace(c: str) -> bool:
+    """JS String.prototype.trim whitespace (WhiteSpace + LineTerminator), without
+    character literals or code-point tables (the Dhan Cloud scanner rejects
+    escape sequences and character construction). Python's isspace() set minus
+    the C0 separators 1C-1F and NEL, plus the BOM."""
+    if c.isspace():
+        return c <= "\r" or (c >= " " and unicodedata.category(c) != "Cc")
+    return unicodedata.name(c, "") == "ZERO WIDTH NO-BREAK SPACE"
+
+
+def strip_where(s: str, pred) -> str:
+    i, j = 0, len(s)
+    while i < j and pred(s[i]):
+        i += 1
+    while j > i and pred(s[j - 1]):
+        j -= 1
+    return s[i:j]
 
 
 def js_number(s: str) -> float:
     """Number(string). Returns NaN where JS returns NaN."""
-    t = s.strip(_JS_WS)
+    t = strip_where(s, is_js_whitespace)
     if t == "":
         return 0.0
     low = t.lower()

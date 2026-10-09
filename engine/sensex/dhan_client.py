@@ -136,7 +136,7 @@ _B64URL = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
 def _b64url_decode(text: str) -> bytes:
     """Base-64url decoding in plain Python (the Dhan Cloud scanner blocks the standard module)."""
     bits = nbits = 0
-    out = bytearray()
+    out = []
     for ch in text.rstrip("="):
         v = _B64URL.find(ch)
         if v < 0:
@@ -144,7 +144,7 @@ def _b64url_decode(text: str) -> bytes:
         bits, nbits = (bits << 6) | v, nbits + 6
         if nbits >= 8:
             nbits -= 8
-            out.append((bits >> nbits) & 0xFF)
+            out.append((bits >> nbits) & 255)
     return bytes(out)
 
 

@@ -75,7 +75,7 @@ from sensex.session import IST
 from bx_selftest_data import SELFTEST
 
 PROGRAM = "sensex-readonly-observer"
-VERSION = "6.2"
+VERSION = "6.3"
 EXIT_OK, EXIT_CONFIG, EXIT_AUTH, EXIT_SELFTEST = 0, 2, 3, 4
 
 

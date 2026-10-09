@@ -184,7 +184,9 @@ FORBIDDEN_MODULES = ("subprocess", "socket", "importlib", "pickle", "marshal", "
                      "platform", "os", "pathlib", "base64", "code")
 # Patterns the Dhan Cloud scanner reported as blocked on 9 Oct 2026 (Security Violation [CRITICAL]).
 BLOCKED_TEXT = [r"\bpathlib\b", r"compile\(", r"os\.environ", r"\bbase64\b", r"sys\.exit\(", r"\\x",
-                r"getattr\(", r"os\.getenv", r"os\.path", r"(?<![A-Za-z_.])open\(", r"\\u[0-9a-fA-F]{4}"]   # Dhan Cloud scanner: "querying host platform/OS details is not allowed" (9 Oct 2026)
+                r"getattr\(", r"os\.getenv", r"os\.path", r"(?<![A-Za-z_.])open\(", r"\\u[0-9a-fA-F]{4}",
+                # second Cloud scan (9 Oct 2026 22:17): chr( and bytearray( blocked; "import code" suspected = `types`
+                r"(?<![A-Za-z_.])chr\(", r"bytearray\(", r"^\s*import types\b", r"^\s*from types\b"]   # Dhan Cloud scanner: "querying host platform/OS details is not allowed" (9 Oct 2026)
 HOST_QUERIES = {("sys", "platform"), ("sys", "implementation"), ("sys", "executable"), ("sys", "version"),
                 ("os", "uname"), ("os", "name"), ("os", "listdir"), ("os", "getcwd"), ("os", "cpu_count")}
 
@@ -217,7 +219,7 @@ class Safety(unittest.TestCase):
         for f in [SINGLE] + sorted(MULTI.glob("*.py")):
             text = f.read_text()
             for pat in BLOCKED_TEXT:
-                m = re.search(pat, text)
+                m = re.search(pat, text, re.M)
                 self.assertIsNone(m, "%s contains blocked pattern %s: %r" % (f.name, pat, m and text[max(0, m.start() - 40):m.end() + 20]))
 
     def test_every_request_site_is_on_the_allow_list(self):

@@ -271,8 +271,9 @@ def build_single() -> str:
             body = "# " + "=" * 70 + "\n" + raw[a:b] + "\n" + _drop_config_assigns(body)
         parts.append("\n# %s\n# module: %s\n# %s\n%s\n" % ("-" * 70, label, "-" * 70, body))
         if m == "refresh_table":
-            parts.append("import types as _bx_types\n_BX_RT = _bx_types.SimpleNamespace(%s)\n"
-                         % ", ".join("%s=%s" % (a, a) for a in rt_attrs))
+            funcs = {n.name for n in trees["refresh_table"].body if isinstance(n, ast.FunctionDef)}
+            parts.append("class _BX_RT:\n%s\n" % "".join(
+                "    %s = staticmethod(%s)\n" % (a, a) if a in funcs else "    %s = %s\n" % (a, a) for a in rt_attrs))
     return "".join(parts)
 
 

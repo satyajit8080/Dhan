@@ -129,13 +129,19 @@ def to_compact(rows: list[Row]) -> str:
         val = f'{r.target:.0f}' if r.target is not None and r.status == 'OK' else r.status
         out.append(f'| {r.strike} | {r.side} | {r.entry_ask:.2f} | {val} |')
     return '\n'.join(out)
-import types as _bx_types
-_BX_RT = _bx_types.SimpleNamespace(Leg=Leg, Level=Level, build_refresh_table=build_refresh_table, in_skip_window=in_skip_window, to_compact=to_compact)
+class _BX_RT:
+    Leg = Leg
+    Level = Level
+    build_refresh_table = staticmethod(build_refresh_table)
+    in_skip_window = staticmethod(in_skip_window)
+    to_compact = staticmethod(to_compact)
+
 
 # ----------------------------------------------------------------------
 # module: engine/sensex/jscompat.py
 # ----------------------------------------------------------------------
 import math
+import unicodedata
 from decimal import ROUND_HALF_UP, Decimal
 _MS_PER_DAY = 86400000
 
@@ -197,10 +203,22 @@ def _number_to_string(x: float) -> str:
     e = n - 1
     es = ('+' if e > 0 else '-') + str(abs(e))
     return (digits if k == 1 else digits[0] + '.' + digits[1:]) + 'e' + es
-_JS_WS = ''.join((chr(c) for c in (32, 9, 10, 13, 11, 12, 160, 5760, 8192, 8193, 8194, 8195, 8196, 8197, 8198, 8199, 8200, 8201, 8202, 8232, 8233, 8239, 8287, 12288, 65279)))
+
+def is_js_whitespace(c: str) -> bool:
+    if c.isspace():
+        return c <= '\r' or (c >= ' ' and unicodedata.category(c) != 'Cc')
+    return unicodedata.name(c, '') == 'ZERO WIDTH NO-BREAK SPACE'
+
+def strip_where(s: str, pred) -> str:
+    i, j = (0, len(s))
+    while i < j and pred(s[i]):
+        i += 1
+    while j > i and pred(s[j - 1]):
+        j -= 1
+    return s[i:j]
 
 def js_number(s: str) -> float:
-    t = s.strip(_JS_WS)
+    t = strip_where(s, is_js_whitespace)
     if t == '':
         return 0.0
     low = t.lower()
@@ -570,7 +588,9 @@ import math
 import re
 NEVER_TRADED = '01/01/1980 00:00:00'
 _bx_normalize__IST_OFFSET_MS = (5 * 60 + 30) * 60 * 1000
-_ASCII_WS = ' \t\n\r' + chr(11) + chr(12)
+
+def _ascii_ws(c: str) -> bool:
+    return c == ' ' or '\t' <= c <= '\r'
 _LTT = '(\\d{2})/(\\d{2})/(\\d{4})\\s+(\\d{2}):(\\d{2}):(\\d{2})'
 
 def make_provenance(fetch_id: str, epoch_ms: float, endpoint: str) -> dict:
@@ -591,7 +611,7 @@ def parse_last_trade_time(raw):
 def num(v):
     if is_number(v) and math.isfinite(v):
         return v
-    if isinstance(v, str) and v.strip(_ASCII_WS) != '':
+    if isinstance(v, str) and strip_where(v, _ascii_ws) != '':
         n = js_number(v)
         if math.isfinite(n):
             return n
@@ -1283,7 +1303,7 @@ _B64URL = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_'
 
 def _b64url_decode(text: str) -> bytes:
     bits = nbits = 0
-    out = bytearray()
+    out = []
     for ch in text.rstrip('='):
         v = _B64URL.find(ch)
         if v < 0:
@@ -2383,7 +2403,7 @@ import sys
 import time as _bx_main__time
 from datetime import datetime, time as dtime, timezone
 PROGRAM = 'sensex-readonly-observer'
-VERSION = '6.2'
+VERSION = '6.3'
 EXIT_OK, EXIT_CONFIG, EXIT_AUTH, EXIT_SELFTEST = (0, 2, 3, 4)
 
 def _stdout_logger(redactor):

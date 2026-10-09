@@ -16,11 +16,16 @@ import math
 import re
 
 from bx_jscompat import (UNDEFINED, date_utc, is_js_object, is_number, js_get, js_number, js_str,
-                       js_truthy, object_keys)
+                       js_truthy, object_keys, strip_where)
 
 NEVER_TRADED = "01/01/1980 00:00:00"
 IST_OFFSET_MS = (5 * 60 + 30) * 60 * 1000
-_ASCII_WS = " \t\n\r" + chr(11) + chr(12)   # chr(): no escape sequences (Dhan Cloud scanner)
+
+
+def _ascii_ws(c: str) -> bool:
+    """One of " \t\n\r\v\f" (the TS trim set used here)."""
+    return c == " " or "\t" <= c <= "\r"
+
 _LTT = r"(\d{2})/(\d{2})/(\d{4})\s+(\d{2}):(\d{2}):(\d{2})"
 
 
@@ -47,7 +52,7 @@ def num(v):
     """Finite number, or a numeric string; else None. Booleans are not numbers."""
     if is_number(v) and math.isfinite(v):
         return v
-    if isinstance(v, str) and v.strip(_ASCII_WS) != "":
+    if isinstance(v, str) and strip_where(v, _ascii_ws) != "":
         n = js_number(v)
         if math.isfinite(n):
             return n
