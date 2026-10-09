@@ -76,14 +76,20 @@ def ns(bundle):
 
 
 class Transport:
-    def __init__(self, raw_cls, bodies, receipts, default_ms, script=None):
+    def __init__(self, raw_cls, bodies, receipts, default_ms, script=None, poll_fn=None):
         self.raw, self.bodies, self.receipts, self.default_ms = raw_cls, bodies, receipts, default_ms
         self.script = {k: list(v) for k, v in (script or {}).items()}
         self.calls = []
+        self.poll_fn, self.polls = poll_fn, 0
 
     def send(self, method, url, headers, body, timeout):
         path = url.split("/v2", 1)[1]
         self.calls.append((method, path))
+        req = json.loads(body) if body else None
+        if self.poll_fn and path == "/marketfeed/quote" and "IDX_I" in (req or {}):
+            self.polls += 1
+            return self.raw(200, json.dumps({"status": "success", "data": self.poll_fn(self.polls, req)}).encode(),
+                            {}, self.default_ms + self.polls * 5000)
         if self.script.get(path):
             status, b = self.script[path].pop(0)
             return self.raw(status, b, {}, self.default_ms)
@@ -231,12 +237,12 @@ class Safety(unittest.TestCase):
                     self.assertNotRegex(n.value, r"eyJ[A-Za-z0-9_-]{10,}\.", label)
 
 
-def run_main(bundle, *, mode, env, clock_start=None, script=None, cfg=None):
+def run_main(bundle, *, mode, env, clock_start=None, script=None, cfg=None, poll_fn=None):
     """Run the Cloud entry with a fake transport, simulated clock and limiter."""
     n = ns(bundle)
     b, ref = load_scenario("s21Sep")
     receipts = {"/optionchain": ref["receipts"]["chainMs"], "/marketfeed/quote": ref["receipts"]["futuresMs"]}
-    t = Transport(n.RawResponse, b, receipts, ref["receipts"]["chainMs"], script=script)
+    t = Transport(n.RawResponse, b, receipts, ref["receipts"]["chainMs"], script=script, poll_fn=poll_fn)
     now = [clock_start or datetime.fromtimestamp(ref["receipts"]["chainMs"] / 1000, timezone.utc)]
     real_scanner, real_client = n.Scanner, n.DhanClient
     sim = [0.0]
@@ -306,6 +312,30 @@ class EndToEnd(unittest.TestCase):
                       "## 3. Strategy-rule effectiveness", "NOT_CONFIGURED", "orders placed: **0**"):
                 self.assertIn(h, report)
 
+    def test_paper_trades_flow_from_cloud_entry_to_report(self):
+        """Index crosses the CE trigger (74725) on poll 2; every configured CE leg then bids +6.5 over its entry ask."""
+        def poll(n, req):
+            legs = {str(i): {"last_price": 1, "depth": {"buy": [{"price": 100.0 if n <= 2 else 107.5, "quantity": 1,
+                                                                 "orders": 1}],
+                                                         "sell": [{"price": 101.0 if n <= 2 else 108.0, "quantity": 1,
+                                                                   "orders": 1}]}} for i in req.get("BSE_FNO", [])}
+            return {"IDX_I": {"51": {"last_price": 74700.0 if n == 1 else 74730.0}}, "BSE_FNO": legs}
+        for loader in (load_single, load_multi):
+            code, text, t = run_main(loader(), mode="OBSERVE", env=self.env, poll_fn=poll)
+            self.assertEqual(code, 0, text[-1500:])
+            events, records, bad, incomplete, secrets = decode_cloud_log.decode_lines(text.splitlines())
+            self.assertEqual((bad, secrets), ([], []))
+            exits = [e for e in events if e["event"] == "paper_exit"]
+            self.assertEqual(len(exits), 4, loader.__name__)              # 4 CE strikes, PE rows are WEAK_LEVEL
+            self.assertEqual({(e["outcome"], e["pnlPts"]) for e in exits}, {("TAKE_PROFIT", 6.5)})
+            summary = [e for e in events if e["event"] == "paper_summary"][0]
+            self.assertEqual((summary["trades"], summary["winRateTpVsSl"]), (4, 1.0))
+            report = summarize_observation.summarize(events)
+            self.assertIn("### PAPER trades", report)
+            self.assertIn("TAKE_PROFIT 4", report)
+            self.assertNotIn(self.token, text)
+            self.assertEqual(t.polls, 132)                                 # 11 polls in each of the 12 60-s waits
+
     def test_auth_failure_stops_and_leaks_nothing(self):
         echo = json.dumps({"errorCode": "DH-901", "errorMessage": "bad token " + self.token}).encode()
         code, text, _ = run_main(load_single(), mode="OBSERVE", env=self.env,
@@ -333,7 +363,9 @@ class EndToEnd(unittest.TestCase):
         code, text, t = run_main(load_multi(), mode="LIVE_CHECK", env=self.env)
         self.assertEqual(code, 0)
         self.assertEqual(len([l for l in text.splitlines() if '"event": "scan"' in l]), 1)
-        self.assertEqual(len(t.calls), 4)
+        # 4 snapshot calls + 1-min futures and 1-min index candles (EXTRA_SERIES); no paper polls in LIVE_CHECK
+        self.assertEqual([p for _, p in t.calls], ["/optionchain/expirylist", "/optionchain", "/marketfeed/quote",
+                                                   "/charts/intraday", "/charts/intraday", "/charts/intraday"])
 
     def test_decoder_refuses_a_log_containing_a_token(self):
         events, records, bad, incomplete, secrets = decode_cloud_log.decode_lines(

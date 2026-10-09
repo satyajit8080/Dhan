@@ -37,6 +37,17 @@ RECORD_EVERY_N = 15               # replay record every N scans (plus every non-
 RECORD_CHUNK = 3000               # characters per replay-record log line
 LEG_BAND = 5                      # strikes either side of ATM logged with IV/Greeks/OI/bid-ask
                                   # (lower it if decode_cloud_log reports truncated lines)
+EXTRA_SERIES = True               # 1-min index + 1-min futures candles: VWAP, volume, 1-min close facts
+
+# PAPER tracker (NO orders): when the index crosses an OK refresh-table trigger,
+# record a virtual entry at the option ASK and follow the BID until one exit hits.
+PAPER_ENABLED = True
+PAPER_TAKE_PROFIT_PTS = 6         # your rule (9 Oct 2026), option premium points
+PAPER_STOP_LOSS_PTS = 11          # your rule (9 Oct 2026), option premium points
+PAPER_TIME_STOP_MIN = 10          # RULES.md §6 time stop
+POLL_S = 5                        # seconds between fast read-only price polls (min 2)
+LOT_SIZE = None                   # e.g. the SENSEX lot size, to report rupees (verify; never guessed)
+COST_PER_TRADE_RS = None          # brokerage + taxes per round trip, if you want net rupees
 
 # Names of the environment variables that hold your credentials. Set the
 # VALUES in the Dhan Cloud interface only, never in this file.
@@ -54,13 +65,16 @@ from datetime import datetime, time as dtime, timezone
 
 from sensex.dhan_client import (AuthError, Credentials, DhanClient, Redactor, READ_ONLY_ENDPOINTS,
                                 RawResponse, UrllibTransport)
+from sensex.fastpoll import FastPoller
+from sensex.paper import PaperConfig, PaperTracker
+from sensex.scan import in_no_trade_window
 from sensex.recording import MemoryRecorder
 from sensex.scanner import JsonLogger, Scanner, ScannerConfig
 from sensex.session import IST
 from bx_selftest_data import SELFTEST
 
 PROGRAM = "sensex-readonly-observer"
-VERSION = "6.0"
+VERSION = "6.1"
 EXIT_OK, EXIT_CONFIG, EXIT_AUTH, EXIT_SELFTEST = 0, 2, 3, 4
 
 
@@ -110,9 +124,33 @@ def validate(log) -> int:
     log("info" if ok else "error", "selftest", data="MOCK (embedded Stage A s21Sep; not market data)",
         result="PASS" if ok else "FAIL", status=rec["status"], table=rec["table"],
         observationKeys=sorted(rec.get("observation", {}).keys()))
+    paper_ok = _paper_selftest()
+    log("info" if paper_ok else "error", "paper_selftest", result="PASS" if paper_ok else "FAIL",
+        data="synthetic ticks (not market data)")
+    ok = ok and paper_ok
     cred_names = {n: (n in os.environ) for n in (ENV_CLIENT_ID, ENV_ACCESS_TOKEN)}
     log("info", "credential_names_present", **cred_names)   # names and presence only, never values
     return EXIT_OK if ok else EXIT_SELFTEST
+
+
+def _paper_selftest() -> bool:
+    """Synthetic crossing at 10:00 IST: one CE trade must hit take-profit, one PE trade stop-loss."""
+    events = []
+
+    class _Row:
+        def __init__(self, strike, side, trigger):
+            self.strike, self.side, self.trigger, self.status = strike, side, trigger, "OK"
+    t = PaperTracker(PaperConfig(take_profit_pts=6, stop_loss_pts=11), lambda *a, **k: events.append((a, k)),
+                     in_no_trade_window)
+    t.arm([_Row(100.0, "CE", 1000.0), _Row(100.0, "PE", 990.0)], {(100.0, "CE"): "1", (100.0, "PE"): "2"}, True)
+    base = int(datetime(2026, 9, 21, 4, 30, tzinfo=timezone.utc).timestamp() * 1000)   # 10:00 IST
+    t.on_tick(base, 995.0, {"1": (49.0, 50.0), "2": (59.0, 60.0)})
+    t.on_tick(base + 5000, 1001.0, {"1": (49.5, 50.0), "2": (58.0, 59.0)})       # CE crosses: entry ask 50
+    t.on_tick(base + 10000, 1004.0, {"1": (56.0, 56.5), "2": (55.0, 56.0)})      # bid 56 = +6 -> TP
+    t.on_tick(base + 15000, 989.0, {"1": (40.0, 41.0), "2": (70.0, 71.0)})       # PE crosses: entry ask 71
+    t.on_tick(base + 20000, 999.0, {"1": (50.0, 51.0), "2": (59.0, 60.0)})       # bid 59 = -12 -> SL
+    out = [r["outcome"] for r in t.closed]
+    return out == ["TAKE_PROFIT", "STOP_LOSS"] and t.closed[0]["pnlPts"] == 6.0 and t.closed[1]["pnlPts"] == -12.0
 
 
 def _config_errors():
@@ -123,6 +161,8 @@ def _config_errors():
         errs.append("FUTURES_SECURITY_ID / FUTURES_EXPIRY not set (automatic lookup is BLOCKED)")
     if INTERVAL_S < 10:
         errs.append("INTERVAL_S must be >= 10")
+    if PAPER_ENABLED and POLL_S < 2:
+        errs.append("POLL_S must be >= 2 (quote endpoint limit is 1 request per second)")
     return errs
 
 
@@ -165,8 +205,14 @@ def live(log, redactor, loop: bool) -> int:
     cfg = ScannerConfig(strikes=[float(s) for s in STRIKES], interval_s=float(INTERVAL_S), stop_time=dtime(hh, mm),
                         holidays=frozenset(HOLIDAYS), futures_security_id=str(FUTURES_SECURITY_ID),
                         futures_expiry=FUTURES_EXPIRY, max_scans=None if loop else 1,
-                        observe_leg_band=int(LEG_BAND))
+                        observe_leg_band=int(LEG_BAND), extra_series=bool(EXTRA_SERIES), poll_s=float(POLL_S))
     scanner = Scanner(client, cfg, log)
+    if PAPER_ENABLED and loop:
+        tracker = PaperTracker(PaperConfig(take_profit_pts=float(PAPER_TAKE_PROFIT_PTS),
+                                           stop_loss_pts=float(PAPER_STOP_LOSS_PTS),
+                                           time_stop_s=float(PAPER_TIME_STOP_MIN) * 60, lot_size=LOT_SIZE,
+                                           cost_per_trade_rs=COST_PER_TRADE_RS), log, in_no_trade_window)
+        scanner.poller = FastPoller(client, tracker, log, cfg.strikes)
 
     def line(text):
         sys.stdout.write(redactor(text) + "\n")

@@ -62,6 +62,10 @@ In `single/sensex_observer.py`, search for `CONFIG`.
 | `HOLIDAYS` | Exchange holidays you maintain | None are invented. On an unlisted holiday you get `NO_CANDLES` and `DUPLICATE_SNAPSHOT` warnings |
 | `RECORD_EVERY_N` | `15` | Replay record on scan 1, every 15th scan, and every non-OK scan |
 | `RECORD_CHUNK`, `LEG_BAND` | `3000`, `5` | Lower these if the decoder reports truncated lines |
+| `EXTRA_SERIES` | `True` | Also fetch 1-min futures candles (session VWAP, volume vs previous-10 average) and 1-min index candles (close beyond trigger, next bar holds). Observation only (D1–D3 undecided) |
+| `PAPER_ENABLED`, `PAPER_TAKE_PROFIT_PTS`, `PAPER_STOP_LOSS_PTS`, `PAPER_TIME_STOP_MIN` | `True`, `6`, `11`, `10` | **PAPER tracker, no orders.** Your exit rule (9 Oct 2026), taken as **option premium points** (to be confirmed); time stop from RULES.md §6. RULES.md itself is unchanged until you confirm. Entry = the index CROSSING an OK refresh-table trigger outside the no-trade windows, once per trigger per session, for each configured strike of that side; fill at the ASK, exits judged on the BID |
+| `POLL_S` | `5` | Fast read-only `/marketfeed/quote` poll (index + configured legs) between scans, so crossings and +6/−11 are seen within ~5 s. Min 2 |
+| `LOT_SIZE`, `COST_PER_TRADE_RS` | `None` | Fill in to get rupees (gross / net of your cost figure). Never guessed |
 | `ENV_CLIENT_ID`, `ENV_ACCESS_TOKEN` | `"DHAN_CLIENT_ID"`, `"DHAN_ACCESS_TOKEN"` | **Names** only. The values go into the Cloud variables UI, never into the file |
 
 ## 3. Exact steps (you perform them in the official Dhan Cloud interface)
@@ -164,6 +168,8 @@ Follow `docs/PHASE3_CLOUD_CHECKLIST.md` C5–C6 (dummy variable `PROBE_MARKER=he
 | `scan` → `observation` (continued) | Strategy outputs: `levels` (breakout/breakdown, ATR, every level with touches and sources, diagnostics); `legs` (±`LEG_BAND` strikes: bid/ask/qty, spread %, OI, OI change, volume, IV, delta, gamma, theta/day, vega, vendor IV for diagnosis only); `refreshRows`; `conditions` (each rule and its outcome); `skipped` (reasons); `strategy: NO_SIGNAL / NOT_CONFIGURED`; `durationMs`; `nextScanIst` |
 | `request_retry`, `request_failed` | Path, attempt, error class, Dhan error code, wait |
 | `BX|REC|<scanId>|i/n|…` | gzip+base64 replay record: the 4 market-data response bodies, receipt times, strikes, contract and clock. No headers, no credentials, no `/profile` |
+| `paper_entry` / `paper_exit` / `paper_skip` / `paper_summary` | PAPER trades: trigger, index at crossing, entry ask/bid, spread, TP/SL levels; outcome (TAKE_PROFIT / STOP_LOSS / TIME_STOP / SESSION_END), exit bid, P&L points, held seconds, best/worst excursion, bid path; win rate vs the 64.7 % break-even |
+| `scan` → `observation.futuresFlow`, `oneMinuteIndex` | Futures day volume, exchange average price, session VWAP (1-min, same formula as the TS plugin), last bar volume vs previous-10 average; last three 1-min index bars and close vs breakout/breakdown |
 | `session_summary` | Stop reason, scan count, status counts, `ordersPlaced: 0` |
 
 ## 5. Downloading and reviewing logs

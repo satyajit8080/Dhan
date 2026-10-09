@@ -64,6 +64,12 @@ separate. Record facts; do not propose thresholds.
 | Levels reached by the index (time) | | Scan granularity, not tick |
 | Projected premium at trigger vs observed ask after crossing | | Indicative only; overshoot between scans |
 | Excluded table legs (reason) | | Strike not in chain / no IV |
+| PAPER trades (TP +6 / SL −11 premium pts, time stop 10 min): count by outcome | | No orders; entry at ask, exit at bid |
+| PAPER win rate TP vs SL (break-even 64.7 % before charges) | | |
+| PAPER total / average points; median time to TP and to SL | | |
+| Entry spread p50 / max | | Cost already inside the result |
+| Futures rel. volume vs previous 10 bars (p50 / p90); futures − VWAP | | Input to D3 |
+| 1-min closes beyond trigger, with next bar holding | | Input to D1 / D2 |
 | Was `STRIKES` near `atmStrike` all session? | | Input to your ATM±2 decision (P1) |
 
 ## Gaps found

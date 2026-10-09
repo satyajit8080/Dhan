@@ -58,7 +58,7 @@ string. Never share the token or the raw Cloud UI.
 |---|---|---|
 | **1. Data retrieval** | Did Dhan return complete, fresh, well-formed data, and did the client handle failures correctly? | Per-endpoint success/retry/duration and envelope shape (settles the `/charts` and `/marketfeed` envelope question); chain completeness; skew and ages; warnings; errors |
 | **2. Calculation** | Given that data, did Python compute exactly what the TypeScript plugin computes? | TS/Python replay on recorded scans (bit-level comparator, tolerance 1e-9); gate numbers; IV coverage; our IV vs vendor IV (diagnostic only) |
-| **3. Strategy rules** | What did the existing rules do with correct data? | Gate decisions; level availability and crossings; row-status distribution by session window; projected vs observed premium at trigger (indicative only); CE/PE **NOT_CONFIGURED** |
+| **3. Strategy rules** (incl. PAPER 6/11) | What did the existing rules do with correct data, and how would TP +6 / SL −11 have fared on trigger crossings? | Gate decisions; level availability and crossings; row-status distribution by session window; projected vs observed premium at trigger (indicative only); CE/PE **NOT_CONFIGURED** |
 
 A failure in category 1 is never counted against category 2 or 3. A category 3
 observation is never turned into a threshold here. Thresholds are your

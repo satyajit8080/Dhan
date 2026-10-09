@@ -124,3 +124,9 @@ def run_refresh(scan: dict, now):
         snapshot_ms=scan["snapshotMs"], candles_ms=scan["candlesMs"], now=now,
     )
     return rows, rt.to_compact(rows)
+
+
+def in_no_trade_window(now) -> bool:
+    """RULES.md §5 no-trade windows, from the existing refresh_table (unchanged)."""
+    import bx_refresh_table as rt
+    return rt.in_skip_window(now)

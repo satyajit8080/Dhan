@@ -71,6 +71,8 @@ class ScannerConfig:
     min_interval_s: float = 10.0
     observe: bool = True                       # attach the Phase-6 observation record to each scan
     observe_leg_band: int = 5                  # strikes either side of ATM logged with IV/Greeks/OI/bid-ask
+    extra_series: bool = False                 # also fetch 1-min index + 1-min futures candles (VWAP/volume facts)
+    poll_s: float = 5.0                        # fast read-only poll between scans when a poller is attached
 
 
 @dataclass
@@ -92,6 +94,7 @@ class Scanner:
         self.sleep = sleep
         self.state = ScanState()
         self.stop_event = threading.Event()
+        self.poller = None   # optional FastPoller (paper tracker); read-only
 
     # ----------------------------------------------------------------- one scan
     def _future(self, option_expiry: date, today: date):
@@ -129,6 +132,8 @@ class Scanner:
         finally:
             if hasattr(self.client, "on_call"):
                 self.client.on_call = None
+        if self.poller is not None and rec["status"] not in ("AUTH_FAILED", "PLAN_MISSING"):
+            self.poller.after_scan(rec, detail, rows)
         if self.cfg.observe:
             dur = (self.clock() - now).total_seconds() * 1000
             nxt = None
@@ -205,6 +210,9 @@ class Scanner:
         if not candles:
             rec["warnings"].append("NO_CANDLES: no index candles for today (holiday, pre-open, or feed issue); "
                                    "levels cannot be derived")
+        if self.cfg.extra_series:
+            detail["fut1m"] = self._optional_candles(rec, fut.security_id, FUT_SEG, "FUTIDX", day, "FUT_1M")
+            detail["idx1m"] = self._optional_candles(rec, str(SENSEX_SCRIP), SENSEX_SEG, "INDEX", day, "INDEX_1M")
 
         scan = build_scan(raw_chain=chain.payload, raw_futures=raw_fut, candles=candles, expiry=expiry,
                           strikes=self.cfg.strikes, chain_received_ms=chain.received_at_ms,
@@ -220,6 +228,18 @@ class Scanner:
         else:
             rec["reason"] = " | ".join(scan.get("reasons", []))
         return rows
+
+    def _optional_candles(self, rec, security_id, segment, instrument, day, label):
+        """1-minute series for observation only: failure is a warning, never a scan failure."""
+        try:
+            r = self.client.intraday_candles(str(security_id), segment, instrument, 1, day + " 09:15:00", day + " 15:30:00")
+            validate_candles(r.payload)
+            return to_candles(r.payload)
+        except (AuthError, PlanError):
+            raise
+        except (DhanClientError, DataValidationError) as e:
+            rec["warnings"].append("%s_UNAVAILABLE: %s" % (label, type(e).__name__))
+            return []
 
     def _finish(self, rec: dict) -> dict:
         rec["finishedIst"] = self.clock().astimezone(IST).isoformat(timespec="seconds")
@@ -253,10 +273,22 @@ class Scanner:
                 self.state.stop_reason = "MAX_SCANS"
                 break
             remaining = self.cfg.interval_s - (self.clock() - tick).total_seconds()
+            last_poll = self.clock()
             while remaining > 0 and not self.stop_event.is_set():   # sleep in slices: Ctrl-C is prompt
                 step = min(1.0, remaining)
                 self.sleep(step)
                 remaining -= step
+                if self.poller is not None and remaining > 1.0 and \
+                        (self.clock() - last_poll).total_seconds() >= self.cfg.poll_s:
+                    t0 = self.clock()
+                    if not self.poller.tick():
+                        self.state.stop_reason = "AUTH_FAILED"
+                        self.stop_event.set()
+                    last_poll = self.clock()
+                    remaining -= (last_poll - t0).total_seconds()
+        if self.poller is not None:
+            self.poller.tracker.close_all(int(self.clock().timestamp() * 1000))
+            self.log("info", "paper_summary", **self.poller.tracker.summary())
         reason = self.state.stop_reason or "STOPPED"
         self.log("info", "scanner_stop", reason=reason, scans=self.state.scans, statuses=self.state.history)
         return reason

@@ -15,6 +15,7 @@ from __future__ import annotations
 import math
 
 from bx_jscompat import is_number
+from bx_levels import ist_time_of, session_vwap
 
 STRATEGY_VERDICT = {
     "verdict": "NO_SIGNAL",
@@ -70,6 +71,53 @@ def leg_rows(chain: dict, pricing: dict, atm, band_strikes: int = 5) -> list:
                 "gamma": _r(p.get("gamma"), 8), "thetaPerDay": _r(p.get("theta")), "vegaPerIvPt": _r(p.get("vega")),
                 "vendorIvPct": leg["vendorQuarantined"]["impliedVolatility"],
             })
+    return out
+
+
+def _closed(candles, now_ms, bar_ms=60_000):
+    return [c for c in (candles or []) if c["timestampMs"] + bar_ms <= now_ms]
+
+
+def futures_flow(fut: dict | None, fut1m, now_ms) -> dict | None:
+    """Futures volume / VWAP facts (index candles carry no volume, D3). No rule is applied."""
+    if fut is None and not fut1m:
+        return None
+    out = {"dayVolume": fut["volume"] if fut else None,
+           "dayAvgPrice": _r(fut["averagePrice"], 2) if fut else None,   # exchange average traded price
+           "futLtpMinusDayAvg": _r(fut["ltp"] - fut["averagePrice"], 2) if fut and is_number(fut["averagePrice"])
+           and fut["averagePrice"] > 0 and is_number(fut["ltp"]) else None}
+    bars = _closed(fut1m, now_ms)
+    if bars:
+        vw = session_vwap(bars)
+        vols = [b["volume"] for b in bars]
+        last = vols[-1]
+        prev = [v for v in vols[-11:-1] if v is not None]
+        avg_prev = sum(prev) / len(prev) if len(prev) == 10 else None
+        out.update(
+            sessionVwap1m=_r(vw, 2), futLtpMinusVwap=_r(fut["ltp"] - vw, 2) if fut and vw is not None else None,
+            lastClosedBarIst=ist_time_of(bars[-1]["timestampMs"]), lastClosedBarVolume=last,
+            avgVolumePrev10=_r(avg_prev, 1),
+            relVolumeVsPrev10=_r(last / avg_prev, 3) if avg_prev and last is not None else None,
+            barsWithVolume=sum(1 for v in vols if v), bars=len(bars))
+    return out
+
+
+def one_minute_index(idx1m, levels, now_ms) -> dict | None:
+    """Last closed 1-min index bars vs the published triggers: raw facts for D1/D2 (undecided)."""
+    bars = _closed(idx1m, now_ms)
+    if not bars:
+        return None
+    out = {"lastBars": [[ist_time_of(b["timestampMs"]), b["open"], b["high"], b["low"], b["close"]] for b in bars[-3:]]}
+    if levels:
+        up, dn = levels.get("breakoutAbove"), levels.get("breakdownBelow")
+        c1 = bars[-1]["close"]
+        c0 = bars[-2]["close"] if len(bars) > 1 else None
+        if up is not None:
+            out.update(closeMinusBreakout=_r(c1 - up, 2), closedAboveBreakout=c1 > up,
+                       previousAlsoAbove=(c0 is not None and c0 > up))
+        if dn is not None:
+            out.update(closeMinusBreakdown=_r(c1 - dn, 2), closedBelowBreakdown=c1 < dn,
+                       previousAlsoBelow=(c0 is not None and c0 < dn))
     return out
 
 
@@ -134,5 +182,10 @@ def build_observation(*, rec: dict, detail: dict, endpoints: list, rows, contrac
         obs["skipped"].append("refresh table blank: no candles / candle timestamp (RULES.md §5)")
     for leg in (rec.get("excludedLegs") or []):
         obs["skipped"].append("leg %s %s excluded: %s" % (leg["strike"], leg["type"], leg["reason"]))
+    if "fut1m" in detail or "idx1m" in detail:
+        now_ms = chain["provenance"]["epochMs"] if chain else None
+        if now_ms is not None:
+            obs["futuresFlow"] = futures_flow(fut, detail.get("fut1m"), now_ms)
+            obs["oneMinuteIndex"] = one_minute_index(detail.get("idx1m"), lv, now_ms)
     obs["conditions"].append({"rule": "CE/PE direction (RULES.md §6)", "outcome": "NOT_CONFIGURED"})
     return obs

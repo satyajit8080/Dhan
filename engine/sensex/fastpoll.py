@@ -1,0 +1,76 @@
+"""
+Fast read-only poll between scans (Phase 6b): one /marketfeed/quote call for
+the SENSEX index LTP plus the configured option legs (and any open paper legs),
+fed to the PAPER tracker. Read-only; uses the same allow-listed client and
+rate limiter as the scanner. No order code.
+"""
+
+from __future__ import annotations
+
+from .dhan_client import AuthError, DhanClientError, PlanError
+from .jscompat import is_number, js_get
+from .normalize import normalize_quote
+
+INDEX_SEG, INDEX_ID, LEG_SEG = "IDX_I", 51, "BSE_FNO"
+
+
+def _top(depth, side):
+    lvls = (depth or {}).get(side) or []
+    p = lvls[0]["price"] if lvls else None
+    return p if is_number(p) and p > 0 else None
+
+
+class FastPoller:
+    def __init__(self, client, tracker, log, strikes):
+        self.client, self.tracker, self.log = client, tracker, log
+        self.strikes = set(float(s) for s in strikes)
+        self.polls = self.failures = 0
+        self.index_missing_logged = False
+
+    def after_scan(self, rec: dict, detail: dict, rows):
+        chain = detail.get("chain")
+        legs = {}
+        if chain:
+            for s in chain["strikes"]:
+                if float(s["strike"]) not in self.strikes:
+                    continue
+                for side, leg in (("CE", s["ce"]), ("PE", s["pe"])):
+                    if leg and leg["securityId"]:
+                        legs[(s["strike"], side)] = leg["securityId"]
+        self.tracker.arm(rows, legs, rec.get("status") == "OK")
+
+    def tick(self) -> bool:
+        """One poll. Returns False when the scanner must stop (auth/plan)."""
+        ids = self.tracker.watch_ids()
+        body = {INDEX_SEG: [INDEX_ID]}
+        if ids:
+            body[LEG_SEG] = [int(i) for i in ids]
+        try:
+            r = self.client.quote(body)
+        except (AuthError, PlanError) as e:
+            self.log("error", "paper_poll_failed", error=type(e).__name__, code=e.code)
+            return False
+        except DhanClientError as e:
+            self.failures += 1
+            self.log("warn", "paper_poll_failed", error=type(e).__name__, code=e.code)
+            return True
+        self.polls += 1
+        p = r.payload if isinstance(r.payload, dict) else {}
+        idx_raw = js_get(js_get(p, INDEX_SEG), str(INDEX_ID))
+        index = None
+        if isinstance(idx_raw, dict):
+            q = normalize_quote(idx_raw, str(INDEX_ID), INDEX_SEG, "poll", r.received_at_ms, "/marketfeed/quote")
+            index = q["ltp"] if is_number(q["ltp"]) and q["ltp"] == q["ltp"] and q["ltp"] > 0 else None
+        if index is None and not self.index_missing_logged:
+            self.index_missing_logged = True
+            self.log("warn", "paper_index_missing", note="quote response had no IDX_I:51 last_price; "
+                     "crossings cannot be detected between scans")
+        quotes = {}
+        legs_raw = js_get(p, LEG_SEG)
+        for sid in ids:
+            raw = js_get(legs_raw, str(sid)) if isinstance(legs_raw, dict) else None
+            if isinstance(raw, dict):
+                q = normalize_quote(raw, str(sid), LEG_SEG, "poll", r.received_at_ms, "/marketfeed/quote")
+                quotes[str(sid)] = (_top(q["depth"], "buy"), _top(q["depth"], "sell"))
+        self.tracker.on_tick(r.received_at_ms, index, quotes)
+        return True

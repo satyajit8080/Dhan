@@ -152,7 +152,7 @@ def to_compact(rows: list[Row]) -> str:
         out.append(f'| {r.strike} | {r.side} | {r.entry_ask:.2f} | {val} |')
     return '\n'.join(out)
 import types as _bx_types
-_BX_RT = _bx_types.SimpleNamespace(Leg=Leg, Level=Level, build_refresh_table=build_refresh_table, to_compact=to_compact)
+_BX_RT = _bx_types.SimpleNamespace(Leg=Leg, Level=Level, build_refresh_table=build_refresh_table, in_skip_window=in_skip_window, to_compact=to_compact)
 
 # ----------------------------------------------------------------------
 # module: engine/sensex/jscompat.py
@@ -1363,6 +1363,11 @@ def run_refresh(scan: dict, now):
     rows = rt.build_refresh_table(forward=scan['forward'], T=scan['T'], df=scan['df'], candle_ref_price=scan['candleRefPrice'], resistances=[rt.Level(l['price'], l['touches'], l['sources']) for l in scan['resistances']], supports=[rt.Level(l['price'], l['touches'], l['sources']) for l in scan['supports']], atr=scan['atr'] if scan['atr'] is not None else 0.0, bar_minutes=int(scan['barMinutes']) if scan['barMinutes'] else 5, legs=[rt.Leg(l['strike'], l['isCall'], l['ivPct'], l['bid'], l['ask'], l['ltp']) for l in scan['legs']], snapshot_ms=scan['snapshotMs'], candles_ms=scan['candlesMs'], now=now)
     return (rows, rt.to_compact(rows))
 
+def in_no_trade_window(now) -> bool:
+    """RULES.md §5 no-trade windows, from the existing refresh_table (unchanged)."""
+    rt = _BX_RT
+    return rt.in_skip_window(now)
+
 # ----------------------------------------------------------------------
 # module: engine/sensex/dhan_client.py
 # ----------------------------------------------------------------------
@@ -2037,6 +2042,40 @@ def leg_rows(chain: dict, pricing: dict, atm, band_strikes: int=5) -> list:
             out.append({'strike': s['strike'], 'type': typ, 'ltp': leg['lastPrice'], 'bid': bid, 'ask': ask, 'bidQty': leg['topBidQuantity'], 'askQty': leg['topAskQuantity'], 'spreadPct': _r((ask - bid) / mid * 100, 3) if mid else None, 'oi': leg['oi'], 'oiChange': leg['oi'] - leg['previousOi'] if leg['oi'] is not None and leg['previousOi'] is not None else None, 'volume': leg['volume'], 'ivPct': _r(p.get('ivPct')), 'delta': _r(p.get('delta'), 5), 'gamma': _r(p.get('gamma'), 8), 'thetaPerDay': _r(p.get('theta')), 'vegaPerIvPt': _r(p.get('vega')), 'vendorIvPct': leg['vendorQuarantined']['impliedVolatility']})
     return out
 
+def _closed(candles, now_ms, bar_ms=60000):
+    return [c for c in candles or [] if c['timestampMs'] + bar_ms <= now_ms]
+
+def futures_flow(fut: dict | None, fut1m, now_ms) -> dict | None:
+    """Futures volume / VWAP facts (index candles carry no volume, D3). No rule is applied."""
+    if fut is None and (not fut1m):
+        return None
+    out = {'dayVolume': fut['volume'] if fut else None, 'dayAvgPrice': _r(fut['averagePrice'], 2) if fut else None, 'futLtpMinusDayAvg': _r(fut['ltp'] - fut['averagePrice'], 2) if fut and is_number(fut['averagePrice']) and (fut['averagePrice'] > 0) and is_number(fut['ltp']) else None}
+    bars = _closed(fut1m, now_ms)
+    if bars:
+        vw = session_vwap(bars)
+        vols = [b['volume'] for b in bars]
+        last = vols[-1]
+        prev = [v for v in vols[-11:-1] if v is not None]
+        avg_prev = sum(prev) / len(prev) if len(prev) == 10 else None
+        out.update(sessionVwap1m=_r(vw, 2), futLtpMinusVwap=_r(fut['ltp'] - vw, 2) if fut and vw is not None else None, lastClosedBarIst=ist_time_of(bars[-1]['timestampMs']), lastClosedBarVolume=last, avgVolumePrev10=_r(avg_prev, 1), relVolumeVsPrev10=_r(last / avg_prev, 3) if avg_prev and last is not None else None, barsWithVolume=sum((1 for v in vols if v)), bars=len(bars))
+    return out
+
+def one_minute_index(idx1m, levels, now_ms) -> dict | None:
+    """Last closed 1-min index bars vs the published triggers: raw facts for D1/D2 (undecided)."""
+    bars = _closed(idx1m, now_ms)
+    if not bars:
+        return None
+    out = {'lastBars': [[ist_time_of(b['timestampMs']), b['open'], b['high'], b['low'], b['close']] for b in bars[-3:]]}
+    if levels:
+        up, dn = (levels.get('breakoutAbove'), levels.get('breakdownBelow'))
+        c1 = bars[-1]['close']
+        c0 = bars[-2]['close'] if len(bars) > 1 else None
+        if up is not None:
+            out.update(closeMinusBreakout=_r(c1 - up, 2), closedAboveBreakout=c1 > up, previousAlsoAbove=c0 is not None and c0 > up)
+        if dn is not None:
+            out.update(closeMinusBreakdown=_r(c1 - dn, 2), closedBelowBreakdown=c1 < dn, previousAlsoBelow=c0 is not None and c0 < dn)
+    return out
+
 def build_observation(*, rec: dict, detail: dict, endpoints: list, rows, contract: dict | None, next_scan_ist: str | None, duration_ms: float, leg_band: int=5) -> dict:
     chain, fut, p, lv = (detail.get('chain'), detail.get('futures'), detail.get('pricing'), detail.get('levels'))
     obs = {'endpoints': endpoints, 'chainCompleteness': chain_completeness(chain) if chain else None, 'contract': contract, 'prices': None, 'gate': None, 'levels': None, 'legs': [], 'refreshRows': [], 'freshness': {}, 'conditions': [], 'skipped': [], 'strategy': STRATEGY_VERDICT, 'durationMs': round(duration_ms, 1), 'nextScanIst': next_scan_ist}
@@ -2075,8 +2114,252 @@ def build_observation(*, rec: dict, detail: dict, endpoints: list, rows, contrac
         obs['skipped'].append('refresh table blank: no candles / candle timestamp (RULES.md §5)')
     for leg in rec.get('excludedLegs') or []:
         obs['skipped'].append('leg %s %s excluded: %s' % (leg['strike'], leg['type'], leg['reason']))
+    if 'fut1m' in detail or 'idx1m' in detail:
+        now_ms = chain['provenance']['epochMs'] if chain else None
+        if now_ms is not None:
+            obs['futuresFlow'] = futures_flow(fut, detail.get('fut1m'), now_ms)
+            obs['oneMinuteIndex'] = one_minute_index(detail.get('idx1m'), lv, now_ms)
     obs['conditions'].append({'rule': 'CE/PE direction (RULES.md §6)', 'outcome': 'NOT_CONFIGURED'})
     return obs
+
+# ----------------------------------------------------------------------
+# module: engine/sensex/paper.py
+# ----------------------------------------------------------------------
+"""
+PAPER tracker for the user's exit rule: take profit +6 / stop loss -11 option
+premium points (user, 9 Oct 2026), time stop 10 min (RULES.md §6).
+
+OBSERVATION ONLY. Nothing here talks to a broker: it receives prices that the
+read-only scanner already fetched and records what WOULD have happened. There
+is no order, position or account code anywhere in this module.
+
+Entry event (exploratory, NOT a CE/PE signal; D1-D8 are undecided):
+  the SENSEX index CROSSES a refresh-table trigger of a row whose status is OK
+  (CE: from below to >= breakoutAbove; PE: from above to <= breakdownBelow),
+  outside the no-trade windows. Each (side, trigger) fires once per session,
+  for every configured strike of that side (one paper trade per strike).
+Fill model: entry at the option's ASK at the first poll after the crossing;
+  exits evaluated on the BID (what a sell would get). Both sides of the spread
+  are therefore already inside the result. Polling is discrete (every few
+  seconds), so a move that hits both levels between two polls cannot be
+  ordered; such a case is impossible to see and is not invented.
+"""
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+
+@dataclass
+class PaperConfig:
+    take_profit_pts: float = 6.0
+    stop_loss_pts: float = 11.0
+    time_stop_s: float = 600.0
+    max_open: int = 40
+    lot_size: int | None = None
+    cost_per_trade_rs: float | None = None
+
+@dataclass
+class _Arm:
+    side: str
+    trigger: float
+    strikes: list
+    fired: bool = False
+
+@dataclass
+class _Trade:
+    tid: str
+    side: str
+    strike: float
+    security_id: str
+    trigger: float
+    entry_ms: int
+    entry_ask: float
+    entry_bid: float | None
+    index_at_cross: float
+    best: float = 0.0
+    worst: float = 0.0
+    ticks: int = 0
+    gaps: int = 0
+    last_bid: float | None = None
+    path: list = field(default_factory=list)
+
+class PaperTracker:
+
+    def __init__(self, cfg: PaperConfig, log, in_skip_window):
+        self.cfg, self.log, self.in_skip_window = (cfg, log, in_skip_window)
+        self.arms: dict = {}
+        self.fired: set = set()
+        self.open: list = []
+        self.closed: list = []
+        self.last_index: float | None = None
+        self.legs: dict = {}
+        self.seq = 0
+
+    def arm(self, rows, legs: dict, scan_ok: bool):
+        """Replace the armed triggers with the latest scan's OK rows."""
+        self.legs = dict(legs)
+        self.arms = {}
+        if not scan_ok or not rows:
+            return
+        for r in rows:
+            if r.status != 'OK' or r.trigger is None:
+                continue
+            key = (r.side, float(r.trigger))
+            if key in self.fired:
+                continue
+            self.arms.setdefault(key, _Arm(r.side, float(r.trigger), []))
+            if r.strike not in self.arms[key].strikes:
+                self.arms[key].strikes.append(r.strike)
+
+    def watch_ids(self) -> list:
+        ids = {self.legs[k] for k in self.legs if self.legs[k]}
+        ids |= {t.security_id for t in self.open}
+        return sorted(ids)
+
+    def on_tick(self, now_ms: int, index_ltp, quotes: dict):
+        """quotes: security_id -> (bid, ask). Returns nothing; logs events."""
+        for t in list(self.open):
+            self._update(t, now_ms, quotes.get(t.security_id))
+        prev, self.last_index = (self.last_index, index_ltp)
+        if index_ltp is None or prev is None:
+            return
+        now = datetime.fromtimestamp(now_ms / 1000, timezone.utc)
+        if self.in_skip_window(now):
+            return
+        for key, arm in list(self.arms.items()):
+            crossed = prev < arm.trigger <= index_ltp if arm.side == 'CE' else prev > arm.trigger >= index_ltp
+            if not crossed:
+                continue
+            self.fired.add(key)
+            del self.arms[key]
+            for strike in arm.strikes:
+                self._enter(arm, strike, now_ms, index_ltp, quotes)
+
+    def _enter(self, arm, strike, now_ms, index_ltp, quotes):
+        sid = self.legs.get((strike, arm.side))
+        q = quotes.get(sid) if sid else None
+        base = {'side': arm.side, 'strike': strike, 'trigger': arm.trigger, 'indexAtCross': index_ltp}
+        if q is None or not q[1] or q[1] <= 0:
+            self.log('info', 'paper_skip', reason='no ask quote for the leg at the crossing', **base)
+            return
+        if len(self.open) >= self.cfg.max_open:
+            self.log('warn', 'paper_skip', reason='max_open reached', **base)
+            return
+        self.seq += 1
+        bid, ask = q
+        t = _Trade('P%03d' % self.seq, arm.side, strike, sid, arm.trigger, now_ms, ask, bid, index_ltp)
+        self.open.append(t)
+        self.log('info', 'paper_entry', paperId=t.tid, entryAsk=ask, entryBid=bid, spreadPts=round(ask - bid, 2) if bid else None, spreadPct=round((ask - bid) / ((ask + bid) / 2) * 100, 3) if bid else None, takeProfitAt=round(ask + self.cfg.take_profit_pts, 2), stopLossAt=round(ask - self.cfg.stop_loss_pts, 2), note='PAPER (no order); exploratory trigger crossing, not a signal', **base)
+
+    def _update(self, t, now_ms, q):
+        held = (now_ms - t.entry_ms) / 1000
+        bid = q[0] if q and q[0] and (q[0] > 0) else None
+        if bid is None:
+            t.gaps += 1
+        else:
+            t.ticks += 1
+            t.last_bid = bid
+            pnl = bid - t.entry_ask
+            t.best, t.worst = (max(t.best, pnl), min(t.worst, pnl))
+            t.path.append([round(held, 1), bid])
+            if pnl >= self.cfg.take_profit_pts:
+                return self._close(t, now_ms, 'TAKE_PROFIT', bid)
+            if pnl <= -self.cfg.stop_loss_pts:
+                return self._close(t, now_ms, 'STOP_LOSS', bid)
+        if held >= self.cfg.time_stop_s:
+            self._close(t, now_ms, 'TIME_STOP', t.last_bid)
+
+    def _close(self, t, now_ms, outcome, exit_bid):
+        self.open.remove(t)
+        pnl = None if exit_bid is None else round(exit_bid - t.entry_ask, 2)
+        rec = {'paperId': t.tid, 'outcome': outcome, 'side': t.side, 'strike': t.strike, 'trigger': t.trigger, 'entryAsk': t.entry_ask, 'exitBid': exit_bid, 'pnlPts': pnl, 'heldS': round((now_ms - t.entry_ms) / 1000, 1), 'maxFavourablePts': round(t.best, 2), 'maxAdversePts': round(t.worst, 2), 'ticks': t.ticks, 'quoteGaps': t.gaps, 'path': t.path}
+        if pnl is not None and self.cfg.lot_size:
+            rec['pnlRsGross'] = round(pnl * self.cfg.lot_size, 2)
+            if self.cfg.cost_per_trade_rs is not None:
+                rec['pnlRsNet'] = round(pnl * self.cfg.lot_size - self.cfg.cost_per_trade_rs, 2)
+        self.closed.append(rec)
+        self.log('info', 'paper_exit', note='PAPER (no order)', **rec)
+
+    def close_all(self, now_ms: int, reason: str='SESSION_END'):
+        for t in list(self.open):
+            self._close(t, now_ms, reason, t.last_bid)
+
+    def summary(self) -> dict:
+        out = {}
+        for r in self.closed:
+            out[r['outcome']] = out.get(r['outcome'], 0) + 1
+        decided = [r for r in self.closed if r['outcome'] in ('TAKE_PROFIT', 'STOP_LOSS')]
+        pnls = [r['pnlPts'] for r in self.closed if r['pnlPts'] is not None]
+        return {'trades': len(self.closed), 'byOutcome': out, 'winRateTpVsSl': round(sum((r['outcome'] == 'TAKE_PROFIT' for r in decided)) / len(decided), 3) if decided else None, 'breakEvenWinRate': round(self.cfg.stop_loss_pts / (self.cfg.stop_loss_pts + self.cfg.take_profit_pts), 3), 'totalPnlPts': round(sum(pnls), 2) if pnls else 0.0, 'note': 'PAPER results; entry at ask, exit at bid; no orders were placed'}
+
+# ----------------------------------------------------------------------
+# module: engine/sensex/fastpoll.py
+# ----------------------------------------------------------------------
+"""
+Fast read-only poll between scans (Phase 6b): one /marketfeed/quote call for
+the SENSEX index LTP plus the configured option legs (and any open paper legs),
+fed to the PAPER tracker. Read-only; uses the same allow-listed client and
+rate limiter as the scanner. No order code.
+"""
+INDEX_SEG, INDEX_ID, LEG_SEG = ('IDX_I', 51, 'BSE_FNO')
+
+def _top(depth, side):
+    lvls = (depth or {}).get(side) or []
+    p = lvls[0]['price'] if lvls else None
+    return p if is_number(p) and p > 0 else None
+
+class FastPoller:
+
+    def __init__(self, client, tracker, log, strikes):
+        self.client, self.tracker, self.log = (client, tracker, log)
+        self.strikes = set((float(s) for s in strikes))
+        self.polls = self.failures = 0
+        self.index_missing_logged = False
+
+    def after_scan(self, rec: dict, detail: dict, rows):
+        chain = detail.get('chain')
+        legs = {}
+        if chain:
+            for s in chain['strikes']:
+                if float(s['strike']) not in self.strikes:
+                    continue
+                for side, leg in (('CE', s['ce']), ('PE', s['pe'])):
+                    if leg and leg['securityId']:
+                        legs[s['strike'], side] = leg['securityId']
+        self.tracker.arm(rows, legs, rec.get('status') == 'OK')
+
+    def tick(self) -> bool:
+        """One poll. Returns False when the scanner must stop (auth/plan)."""
+        ids = self.tracker.watch_ids()
+        body = {INDEX_SEG: [INDEX_ID]}
+        if ids:
+            body[LEG_SEG] = [int(i) for i in ids]
+        try:
+            r = self.client.quote(body)
+        except (AuthError, PlanError) as e:
+            self.log('error', 'paper_poll_failed', error=type(e).__name__, code=e.code)
+            return False
+        except DhanClientError as e:
+            self.failures += 1
+            self.log('warn', 'paper_poll_failed', error=type(e).__name__, code=e.code)
+            return True
+        self.polls += 1
+        p = r.payload if isinstance(r.payload, dict) else {}
+        idx_raw = js_get(js_get(p, INDEX_SEG), str(INDEX_ID))
+        index = None
+        if isinstance(idx_raw, dict):
+            q = normalize_quote(idx_raw, str(INDEX_ID), INDEX_SEG, 'poll', r.received_at_ms, '/marketfeed/quote')
+            index = q['ltp'] if is_number(q['ltp']) and q['ltp'] == q['ltp'] and (q['ltp'] > 0) else None
+        if index is None and (not self.index_missing_logged):
+            self.index_missing_logged = True
+            self.log('warn', 'paper_index_missing', note='quote response had no IDX_I:51 last_price; crossings cannot be detected between scans')
+        quotes = {}
+        legs_raw = js_get(p, LEG_SEG)
+        for sid in ids:
+            raw = js_get(legs_raw, str(sid)) if isinstance(legs_raw, dict) else None
+            if isinstance(raw, dict):
+                q = normalize_quote(raw, str(sid), LEG_SEG, 'poll', r.received_at_ms, '/marketfeed/quote')
+                quotes[str(sid)] = (_top(q['depth'], 'buy'), _top(q['depth'], 'sell'))
+        self.tracker.on_tick(r.received_at_ms, index, quotes)
+        return True
 
 # ----------------------------------------------------------------------
 # module: engine/sensex/scanner.py
@@ -2138,6 +2421,8 @@ class ScannerConfig:
     min_interval_s: float = 10.0
     observe: bool = True
     observe_leg_band: int = 5
+    extra_series: bool = False
+    poll_s: float = 5.0
 
 @dataclass
 class ScanState:
@@ -2158,6 +2443,7 @@ class Scanner:
         self.sleep = sleep
         self.state = ScanState()
         self.stop_event = threading.Event()
+        self.poller = None
 
     def _future(self, option_expiry: date, today: date):
         if self.cfg.instrument_contracts is not None:
@@ -2190,6 +2476,8 @@ class Scanner:
         finally:
             if hasattr(self.client, 'on_call'):
                 self.client.on_call = None
+        if self.poller is not None and rec['status'] not in ('AUTH_FAILED', 'PLAN_MISSING'):
+            self.poller.after_scan(rec, detail, rows)
         if self.cfg.observe:
             dur = (self.clock() - now).total_seconds() * 1000
             nxt = None
@@ -2254,6 +2542,9 @@ class Scanner:
             rec['warnings'].append('CANDLES_UNAVAILABLE: %s: %s' % (type(e).__name__, e))
         if not candles:
             rec['warnings'].append('NO_CANDLES: no index candles for today (holiday, pre-open, or feed issue); levels cannot be derived')
+        if self.cfg.extra_series:
+            detail['fut1m'] = self._optional_candles(rec, fut.security_id, FUT_SEG, 'FUTIDX', day, 'FUT_1M')
+            detail['idx1m'] = self._optional_candles(rec, str(SENSEX_SCRIP), SENSEX_SEG, 'INDEX', day, 'INDEX_1M')
         scan = build_scan(raw_chain=chain.payload, raw_futures=raw_fut, candles=candles, expiry=expiry, strikes=self.cfg.strikes, chain_received_ms=chain.received_at_ms, futures_received_ms=quote.received_at_ms, futures_security_id=fut.security_id, futures_expiry=fut.expiry.isoformat(), risk_free_rate=self.cfg.risk_free_rate, max_snapshot_skew_ms=self.cfg.max_snapshot_skew_ms, detail_out=detail)
         rows, table = run_refresh(scan, ist)
         rec.update(status=scan['status'], table=table, scanInputs=scan)
@@ -2262,6 +2553,18 @@ class Scanner:
         else:
             rec['reason'] = ' | '.join(scan.get('reasons', []))
         return rows
+
+    def _optional_candles(self, rec, security_id, segment, instrument, day, label):
+        """1-minute series for observation only: failure is a warning, never a scan failure."""
+        try:
+            r = self.client.intraday_candles(str(security_id), segment, instrument, 1, day + ' 09:15:00', day + ' 15:30:00')
+            validate_candles(r.payload)
+            return to_candles(r.payload)
+        except (AuthError, PlanError):
+            raise
+        except (DhanClientError, DataValidationError) as e:
+            rec['warnings'].append('%s_UNAVAILABLE: %s' % (label, type(e).__name__))
+            return []
 
     def _finish(self, rec: dict) -> dict:
         rec['finishedIst'] = self.clock().astimezone(IST).isoformat(timespec='seconds')
@@ -2292,10 +2595,21 @@ class Scanner:
                 self.state.stop_reason = 'MAX_SCANS'
                 break
             remaining = self.cfg.interval_s - (self.clock() - tick).total_seconds()
+            last_poll = self.clock()
             while remaining > 0 and (not self.stop_event.is_set()):
                 step = min(1.0, remaining)
                 self.sleep(step)
                 remaining -= step
+                if self.poller is not None and remaining > 1.0 and ((self.clock() - last_poll).total_seconds() >= self.cfg.poll_s):
+                    t0 = self.clock()
+                    if not self.poller.tick():
+                        self.state.stop_reason = 'AUTH_FAILED'
+                        self.stop_event.set()
+                    last_poll = self.clock()
+                    remaining -= (last_poll - t0).total_seconds()
+        if self.poller is not None:
+            self.poller.tracker.close_all(int(self.clock().timestamp() * 1000))
+            self.log('info', 'paper_summary', **self.poller.tracker.summary())
         reason = self.state.stop_reason or 'STOPPED'
         self.log('info', 'scanner_stop', reason=reason, scans=self.state.scans, statuses=self.state.history)
         return reason
@@ -2401,6 +2715,17 @@ RECORD_EVERY_N = 15               # replay record every N scans (plus every non-
 RECORD_CHUNK = 3000               # characters per replay-record log line
 LEG_BAND = 5                      # strikes either side of ATM logged with IV/Greeks/OI/bid-ask
                                   # (lower it if decode_cloud_log reports truncated lines)
+EXTRA_SERIES = True               # 1-min index + 1-min futures candles: VWAP, volume, 1-min close facts
+
+# PAPER tracker (NO orders): when the index crosses an OK refresh-table trigger,
+# record a virtual entry at the option ASK and follow the BID until one exit hits.
+PAPER_ENABLED = True
+PAPER_TAKE_PROFIT_PTS = 6         # your rule (9 Oct 2026), option premium points
+PAPER_STOP_LOSS_PTS = 11          # your rule (9 Oct 2026), option premium points
+PAPER_TIME_STOP_MIN = 10          # RULES.md §6 time stop
+POLL_S = 5                        # seconds between fast read-only price polls (min 2)
+LOT_SIZE = None                   # e.g. the SENSEX lot size, to report rupees (verify; never guessed)
+COST_PER_TRADE_RS = None          # brokerage + taxes per round trip, if you want net rupees
 
 # Names of the environment variables that hold your credentials. Set the
 # VALUES in the Dhan Cloud interface only, never in this file.
@@ -2435,7 +2760,7 @@ import sys
 import time as _bx_main__time
 from datetime import datetime, time as dtime, timezone
 PROGRAM = 'sensex-readonly-observer'
-VERSION = '6.0'
+VERSION = '6.1'
 EXIT_OK, EXIT_CONFIG, EXIT_AUTH, EXIT_SELFTEST = (0, 2, 3, 4)
 
 def _stdout_logger(redactor):
@@ -2475,9 +2800,31 @@ def validate(log) -> int:
     rec = Scanner(client, cfg, _Quiet(), clock=lambda: at).run_once()
     ok = rec['status'] == 'OK' and rec['table'] == st['expectedTable']
     log('info' if ok else 'error', 'selftest', data='MOCK (embedded Stage A s21Sep; not market data)', result='PASS' if ok else 'FAIL', status=rec['status'], table=rec['table'], observationKeys=sorted(rec.get('observation', {}).keys()))
+    paper_ok = _paper_selftest()
+    log('info' if paper_ok else 'error', 'paper_selftest', result='PASS' if paper_ok else 'FAIL', data='synthetic ticks (not market data)')
+    ok = ok and paper_ok
     cred_names = {n: n in os.environ for n in (ENV_CLIENT_ID, ENV_ACCESS_TOKEN)}
     log('info', 'credential_names_present', **cred_names)
     return EXIT_OK if ok else EXIT_SELFTEST
+
+def _paper_selftest() -> bool:
+    """Synthetic crossing at 10:00 IST: one CE trade must hit take-profit, one PE trade stop-loss."""
+    events = []
+
+    class _Row:
+
+        def __init__(self, strike, side, trigger):
+            self.strike, self.side, self.trigger, self.status = (strike, side, trigger, 'OK')
+    t = PaperTracker(PaperConfig(take_profit_pts=6, stop_loss_pts=11), lambda *a, **k: events.append((a, k)), in_no_trade_window)
+    t.arm([_Row(100.0, 'CE', 1000.0), _Row(100.0, 'PE', 990.0)], {(100.0, 'CE'): '1', (100.0, 'PE'): '2'}, True)
+    base = int(datetime(2026, 9, 21, 4, 30, tzinfo=timezone.utc).timestamp() * 1000)
+    t.on_tick(base, 995.0, {'1': (49.0, 50.0), '2': (59.0, 60.0)})
+    t.on_tick(base + 5000, 1001.0, {'1': (49.5, 50.0), '2': (58.0, 59.0)})
+    t.on_tick(base + 10000, 1004.0, {'1': (56.0, 56.5), '2': (55.0, 56.0)})
+    t.on_tick(base + 15000, 989.0, {'1': (40.0, 41.0), '2': (70.0, 71.0)})
+    t.on_tick(base + 20000, 999.0, {'1': (50.0, 51.0), '2': (59.0, 60.0)})
+    out = [r['outcome'] for r in t.closed]
+    return out == ['TAKE_PROFIT', 'STOP_LOSS'] and t.closed[0]['pnlPts'] == 6.0 and (t.closed[1]['pnlPts'] == -12.0)
 
 def _config_errors():
     errs = []
@@ -2487,6 +2834,8 @@ def _config_errors():
         errs.append('FUTURES_SECURITY_ID / FUTURES_EXPIRY not set (automatic lookup is BLOCKED)')
     if INTERVAL_S < 10:
         errs.append('INTERVAL_S must be >= 10')
+    if PAPER_ENABLED and POLL_S < 2:
+        errs.append('POLL_S must be >= 2 (quote endpoint limit is 1 request per second)')
     return errs
 
 def _emit_record(scanner_rec, recorder, cfg, clock_utc, log_line):
@@ -2518,8 +2867,11 @@ def live(log, redactor, loop: bool) -> int:
     recorder = MemoryRecorder(UrllibTransport())
     client = DhanClient(creds, transport=recorder, redactor=redactor, logger=log)
     hh, mm = (int(x) for x in STOP_TIME.split(':'))
-    cfg = ScannerConfig(strikes=[float(s) for s in STRIKES], interval_s=float(INTERVAL_S), stop_time=dtime(hh, mm), holidays=frozenset(HOLIDAYS), futures_security_id=str(FUTURES_SECURITY_ID), futures_expiry=FUTURES_EXPIRY, max_scans=None if loop else 1, observe_leg_band=int(LEG_BAND))
+    cfg = ScannerConfig(strikes=[float(s) for s in STRIKES], interval_s=float(INTERVAL_S), stop_time=dtime(hh, mm), holidays=frozenset(HOLIDAYS), futures_security_id=str(FUTURES_SECURITY_ID), futures_expiry=FUTURES_EXPIRY, max_scans=None if loop else 1, observe_leg_band=int(LEG_BAND), extra_series=bool(EXTRA_SERIES), poll_s=float(POLL_S))
     scanner = Scanner(client, cfg, log)
+    if PAPER_ENABLED and loop:
+        tracker = PaperTracker(PaperConfig(take_profit_pts=float(PAPER_TAKE_PROFIT_PTS), stop_loss_pts=float(PAPER_STOP_LOSS_PTS), time_stop_s=float(PAPER_TIME_STOP_MIN) * 60, lot_size=LOT_SIZE, cost_per_trade_rs=COST_PER_TRADE_RS), log, in_no_trade_window)
+        scanner.poller = FastPoller(client, tracker, log, cfg.strikes)
 
     def line(text):
         sys.stdout.write(redactor(text) + '\n')
