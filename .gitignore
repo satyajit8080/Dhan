@@ -1,0 +1,10 @@
+node_modules/
+dist/
+*.log
+.env
+.env.local
+*.token
+__pycache__/
+*.pyc
+server/paper-state.json
+server/logs/
