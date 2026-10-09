@@ -11,6 +11,13 @@ import type { Logger } from '../config.js';
 import type { ExchangeSegment } from '../types.js';
 import { InstrumentError } from '../errors.js';
 
+/** A real calendar date in YYYY-MM-DD form (rejects 2026-02-30, "N/A", 15-10-2026). */
+export function isIsoDate(v: unknown): v is string {
+  if (typeof v !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
+  const d = new Date(`${v}T00:00:00Z`);
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === v;
+}
+
 interface CacheEntry {
   expiries: string[];
   fetchedAtMs: number;
@@ -43,9 +50,17 @@ export class ExpiryCache {
     }
 
     const { data, receivedAtMs } = await fetchExpiryList(this.transport, { scrip, segment });
-    const expiries = (Array.isArray(data) ? data : [])
-      .filter((d): d is string => typeof d === 'string')
-      .sort();
+    const raw = Array.isArray(data) ? data : [];
+    // Only real YYYY-MM-DD dates. Expiries are compared as strings, and a
+    // malformed entry such as "N/A" sorts AFTER every date — it was being
+    // returned as the "nearest" expiry once the real dates had passed.
+    const expiries = raw.filter(isIsoDate).sort();
+    if (expiries.length !== raw.length) {
+      this.log.warn('Expiry list contained malformed entries; ignored', {
+        key,
+        ignored: raw.length - expiries.length,
+      });
+    }
 
     if (expiries.length === 0) {
       throw new InstrumentError(

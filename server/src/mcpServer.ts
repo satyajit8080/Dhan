@@ -474,8 +474,9 @@ server.registerTool(
       '(PCR, max pain, OI buildup, OI concentration, support/resistance peaks), ' +
       'price structure (swings, higher-highs/lower-lows, consolidation, candidate ' +
       'breakout levels), chart indicators, and ranked strike candidates for BOTH ' +
-      'CE and PE. Produces NO directional verdict and NO trigger level, because ' +
-      'those rules are not configured. Use this as the internal analysis step.',
+      'CE and PE, plus breakout/breakdown trigger levels from price action. ' +
+      'Produces NO directional verdict (CE vs PE), because the direction ' +
+      'thresholds are not configured. Use this as the internal analysis step.',
     inputSchema: {
       underlying: z.string().describe('SENSEX, NIFTY or BANKNIFTY.'),
       expiry: z

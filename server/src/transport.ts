@@ -31,6 +31,12 @@ const FORBIDDEN_PATH_FRAGMENTS = [
   'holdings',
   'alerts',
   'kill',
+  // Account actions that are not orders but still change account state. Found
+  // by enumerating every mutating call in the official DhanHQ-py SDK (v2.3.0):
+  'pnlexit', // P&L-based exit: closes positions
+  '/ip/', // static-IP whitelist set/modify (7-day edit lock)
+  'renewtoken', // expires the current token and issues a new one
+  'globalstocks', // separate US-stocks product, out of scope
 ];
 
 export function assertReadOnlyPath(path: string): void {

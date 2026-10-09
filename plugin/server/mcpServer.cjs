@@ -21912,7 +21912,17 @@ var FORBIDDEN_PATH_FRAGMENTS = [
   "positions",
   "holdings",
   "alerts",
-  "kill"
+  "kill",
+  // Account actions that are not orders but still change account state. Found
+  // by enumerating every mutating call in the official DhanHQ-py SDK (v2.3.0):
+  "pnlexit",
+  // P&L-based exit: closes positions
+  "/ip/",
+  // static-IP whitelist set/modify (7-day edit lock)
+  "renewtoken",
+  // expires the current token and issues a new one
+  "globalstocks"
+  // separate US-stocks product, out of scope
 ];
 function assertReadOnlyPath(path) {
   const p = path.toLowerCase();
@@ -22229,6 +22239,11 @@ async function fetchExpiryList(transport, params) {
 }
 
 // src/instruments/expiries.ts
+function isIsoDate(v) {
+  if (typeof v !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
+  const d = /* @__PURE__ */ new Date(`${v}T00:00:00Z`);
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === v;
+}
 var ExpiryCache = class {
   constructor(transport, ttlMs, log) {
     this.transport = transport;
@@ -22247,7 +22262,14 @@ var ExpiryCache = class {
       return { expiries: hit.expiries, cached: true, fetchedAtMs: hit.fetchedAtMs };
     }
     const { data, receivedAtMs } = await fetchExpiryList(this.transport, { scrip, segment });
-    const expiries = (Array.isArray(data) ? data : []).filter((d) => typeof d === "string").sort();
+    const raw = Array.isArray(data) ? data : [];
+    const expiries = raw.filter(isIsoDate).sort();
+    if (expiries.length !== raw.length) {
+      this.log.warn("Expiry list contained malformed entries; ignored", {
+        key,
+        ignored: raw.length - expiries.length
+      });
+    }
     if (expiries.length === 0) {
       throw new InstrumentError(
         `Dhan returned no expiries for ${segment}:${scrip}. Cannot proceed without one.`,
@@ -24957,9 +24979,9 @@ var Bull50DhanClient = class {
    * The complete internal picture: gated pricing, Greeks, liquidity, chain
    * positioning, price structure and ranked strike candidates for BOTH sides.
    *
-   * Returns no verdict and no trigger level. It assembles every input a
-   * decision rule could need and stops there, because the decision rules are
-   * not defined in this server.
+   * Returns trigger levels but no verdict. It assembles every input a
+   * decision rule could need and stops there, because the CE/PE decision
+   * rules are not defined in this server.
    */
   async getAnalysis(params) {
     const lots = params.lots ?? 5;
@@ -25166,7 +25188,7 @@ var Bull50DhanClient = class {
       },
       integrity: snap.integrity,
       warnings: snap.warnings,
-      note: "Complete analysis inputs. NO directional verdict and NO trigger level are produced: those rules are not defined in this server."
+      note: "Complete analysis inputs. Trigger levels (levels.breakoutAbove / breakdownBelow) are reported, but NO directional verdict (CE vs PE) is produced: the direction thresholds are not defined in this server."
     };
   }
   // --- get_candles ---------------------------------------------------------
@@ -25701,7 +25723,7 @@ server.registerTool(
   "get_analysis",
   {
     title: "Complete options-market analysis (no verdict)",
-    description: "One call assembling everything a decision rule could need: gated parity pricing and Greeks, executable liquidity at size, full chain positioning (PCR, max pain, OI buildup, OI concentration, support/resistance peaks), price structure (swings, higher-highs/lower-lows, consolidation, candidate breakout levels), chart indicators, and ranked strike candidates for BOTH CE and PE. Produces NO directional verdict and NO trigger level, because those rules are not configured. Use this as the internal analysis step.",
+    description: "One call assembling everything a decision rule could need: gated parity pricing and Greeks, executable liquidity at size, full chain positioning (PCR, max pain, OI buildup, OI concentration, support/resistance peaks), price structure (swings, higher-highs/lower-lows, consolidation, candidate breakout levels), chart indicators, and ranked strike candidates for BOTH CE and PE, plus breakout/breakdown trigger levels from price action. Produces NO directional verdict (CE vs PE), because the direction thresholds are not configured. Use this as the internal analysis step.",
     inputSchema: {
       underlying: external_exports.string().describe("SENSEX, NIFTY or BANKNIFTY."),
       expiry: external_exports.string().optional().describe("YYYY-MM-DD. Omit for the nearest expiry after today (next weekly on expiry day)."),

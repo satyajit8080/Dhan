@@ -241,9 +241,9 @@ export class Bull50DhanClient {
    * The complete internal picture: gated pricing, Greeks, liquidity, chain
    * positioning, price structure and ranked strike candidates for BOTH sides.
    *
-   * Returns no verdict and no trigger level. It assembles every input a
-   * decision rule could need and stops there, because the decision rules are
-   * not defined in this server.
+   * Returns trigger levels but no verdict. It assembles every input a
+   * decision rule could need and stops there, because the CE/PE decision
+   * rules are not defined in this server.
    */
   async getAnalysis(params: {
     underlying: string;
@@ -553,8 +553,9 @@ export class Bull50DhanClient {
       integrity: snap.integrity,
       warnings: snap.warnings,
       note:
-        'Complete analysis inputs. NO directional verdict and NO trigger level are ' +
-        'produced: those rules are not defined in this server.',
+        'Complete analysis inputs. Trigger levels (levels.breakoutAbove / ' +
+        'breakdownBelow) are reported, but NO directional verdict (CE vs PE) is ' +
+        'produced: the direction thresholds are not defined in this server.',
     };
   }
 
