@@ -69,6 +69,7 @@ RETRYABLE_CODES = {"800", "DH-908", "DH-909"}
 
 class DhanClientError(Exception):
     retryable = False
+    attempts = None
 
     def __init__(self, message: str, *, code: str = "", http_status: int | None = None):
         super().__init__(message)
@@ -253,6 +254,7 @@ class DhanClient:
         self.sleep = sleep
         self.base_url = base_url
         self.jitter = jitter
+        self.on_call = None   # optional observer: receives one outcome dict per request (no headers, no body)
 
     # ---- guard -------------------------------------------------------------
     @staticmethod
@@ -274,6 +276,23 @@ class DhanClient:
 
     def request(self, method: str, path: str, body: dict | None = None, unique_key: str | None = None,
                 accept_bare=None) -> DhanResponse:
+        if self.on_call is None:
+            return self._request(method, path, body, unique_key, accept_bare)
+        t0 = time.monotonic()
+        out = {"endpoint": path, "ok": False}
+        try:
+            r = self._request(method, path, body, unique_key, accept_bare)
+            out.update(ok=True, attempts=r.attempts, envelope=r.envelope, receivedAtMs=r.received_at_ms)
+            return r
+        except DhanClientError as e:
+            out.update(error=type(e).__name__, code=e.code, httpStatus=e.http_status,
+                       attempts=getattr(e, "attempts", None), message=self.redact(str(e))[:300])
+            raise
+        finally:
+            out["durationMs"] = round((time.monotonic() - t0) * 1000, 1)
+            self.on_call(out)
+
+    def _request(self, method, path, body, unique_key, accept_bare) -> DhanResponse:
         cls = self.assert_read_only(method, path)
         headers = {"access-token": self._creds.access_token, "client-id": self._creds.client_id,
                    "Content-Type": "application/json", "Accept": "application/json"}
@@ -293,6 +312,7 @@ class DhanClient:
                 except DhanClientError as e:
                     last = e
             if not last.retryable or attempt == self.max_attempts:
+                last.attempts = attempt
                 self._emit("error", "request_failed", path=path, attempt=attempt, error=type(last).__name__,
                            code=last.code, http_status=last.http_status, message=str(last))
                 raise last

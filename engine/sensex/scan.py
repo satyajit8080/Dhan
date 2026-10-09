@@ -33,29 +33,39 @@ BLANK_TABLE = "| Strike | Type | LTP | Breakout Above |\n|---|---|---|---|\n| â€
 def build_scan(*, raw_chain, raw_futures, candles, expiry, strikes,
                chain_received_ms, futures_received_ms, futures_security_id="FUT",
                futures_expiry=None, risk_free_rate=0.065, max_snapshot_skew_ms=3000,
-               chain_fetch_id="chain", futures_fetch_id="futures") -> dict:
+               chain_fetch_id="chain", futures_fetch_id="futures", detail_out: dict | None = None) -> dict:
     """Return the refresh_table inputs for `strikes`, or a BLOCKED/ERROR result.
 
     `raw_futures=None` models a failed futures fetch (the gate then blocks).
+    `detail_out`, when given, receives the intermediate results already
+    computed here (normalised chain, futures quote, pricing context or gate
+    error, levels) for observation logging. The return value is unaffected.
     """
+    d = detail_out if detail_out is not None else {}
     chain = normalize_chain(raw_chain, "SENSEX", 51, "IDX_I", expiry, chain_fetch_id,
                             chain_received_ms, "/optionchain")
     futures = None
     if raw_futures is not None:
         futures = normalize_quote(raw_futures, str(futures_security_id), "BSE_FNO", futures_fetch_id,
                                   futures_received_ms, "/marketfeed/quote")
+    d.update(chain=chain, futures=futures)
     try:
         p = attach_pricing(chain, futures, risk_free_rate, max_snapshot_skew_ms, futures_expiry=futures_expiry)
     except GateBlockedError as e:
+        d["gateError"] = {"type": "GateBlockedError", "reasons": e.reasons, "details": e.details}
         return {"status": "BLOCKED", "reasons": e.reasons}
     except SnapshotSkewError as e:
+        d["gateError"] = {"type": "SnapshotSkewError", "reasons": [e.message], "details": e.details}
         return {"status": "BLOCKED", "reasons": [e.message]}
     except PricingValidationError as e:
+        d["gateError"] = {"type": "ValidationError", "reasons": [e.message], "details": e.details}
         return {"status": "ERROR", "reasons": [e.message]}
+    d["pricing"] = p
 
     index_ltp = chain["underlyingLtpDoNotUseAsSpot"]
     spot = index_ltp if index_ltp is not None else math.nan
     lv = derive_levels(candles, spot, confirmation_buffer=5, min_touches=2, round_to=5)
+    d["levels"] = lv
 
     by_key = {(l["strike"], l["type"]): l for l in p["legs"]}
     chain_legs = {s["strike"]: s for s in chain["strikes"]}

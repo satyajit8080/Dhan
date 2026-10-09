@@ -1,0 +1,136 @@
+"""
+Structured per-scan observation record (Phase 6). PURE: built from data the
+scan already fetched and computed; nothing is fetched or recalculated here.
+
+Records what the EXISTING rules decided and why. It never produces a CE/PE
+verdict: the direction thresholds are not configured (RULES.md §6,
+docs/PHASE3_STRATEGY_GAPS.md D1–D15), and that is stated in every record.
+No credentials, headers or account identifiers are ever included.
+"""
+
+from __future__ import annotations
+
+import math
+
+from .jscompat import is_number
+
+STRATEGY_VERDICT = {
+    "verdict": "NO_SIGNAL",
+    "reason": "Direction thresholds not configured (RULES.md §6; PHASE3_STRATEGY_GAPS D1–D8). "
+              "Levels and the refresh table are computed; no CE/PE decision is made.",
+    "unresolved": ["D1-D8 direction rules", "ATM±2 strike selection (PHASE4 P1)",
+                   "display of legs without IV (PHASE4 P2)"],
+}
+
+
+def _r(v, dp=4):
+    return round(v, dp) if is_number(v) and math.isfinite(v) else (None if v is None or (is_number(v) and not math.isfinite(v)) else v)
+
+
+def chain_completeness(chain: dict) -> dict:
+    strikes = chain.get("strikes", []) if chain else []
+    legs = [leg for s in strikes for leg in (s["ce"], s["pe"]) if leg]
+    priced = [l for l in legs if is_number(l["lastPrice"]) and l["lastPrice"] > 0]
+    two_sided = [l for l in legs if (l["topBidPrice"] or 0) > 0 and (l["topAskPrice"] or 0) > 0]
+    pairs = sum(1 for s in strikes if s["ce"] and s["pe"] and s["ce"]["lastPrice"] and s["pe"]["lastPrice"])
+    return {"strikes": len(strikes), "legs": len(legs), "legsWithLtp": len(priced), "legsTwoSided": len(two_sided),
+            "completePairs": pairs, "legsWithoutOi": sum(1 for l in legs if l["oi"] is None),
+            "legsWithoutPreviousOi": sum(1 for l in legs if l["previousOi"] is None),
+            "quarantinedKeys": sorted((chain or {}).get("quarantined", {}).keys())[:10]}
+
+
+def leg_rows(chain: dict, pricing: dict, atm, band_strikes: int = 5) -> list:
+    """IV, Greeks, OI, bid/ask and quoted spread for strikes within ±band of ATM."""
+    if not chain or not pricing or atm is None:
+        return []
+    ladder = sorted(s["strike"] for s in chain["strikes"])
+    if atm not in ladder:
+        return []
+    i = ladder.index(atm)
+    keep = set(ladder[max(0, i - band_strikes): i + band_strikes + 1])
+    priced = {(l["strike"], l["type"]): l for l in pricing["legs"]}
+    out = []
+    for s in chain["strikes"]:
+        if s["strike"] not in keep:
+            continue
+        for typ, leg in (("CE", s["ce"]), ("PE", s["pe"])):
+            if not leg:
+                continue
+            p = priced.get((s["strike"], typ), {})
+            bid, ask = leg["topBidPrice"], leg["topAskPrice"]
+            mid = (bid + ask) / 2 if bid and ask and bid > 0 and ask > 0 else None
+            out.append({
+                "strike": s["strike"], "type": typ, "ltp": leg["lastPrice"], "bid": bid, "ask": ask,
+                "bidQty": leg["topBidQuantity"], "askQty": leg["topAskQuantity"],
+                "spreadPct": _r((ask - bid) / mid * 100, 3) if mid else None,
+                "oi": leg["oi"], "oiChange": (leg["oi"] - leg["previousOi"]) if leg["oi"] is not None and leg["previousOi"] is not None else None,
+                "volume": leg["volume"], "ivPct": _r(p.get("ivPct")), "delta": _r(p.get("delta"), 5),
+                "gamma": _r(p.get("gamma"), 8), "thetaPerDay": _r(p.get("theta")), "vegaPerIvPt": _r(p.get("vega")),
+                "vendorIvPct": leg["vendorQuarantined"]["impliedVolatility"],
+            })
+    return out
+
+
+def build_observation(*, rec: dict, detail: dict, endpoints: list, rows, contract: dict | None,
+                      next_scan_ist: str | None, duration_ms: float, leg_band: int = 5) -> dict:
+    chain, fut, p, lv = detail.get("chain"), detail.get("futures"), detail.get("pricing"), detail.get("levels")
+    obs = {
+        "endpoints": endpoints,
+        "chainCompleteness": chain_completeness(chain) if chain else None,
+        "contract": contract,
+        "prices": None, "gate": None, "levels": None, "legs": [], "refreshRows": [],
+        "freshness": {}, "conditions": [], "skipped": [], "strategy": STRATEGY_VERDICT,
+        "durationMs": round(duration_ms, 1), "nextScanIst": next_scan_ist,
+    }
+    if chain is not None:
+        recv = chain["provenance"]["epochMs"]
+        fr = obs["freshness"]
+        if fut is not None:
+            fr["chainFuturesSkewMs"] = abs(fut["provenance"]["epochMs"] - recv)
+            if fut["lastTradeTimeMs"] is not None:
+                fr["futuresLastTradeAgeS"] = round((recv - fut["lastTradeTimeMs"]) / 1000, 1)
+        sc = rec.get("scanInputs") or {}
+        if sc.get("candlesMs") is not None:
+            fr["lastCandleAgeS"] = round((recv - sc["candlesMs"]) / 1000, 1)
+        obs["prices"] = {"indexLtp": chain["underlyingLtpDoNotUseAsSpot"],
+                         "futuresLtp": _r(fut["ltp"]) if fut else None,
+                         "futuresOhlc": fut["ohlc"] if fut else None}
+    if p is not None:
+        g = p["gate"]
+        obs["prices"].update(forward=_r(p["forward"]), T=p["T"], daysToExpiry=_r(p["calendarDaysToExpiry"]),
+                             atmStrike=p["atmStrike"])
+        obs["gate"] = {"blocked": False, "perStrikeSpread": _r(p["forwardDetail"]["spread"]),
+                       "strikesUsed": p["forwardDetail"]["usedStrikes"], "divergenceVsFuture": _r(g["divergenceVsFuture"]),
+                       "impliedCarryAnnual": _r(g["impliedCarryAnnual"], 6), "futureCheckMode": g["futureCheckMode"],
+                       "indexDivergence": _r(g["indexDivergence"]),
+                       "findings": [{"code": f["code"], "severity": f["severity"], "observed": _r(f["observed"], 6),
+                                     "threshold": f["threshold"]} for f in g["findings"]]}
+        obs["legs"] = leg_rows(chain, p, p["atmStrike"], leg_band)
+        obs["conditions"].append({"rule": "data gate (RULES.md §3)", "outcome": "PASS"})
+    elif detail.get("gateError"):
+        ge = detail["gateError"]
+        details = {k: (_r(v, 6) if is_number(v) else v) for k, v in (ge.get("details") or {}).items()
+                   if is_number(v) or isinstance(v, (str, dict)) or v is None}
+        obs["gate"] = {"blocked": True, "type": ge["type"], "reasons": ge["reasons"], "details": details}
+        obs["conditions"].append({"rule": "data gate (RULES.md §3)", "outcome": "BLOCKED", "reasons": ge["reasons"]})
+        obs["skipped"].append("pricing, levels and refresh table: gate blocked (RULES.md §5 blank table)")
+    if lv is not None:
+        obs["levels"] = {"breakoutAbove": lv["breakoutAbove"], "breakdownBelow": lv["breakdownBelow"],
+                         "atr14": _r(lv["atr14"]), "tolerance": _r(lv["toleranceUsed"]), "bars": lv["barsAnalyzed"],
+                         "resistances": [{"price": _r(l["price"], 2), "touches": l["touches"], "sources": l["sources"]} for l in lv["allResistance"]],
+                         "supports": [{"price": _r(l["price"], 2), "touches": l["touches"], "sources": l["sources"]} for l in lv["allSupport"]],
+                         "rejectedSpikes": len(lv["rejected"]), "diagnostics": lv["diagnostics"]}
+        if lv["breakoutAbove"] is None and lv["breakdownBelow"] is None:
+            obs["skipped"].append("no confirmed level: " + "; ".join(lv["diagnostics"]))
+    if rows:
+        obs["refreshRows"] = [{"strike": r.strike, "side": r.side, "entry": r.entry_ask, "trigger": r.trigger,
+                               "projectedPremium": r.target, "status": r.status} for r in rows]
+        statuses = sorted({r.status for r in rows})
+        obs["conditions"].append({"rule": "refresh row filters (RULES.md §5: window, staleness, weak level)",
+                                  "outcome": statuses})
+    elif rec.get("status") == "OK":
+        obs["skipped"].append("refresh table blank: no candles / candle timestamp (RULES.md §5)")
+    for leg in (rec.get("excludedLegs") or []):
+        obs["skipped"].append("leg %s %s excluded: %s" % (leg["strike"], leg["type"], leg["reason"]))
+    obs["conditions"].append({"rule": "CE/PE direction (RULES.md §6)", "outcome": "NOT_CONFIGURED"})
+    return obs

@@ -10,3 +10,5 @@ server/paper-state.json
 server/logs/
 scan-logs/
 scan-records/
+observation/
+cloud/dist/**/__pycache__/

@@ -21,12 +21,13 @@ import sys
 import threading
 import time
 from dataclasses import dataclass, field
-from datetime import date, datetime, time as dtime, timezone
+from datetime import date, datetime, time as dtime, timedelta, timezone
 
 from .dhan_client import AuthError, DhanClientError, PlanError, Redactor
 from .expiries import ExpirySelectionError, next_after
 from .instruments import InstrumentResolutionError, explicit_future, select_future
 from .normalize import to_candles
+from .observation import build_observation
 from .scan import BLANK_TABLE, build_scan, run_refresh
 from .session import DEFAULT_STOP, IST, session_state
 from .validation import (DataValidationError, snapshot_fingerprint, validate_candles, validate_chain,
@@ -38,15 +39,15 @@ SENSEX_SCRIP, SENSEX_SEG, FUT_SEG = 51, "IDX_I", "BSE_FNO"
 class JsonLogger:
     """One JSON object per line, every string passed through the redactor."""
 
-    def __init__(self, redactor: Redactor, stream=None, path: str | None = None, clock=None):
-        self.redact, self.stream, self.path = redactor, stream or sys.stderr, path
+    def __init__(self, redactor: Redactor, stream=None, path: str | None = None, clock=None, prefix: str = ""):
+        self.redact, self.stream, self.path, self.prefix = redactor, stream or sys.stderr, path, prefix
         self.clock = clock or (lambda: datetime.now(timezone.utc))
 
     def __call__(self, level: str, event: str, **fields):
         rec = {"ts": self.clock().astimezone(IST).isoformat(timespec="seconds"), "level": level, "event": event}
         rec.update(fields)
         line = self.redact(json.dumps(rec, default=str, ensure_ascii=False))
-        self.stream.write(line + "\n")
+        self.stream.write(self.prefix + line + "\n")
         self.stream.flush()
         if self.path:
             with open(self.path, "a", encoding="utf-8") as f:
@@ -68,6 +69,8 @@ class ScannerConfig:
     max_scans: int | None = None
     ignore_session: bool = False               # replay of recorded data only; never for live scans
     min_interval_s: float = 10.0
+    observe: bool = True                       # attach the Phase-6 observation record to each scan
+    observe_leg_band: int = 5                  # strikes either side of ATM logged with IV/Greeks/OI/bid-ask
 
 
 @dataclass
@@ -104,73 +107,15 @@ class Scanner:
         now = self.clock()
         ist = now.astimezone(IST)
         self.state.scans += 1
-        rec = {"scan": self.state.scans, "startedIst": ist.isoformat(timespec="seconds"), "status": None,
+        rec = {"scan": self.state.scans, "scanId": "%s-%04d" % (ist.strftime("%Y%m%d"), self.state.scans),
+               "startedIst": ist.isoformat(timespec="seconds"), "clockUtc": now.astimezone(timezone.utc).isoformat(timespec="milliseconds"), "status": None,
                "warnings": [], "envelopes": {}, "table": BLANK_TABLE}
+        calls, detail, rows = [], {}, None
+        if self.cfg.observe and hasattr(self.client, "on_call"):
+            self.client.on_call = calls.append
         try:
-            st = session_state(now, self.cfg.holidays, self.cfg.stop_time)
-            if not st.open and not self.cfg.ignore_session:
-                rec.update(status="SKIPPED", reason=st.reason)
-                return self._finish(rec)
-            today = ist.date()
-
-            exp_resp = self.client.expiry_list(SENSEX_SCRIP, SENSEX_SEG)
-            rec["envelopes"]["expirylist"] = exp_resp.envelope
-            expiries = validate_expiry_list(exp_resp.payload)
-            expiry = next_after(expiries, today.isoformat(), "%s:%d" % (SENSEX_SEG, SENSEX_SCRIP))
-            rec["expiry"] = expiry
-            fut = self._future(date.fromisoformat(expiry), today)
-            rec["futures"] = {"securityId": fut.security_id, "expiry": fut.expiry.isoformat()}
-
-            chain = self.client.option_chain(expiry, SENSEX_SCRIP, SENSEX_SEG)       # chain FIRST
-            quote = self.client.quote({FUT_SEG: [int(fut.security_id)]})               # futures right after
-            rec["envelopes"].update(optionchain=chain.envelope, quote=quote.envelope)
-            rec["warnings"] += validate_chain(chain.payload)
-            fp = snapshot_fingerprint(chain.payload)
-            if fp == self.state.last_fingerprint:
-                rec["warnings"].append("DUPLICATE_SNAPSHOT: option chain identical to the previous scan "
-                                       "(feed may be stale, or the market is closed/halted)")
-            self.state.last_fingerprint = fp
-            rec["chainFingerprint"] = fp
-            try:
-                raw_fut = validate_quote(quote.payload, FUT_SEG, fut.security_id)
-            except DataValidationError as e:
-                raw_fut = None  # the gate then blocks with NO_FUTURES_QUOTE — never substitutes the index
-                rec["warnings"].append(e.code + ": " + e.message)
-
-            day = today.isoformat()
-            candles = []
-            try:
-                cnd = self.client.intraday_candles(str(SENSEX_SCRIP), SENSEX_SEG, "INDEX", self.cfg.candle_interval,
-                                                   day + " 09:15:00", day + " 15:30:00")
-                rec["envelopes"]["intraday"] = cnd.envelope
-                rec["warnings"] += validate_candles(cnd.payload)
-                candles = to_candles(cnd.payload)
-            except (AuthError, PlanError):
-                raise
-            except DataValidationError as e:
-                rec["warnings"].append(e.code + ": " + e.message)
-            except DhanClientError as e:
-                # SKILL.md: a dead candle endpoint is not a reason to fail the
-                # scan. Without candles no level can be derived, so rows show
-                # NO_LEVEL — nothing is estimated.
-                rec["warnings"].append("CANDLES_UNAVAILABLE: %s: %s" % (type(e).__name__, e))
-            if not candles:
-                rec["warnings"].append("NO_CANDLES: no index candles for today (holiday, pre-open, or feed issue); "
-                                       "levels cannot be derived")
-
-            scan = build_scan(raw_chain=chain.payload, raw_futures=raw_fut, candles=candles, expiry=expiry,
-                              strikes=self.cfg.strikes, chain_received_ms=chain.received_at_ms,
-                              futures_received_ms=quote.received_at_ms, futures_security_id=fut.security_id,
-                              futures_expiry=fut.expiry.isoformat(), risk_free_rate=self.cfg.risk_free_rate,
-                              max_snapshot_skew_ms=self.cfg.max_snapshot_skew_ms)
-            rows, table = run_refresh(scan, ist)
-            rec.update(status=scan["status"], table=table, scanInputs=scan)
-            if scan["status"] == "OK":
-                rec.update(forward=scan["forward"], atmStrike=scan["atmStrike"],
-                           rowStatuses=sorted({r.status for r in rows}) if rows else [],
-                           excludedLegs=scan["excludedLegs"])
-            else:
-                rec["reason"] = " | ".join(scan.get("reasons", []))
+            rec["session"] = self._session_label(ist)
+            rows = self._scan(rec, now, ist, detail)
         except (AuthError, PlanError) as e:
             rec.update(status="AUTH_FAILED" if isinstance(e, AuthError) else "PLAN_MISSING", reason=str(e))
             self.state.stop_reason = rec["status"]
@@ -181,7 +126,100 @@ class Scanner:
             rec.update(status="INVALID_DATA", reason=str(e))
         except DhanClientError as e:
             rec.update(status="ERROR", reason="%s: %s" % (type(e).__name__, e))
+        finally:
+            if hasattr(self.client, "on_call"):
+                self.client.on_call = None
+        if self.cfg.observe:
+            dur = (self.clock() - now).total_seconds() * 1000
+            nxt = None
+            if not self.stop_event.is_set() and (self.cfg.max_scans is None or self.state.scans < self.cfg.max_scans):
+                n = (now + timedelta(seconds=self.cfg.interval_s)).astimezone(IST)
+                nxt = n.isoformat(timespec="seconds") if (self.cfg.ignore_session or n.time() < self.cfg.stop_time) \
+                    else "none (stop time %s)" % self.cfg.stop_time.isoformat()
+            rec["observation"] = build_observation(rec=rec, detail=detail, endpoints=calls, rows=rows,
+                                                   contract=rec.get("futures"), next_scan_ist=nxt, duration_ms=dur,
+                                                   leg_band=self.cfg.observe_leg_band)
         return self._finish(rec)
+
+    def _session_label(self, ist) -> str:
+        t = ist.time()
+        if t < dtime(9, 15):
+            return "PRE_OPEN"
+        if t < dtime(9, 25):
+            return "OPENING (no-trade window to 09:25)"
+        if dtime(11, 30) <= t < dtime(13, 0):
+            return "MIDDAY (no-trade window 11:30-13:00)"
+        if t >= dtime(14, 50):
+            return "CLOSING (no-trade window after 14:50)"
+        return "MORNING" if t < dtime(11, 30) else "AFTERNOON"
+
+    def _scan(self, rec, now, ist, detail):
+        """One cycle; fills `rec` and `detail`, returns refresh rows (or None)."""
+        st = session_state(now, self.cfg.holidays, self.cfg.stop_time)
+        if not st.open and not self.cfg.ignore_session:
+            rec.update(status="SKIPPED", reason=st.reason)
+            return None
+        today = ist.date()
+
+        exp_resp = self.client.expiry_list(SENSEX_SCRIP, SENSEX_SEG)
+        rec["envelopes"]["expirylist"] = exp_resp.envelope
+        expiries = validate_expiry_list(exp_resp.payload)
+        expiry = next_after(expiries, today.isoformat(), "%s:%d" % (SENSEX_SEG, SENSEX_SCRIP))
+        rec["expiry"] = expiry
+        fut = self._future(date.fromisoformat(expiry), today)
+        rec["futures"] = {"securityId": fut.security_id, "expiry": fut.expiry.isoformat()}
+
+        chain = self.client.option_chain(expiry, SENSEX_SCRIP, SENSEX_SEG)       # chain FIRST
+        quote = self.client.quote({FUT_SEG: [int(fut.security_id)]})               # futures right after
+        rec["envelopes"].update(optionchain=chain.envelope, quote=quote.envelope)
+        rec["warnings"] += validate_chain(chain.payload)
+        fp = snapshot_fingerprint(chain.payload)
+        if fp == self.state.last_fingerprint:
+            rec["warnings"].append("DUPLICATE_SNAPSHOT: option chain identical to the previous scan "
+                                   "(feed may be stale, or the market is closed/halted)")
+        self.state.last_fingerprint = fp
+        rec["chainFingerprint"] = fp
+        try:
+            raw_fut = validate_quote(quote.payload, FUT_SEG, fut.security_id)
+        except DataValidationError as e:
+            raw_fut = None  # the gate then blocks with NO_FUTURES_QUOTE — never substitutes the index
+            rec["warnings"].append(e.code + ": " + e.message)
+
+        day = today.isoformat()
+        candles = []
+        try:
+            cnd = self.client.intraday_candles(str(SENSEX_SCRIP), SENSEX_SEG, "INDEX", self.cfg.candle_interval,
+                                               day + " 09:15:00", day + " 15:30:00")
+            rec["envelopes"]["intraday"] = cnd.envelope
+            rec["warnings"] += validate_candles(cnd.payload)
+            candles = to_candles(cnd.payload)
+        except (AuthError, PlanError):
+            raise
+        except DataValidationError as e:
+            rec["warnings"].append(e.code + ": " + e.message)
+        except DhanClientError as e:
+            # SKILL.md: a dead candle endpoint is not a reason to fail the
+            # scan. Without candles no level can be derived, so rows show
+            # NO_LEVEL — nothing is estimated.
+            rec["warnings"].append("CANDLES_UNAVAILABLE: %s: %s" % (type(e).__name__, e))
+        if not candles:
+            rec["warnings"].append("NO_CANDLES: no index candles for today (holiday, pre-open, or feed issue); "
+                                   "levels cannot be derived")
+
+        scan = build_scan(raw_chain=chain.payload, raw_futures=raw_fut, candles=candles, expiry=expiry,
+                          strikes=self.cfg.strikes, chain_received_ms=chain.received_at_ms,
+                          futures_received_ms=quote.received_at_ms, futures_security_id=fut.security_id,
+                          futures_expiry=fut.expiry.isoformat(), risk_free_rate=self.cfg.risk_free_rate,
+                          max_snapshot_skew_ms=self.cfg.max_snapshot_skew_ms, detail_out=detail)
+        rows, table = run_refresh(scan, ist)
+        rec.update(status=scan["status"], table=table, scanInputs=scan)
+        if scan["status"] == "OK":
+            rec.update(forward=scan["forward"], atmStrike=scan["atmStrike"],
+                       rowStatuses=sorted({r.status for r in rows}) if rows else [],
+                       excludedLegs=scan["excludedLegs"])
+        else:
+            rec["reason"] = " | ".join(scan.get("reasons", []))
+        return rows
 
     def _finish(self, rec: dict) -> dict:
         rec["finishedIst"] = self.clock().astimezone(IST).isoformat(timespec="seconds")

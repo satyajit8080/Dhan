@@ -45,3 +45,29 @@ class RecordingTransport:
         if self.scan_dir is not None and self.bodies:
             (self.scan_dir / "bodies.json").write_text(json.dumps({"note": "RECORDED live market data", "bodies": self.bodies}))
             (self.scan_dir / "receipts.json").write_text(json.dumps(self.receipts))
+
+
+class MemoryRecorder:
+    """Same capture rule as RecordingTransport, kept in memory (for runtimes
+    without a usable filesystem, e.g. Dhan Cloud). `take()` returns and clears
+    the current scan's bodies and receipts."""
+
+    def __init__(self, inner):
+        self.inner = inner
+        self.bodies, self.receipts = {}, {}
+
+    def send(self, method, url, headers, body, timeout):
+        r = self.inner.send(method, url, headers, body, timeout)
+        path = url.split("/v2", 1)[1]
+        if path in RECORDED_PATHS and r.status == 200:
+            try:
+                self.bodies[path] = json.loads(r.body.decode("utf-8"))
+                self.receipts[path] = r.received_at_ms
+            except ValueError:
+                pass
+        return r
+
+    def take(self) -> dict:
+        out = {"bodies": self.bodies, "receipts": self.receipts}
+        self.bodies, self.receipts = {}, {}
+        return out
