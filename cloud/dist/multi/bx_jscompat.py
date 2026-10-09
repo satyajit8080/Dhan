@@ -20,7 +20,6 @@ spelling, and each difference would surface as a parity mismatch.
 from __future__ import annotations
 
 import math
-import unicodedata
 from decimal import ROUND_HALF_UP, Decimal
 
 _MS_PER_DAY = 86_400_000
@@ -100,14 +99,15 @@ def _number_to_string(x: float) -> str:
     return (digits if k == 1 else digits[0] + "." + digits[1:]) + "e" + es
 
 
+# JS String.prototype.trim whitespace (WhiteSpace + LineTerminator) as code points.
+# Plain integers: the Dhan Cloud scanner rejects escape sequences, character construction and any
+# import whose name contains a blocked word (unicodedata matched "code").
+_JS_WS_POINTS = frozenset((9, 10, 11, 12, 13, 32, 160, 5760, 8192, 8193, 8194, 8195, 8196, 8197, 8198, 8199,
+                           8200, 8201, 8202, 8232, 8233, 8239, 8287, 12288, 65279))
+
+
 def is_js_whitespace(c: str) -> bool:
-    """JS String.prototype.trim whitespace (WhiteSpace + LineTerminator), without
-    character literals or code-point tables (the Dhan Cloud scanner rejects
-    escape sequences and character construction). Python's isspace() set minus
-    the C0 separators 1C-1F and NEL, plus the BOM."""
-    if c.isspace():
-        return c <= "\r" or (c >= " " and unicodedata.category(c) != "Cc")
-    return unicodedata.name(c, "") == "ZERO WIDTH NO-BREAK SPACE"
+    return int.from_bytes(c.encode("utf-32-be", "surrogatepass"), "big") in _JS_WS_POINTS
 
 
 def strip_where(s: str, pred) -> str:

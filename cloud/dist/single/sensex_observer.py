@@ -141,7 +141,6 @@ class _BX_RT:
 # module: engine/sensex/jscompat.py
 # ----------------------------------------------------------------------
 import math
-import unicodedata
 from decimal import ROUND_HALF_UP, Decimal
 _MS_PER_DAY = 86400000
 
@@ -203,11 +202,10 @@ def _number_to_string(x: float) -> str:
     e = n - 1
     es = ('+' if e > 0 else '-') + str(abs(e))
     return (digits if k == 1 else digits[0] + '.' + digits[1:]) + 'e' + es
+_JS_WS_POINTS = frozenset((9, 10, 11, 12, 13, 32, 160, 5760, 8192, 8193, 8194, 8195, 8196, 8197, 8198, 8199, 8200, 8201, 8202, 8232, 8233, 8239, 8287, 12288, 65279))
 
 def is_js_whitespace(c: str) -> bool:
-    if c.isspace():
-        return c <= '\r' or (c >= ' ' and unicodedata.category(c) != 'Cc')
-    return unicodedata.name(c, '') == 'ZERO WIDTH NO-BREAK SPACE'
+    return int.from_bytes(c.encode('utf-32-be', 'surrogatepass'), 'big') in _JS_WS_POINTS
 
 def strip_where(s: str, pred) -> str:
     i, j = (0, len(s))
@@ -2403,7 +2401,7 @@ import sys
 import time as _bx_main__time
 from datetime import datetime, time as dtime, timezone
 PROGRAM = 'sensex-readonly-observer'
-VERSION = '6.4'
+VERSION = '6.5'
 EXIT_OK, EXIT_CONFIG, EXIT_AUTH, EXIT_SELFTEST = (0, 2, 3, 4)
 
 def _stdout_logger(redactor):

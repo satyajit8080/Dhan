@@ -213,6 +213,13 @@ class Safety(unittest.TestCase):
                     mods = [a.name for a in n.names] if isinstance(n, ast.Import) else [n.module or ""]
                     for m in mods:
                         self.assertNotIn(m.split(".")[0], FORBIDDEN_MODULES, "%s imports %s" % (label, m))
+                        # fourth Cloud scan (9 Oct 2026 22:22): "Blocked import detected: code" for `unicodedata`,
+                        # i.e. blocked names are matched as substrings of the imported module name
+                        for bad in ("code", "os", "subprocess", "socket", "pathlib", "base64", "platform", "pickle",
+                                    "marshal", "ctypes", "shutil", "importlib", "types"):
+                            if bad == "os":
+                                continue   # too short for a substring rule to be meaningful; exact match above
+                            self.assertNotIn(bad, m.lower(), "%s imports %s (contains %r)" % (label, m, bad))
 
     def test_no_pattern_the_cloud_scanner_blocked(self):
         import re
