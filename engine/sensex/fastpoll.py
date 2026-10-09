@@ -48,11 +48,11 @@ class FastPoller:
         try:
             r = self.client.quote(body)
         except (AuthError, PlanError) as e:
-            self.log("error", "paper_poll_failed", error=type(e).__name__, code=e.code)
+            self.log("error", "paper_poll_failed", error=type(e).__name__, errorCode=e.error_code)
             return False
         except DhanClientError as e:
             self.failures += 1
-            self.log("warn", "paper_poll_failed", error=type(e).__name__, code=e.code)
+            self.log("warn", "paper_poll_failed", error=type(e).__name__, errorCode=e.error_code)
             return True
         self.polls += 1
         p = r.payload if isinstance(r.payload, dict) else {}

@@ -72,9 +72,9 @@ class DhanClientError(Exception):
     attempts = None
     retry_after_s = None
 
-    def __init__(self, message: str, *, code: str = "", http_status: int | None = None):
+    def __init__(self, message: str, *, error_code: str = "", http_status: int | None = None):
         super().__init__(message)
-        self.code = code
+        self.error_code = error_code
         self.http_status = http_status
 
 
@@ -225,7 +225,7 @@ class UrllibTransport:
                 data = r.read()
                 return RawResponse(r.status, data, dict(r.headers), int(time.time() * 1000))
         except urllib.error.HTTPError as e:
-            return RawResponse(e.code, e.read() or b"", dict(e.headers or {}), int(time.time() * 1000))
+            return RawResponse(e.status, e.read() or b"", dict(e.headers or {}), int(time.time() * 1000))
 
 
 # ----------------------------------------------------------------- the client
@@ -285,7 +285,7 @@ class DhanClient:
             out.update(ok=True, attempts=r.attempts, envelope=r.envelope, receivedAtMs=r.received_at_ms)
             return r
         except DhanClientError as e:
-            out.update(error=type(e).__name__, code=e.code, httpStatus=e.http_status,
+            out.update(error=type(e).__name__, errorCode=e.error_code, httpStatus=e.http_status,
                        attempts=e.attempts, message=self.redact(str(e))[:300])
             raise
         finally:
@@ -314,11 +314,11 @@ class DhanClient:
             if not last.retryable or attempt == self.max_attempts:
                 last.attempts = attempt
                 self._emit("error", "request_failed", path=path, attempt=attempt, error=type(last).__name__,
-                           code=last.code, http_status=last.http_status, message=str(last))
+                           error_code=last.error_code, http_status=last.http_status, message=str(last))
                 raise last
             wait = last.retry_after_s or min(20.0, 0.5 * 2 ** (attempt - 1)) * (0.5 + self.jitter() / 2)
             self._emit("warn", "request_retry", path=path, attempt=attempt, error=type(last).__name__,
-                       code=last.code, wait_s=round(wait, 3))
+                       error_code=last.error_code, wait_s=round(wait, 3))
             self.sleep(wait)
         raise last  # pragma: no cover
 
@@ -330,35 +330,35 @@ class DhanClient:
             if raw.status >= 500:
                 raise TransientError("HTTP %d with non-JSON body on %s" % (raw.status, path), http_status=raw.status)
             raise ResponseFormatError("Non-JSON response on %s (HTTP %d)" % (path, raw.status), http_status=raw.status)
-        code = ""
+        ecode = ""
         msg = "HTTP %d" % raw.status
         if isinstance(parsed, dict):
-            code = str(parsed.get("errorCode") or parsed.get("internalErrorCode") or "").upper()
+            ecode = str(parsed.get("errorCode") or parsed.get("internalErrorCode") or "").upper()
             msg = str(parsed.get("errorMessage") or parsed.get("internalErrorMessage") or msg)
         msg = self.redact(msg)
-        if raw.status == 429 or code in THROTTLE_CODES:
-            e = RateLimitedError("Throttled on %s: %s" % (path, msg), code=code, http_status=raw.status)
+        if raw.status == 429 or ecode in THROTTLE_CODES:
+            e = RateLimitedError("Throttled on %s: %s" % (path, msg), error_code=ecode, http_status=raw.status)
             ra = raw.headers.get("Retry-After") or raw.headers.get("retry-after")
             try:
                 e.retry_after_s = float(ra) if ra else None
             except ValueError:
                 e.retry_after_s = None
             raise e
-        if code in PLAN_CODES:
+        if ecode in PLAN_CODES:
             raise PlanError("Data API access missing on %s (%s): check the Data API plan in Dhan web; a new "
-                            "token will not fix this." % (path, code), code=code, http_status=raw.status)
-        if raw.status in (401, 403) or code in AUTH_CODES:
+                            "token will not fix this." % (path, ecode), error_code=ecode, http_status=raw.status)
+        if raw.status in (401, 403) or ecode in AUTH_CODES:
             raise AuthError("Dhan rejected the credentials on %s (%s). Generate a fresh token in Dhan web and "
-                            "update your local environment." % (path, code or raw.status), code=code,
+                            "update your local environment." % (path, ecode or raw.status), error_code=ecode,
                             http_status=raw.status)
-        if raw.status >= 500 or code in RETRYABLE_CODES:
-            raise TransientError("Dhan server error on %s: %s" % (path, msg), code=code, http_status=raw.status)
+        if raw.status >= 500 or ecode in RETRYABLE_CODES:
+            raise TransientError("Dhan server error on %s: %s" % (path, msg), error_code=ecode, http_status=raw.status)
         if raw.status >= 400:
-            raise RequestRejectedError("Dhan rejected the request on %s: %s (%s)" % (path, msg, code),
-                                       code=code, http_status=raw.status)
+            raise RequestRejectedError("Dhan rejected the request on %s: %s (%s)" % (path, msg, ecode),
+                                       error_code=ecode, http_status=raw.status)
         if isinstance(parsed, dict) and parsed.get("status") not in (None, "success"):
             raise RequestRejectedError("Dhan returned status=%r on %s: %s" % (parsed.get("status"), path, msg),
-                                       code=code)
+                                       error_code=ecode)
         # Envelope: the TS client (used live) expects {"status","data"}; Dhan's
         # skills reference shows the same for /optionchain. Whether /charts and
         # /marketfeed bodies are wrapped is UNVERIFIED, so both are accepted and

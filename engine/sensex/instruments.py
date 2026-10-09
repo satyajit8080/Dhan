@@ -28,23 +28,23 @@ REQUIRED_VALUES = ("exchange", "instrument", "underlying")
 
 
 class InstrumentResolutionError(Exception):
-    code = "INSTRUMENT"
+    error_code = "INSTRUMENT"
 
 
 class MappingMissingError(InstrumentResolutionError):
-    code = "BLOCKED_NO_VERIFIED_MAPPING"
+    error_code = "BLOCKED_NO_VERIFIED_MAPPING"
 
 
 class MappingMismatchError(InstrumentResolutionError):
-    code = "MAPPING_HEADER_MISMATCH"
+    error_code = "MAPPING_HEADER_MISMATCH"
 
 
 class NoEligibleContractError(InstrumentResolutionError):
-    code = "NO_ELIGIBLE_FUTURE"
+    error_code = "NO_ELIGIBLE_FUTURE"
 
 
 class DuplicateContractError(InstrumentResolutionError):
-    code = "DUPLICATE_FUTURE"
+    error_code = "DUPLICATE_FUTURE"
 
 
 @dataclass(frozen=True)

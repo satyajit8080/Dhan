@@ -166,7 +166,7 @@ class Validation(unittest.TestCase):
                                    "200": {"ce": {"last_price": 1}, "pe": {"last_price": 2}}}}, "CHAIN_INSUFFICIENT_PAIRS")]:
             with self.assertRaises(DataValidationError) as cm:
                 validate_chain(bad)
-            self.assertEqual(cm.exception.code, code)
+            self.assertEqual(cm.exception.error_code, code)
 
     def test_quote(self):
         p = {"BSE_FNO": {"844615": {"last_price": 74656.75}}}
@@ -175,7 +175,7 @@ class Validation(unittest.TestCase):
                           ({"BSE_FNO": {"844615": {"last_price": None}}}, "QUOTE_NO_LTP")]:
             with self.assertRaises(DataValidationError) as cm:
                 validate_quote(bad, "BSE_FNO", 844615)
-            self.assertEqual(cm.exception.code, code)
+            self.assertEqual(cm.exception.error_code, code)
 
     def test_candles(self):
         ok = {"timestamp": [1, 2], "open": [1, 2], "high": [1, 2], "low": [1, 2], "close": [1, 2]}

@@ -191,7 +191,7 @@ class Scanner:
             raw_fut = validate_quote(quote.payload, FUT_SEG, fut.security_id)
         except DataValidationError as e:
             raw_fut = None  # the gate then blocks with NO_FUTURES_QUOTE — never substitutes the index
-            rec["warnings"].append(e.code + ": " + e.message)
+            rec["warnings"].append(e.error_code + ": " + e.message)
 
         day = today.isoformat()
         candles = []
@@ -204,7 +204,7 @@ class Scanner:
         except (AuthError, PlanError):
             raise
         except DataValidationError as e:
-            rec["warnings"].append(e.code + ": " + e.message)
+            rec["warnings"].append(e.error_code + ": " + e.message)
         except DhanClientError as e:
             # SKILL.md: a dead candle endpoint is not a reason to fail the
             # scan. Without candles no level can be derived, so rows show

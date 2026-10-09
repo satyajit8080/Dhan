@@ -222,6 +222,16 @@ class Safety(unittest.TestCase):
                 m = re.search(pat, text, re.M)
                 self.assertIsNone(m, "%s contains blocked pattern %s: %r" % (f.name, pat, m and text[max(0, m.start() - 40):m.end() + 20]))
 
+    def test_no_identifier_named_like_a_blocked_module(self):
+        """Third Cloud scan (9 Oct 2026 22:19): 'Blocked import detected: code' with no such import; the
+        scanner evidently treats the NAME `code` as the module. No bundle may bind or read such names."""
+        blocked = {"code", "os", "subprocess", "socket", "pathlib", "base64", "platform", "types", "importlib"}
+        for label, tree in _bundle_trees():
+            for n in ast.walk(tree):
+                name = n.id if isinstance(n, ast.Name) else n.arg if isinstance(n, ast.arg) else \
+                    n.arg if isinstance(n, ast.keyword) else None
+                self.assertNotIn(name, blocked, "%s line %s uses the name %r" % (label, getattr(n, "lineno", "?"), name))
+
     def test_every_request_site_is_on_the_allow_list(self):
         single = load_single()
         allowed = set(single.READ_ONLY_ENDPOINTS)

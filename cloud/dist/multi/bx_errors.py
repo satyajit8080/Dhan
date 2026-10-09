@@ -4,7 +4,7 @@
 
 
 class Bull50Error(Exception):
-    code = "ERROR"
+    error_code = "ERROR"
 
     def __init__(self, message: str, details: dict | None = None):
         super().__init__(message)
@@ -14,15 +14,15 @@ class Bull50Error(Exception):
 
 class PricingValidationError(Bull50Error):
     """TS ValidationError (e.g. expired contract, T <= 0)."""
-    code = "VALIDATION"
+    error_code = "VALIDATION"
 
 
 class SnapshotSkewError(Bull50Error):
-    code = "SNAPSHOT_SKEW"
+    error_code = "SNAPSHOT_SKEW"
 
 
 class GateBlockedError(Bull50Error):
-    code = "GATE_BLOCKED"
+    error_code = "GATE_BLOCKED"
 
     def __init__(self, reasons: list, details: dict | None = None):
         super().__init__(

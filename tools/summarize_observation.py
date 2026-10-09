@@ -70,7 +70,7 @@ def summarize(events, replay_text=None) -> str:
             d["ms"].append(c.get("durationMs"))
             d["env"][c.get("envelope") or "—"] += 1
             if not c.get("ok"):
-                d["err"]["%s %s" % (c.get("error"), c.get("code") or "")] += 1
+                d["err"]["%s %s" % (c.get("error"), c.get("errorCode", c.get("code")) or "")] += 1
     w("| Endpoint | Calls | OK | Retried | p50 ms | max ms | Envelope | Errors |")
     w("|---|---|---|---|---|---|---|---|")
     for ep, d in sorted(per.items()):

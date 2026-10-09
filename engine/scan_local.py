@@ -112,7 +112,7 @@ def main(argv=None) -> int:
         try:
             r = client.profile()
         except DhanClientError as e:
-            log("error", "profile_check_failed", error=type(e).__name__, code=e.code, http_status=e.http_status)
+            log("error", "profile_check_failed", error=type(e).__name__, error_code=e.error_code, http_status=e.http_status)
             return 2
         body = r.payload if isinstance(r.payload, dict) else {}
         # Report presence only — never the values (they identify the account).

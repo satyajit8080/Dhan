@@ -21,9 +21,9 @@ from bx_jscompat import is_number
 
 
 class DataValidationError(Exception):
-    def __init__(self, code: str, message: str):
-        super().__init__("%s: %s" % (code, message))
-        self.code = code
+    def __init__(self, error_code: str, message: str):
+        super().__init__("%s: %s" % (error_code, message))
+        self.error_code = error_code
         self.message = message
 
 
