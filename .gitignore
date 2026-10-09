@@ -12,3 +12,4 @@ scan-logs/
 scan-records/
 observation/
 cloud/dist/**/__pycache__/
+!cloud/dist/
