@@ -10,7 +10,7 @@ forward recovery and an internal Black-76 pricing core. Never places orders.
 | Path | What |
 |---|---|
 | `plugin/` | Installable Claude plugin `bull50-dhan` v1.7.0: MCP server bundle, `/dhan-token`, `/sensex-snapshot`, `sensex-scalp` skill |
-| `server/` | TypeScript source of the MCP server + 276 tests |
+| `server/` | TypeScript source of the MCP server + 282 tests |
 | `engine/` | Python `refresh_table.py` (option breakout premiums), `commodity_engine.py` (MCX), sample data |
 | `docs/` | Signal log |
 | `.claude-plugin/marketplace.json` | Lets Claude install the plugin straight from this repo |
@@ -25,7 +25,7 @@ Needs Node 20+. Then each morning: `/dhan-token <token> <client_id>`.
 ```bash
 cd server
 npm ci
-npm test          # 276 tests, offline
+npm test          # 282 tests, offline
 npm run build     # tsc -> dist/
 npm run bundle    # rebuild plugin/server/mcpServer.cjs
 ```
@@ -70,5 +70,8 @@ verified): [docs/PHASE4_PORT_PLAN.md](docs/PHASE4_PORT_PLAN.md),
 [docs/PHASE4_PARITY_RESULTS.md](docs/PHASE4_PARITY_RESULTS.md).
 Run `cd engine && python3 tests/parity_report.py`; regenerate fixtures with
 `cd server && npx tsx scripts/export-parity-fixtures.ts`.
+Phase-5 local read-only scanner (`engine/scan_local.py`; `--mock` runs offline):
+[docs/PHASE5_DATA_CLIENT_DESIGN.md](docs/PHASE5_DATA_CLIENT_DESIGN.md),
+[docs/PHASE5_DATA_CLIENT_RESULTS.md](docs/PHASE5_DATA_CLIENT_RESULTS.md).
 `tools/dhan_cloud_probe.py` and `tools/dhan_cloud_probe_extended.py` are read-only,
 credential-free runtime probes (`cd tools && python3 -m unittest test_dhan_cloud_probe`).

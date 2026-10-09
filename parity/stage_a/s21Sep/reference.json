@@ -1,0 +1,138 @@
+{
+ "strikes": [
+  74500,
+  74600,
+  74700,
+  74800
+ ],
+ "asOfMs": 1789967033611,
+ "calls": [
+  "/optionchain/expirylist",
+  "/optionchain",
+  "/marketfeed/quote",
+  "/charts/intraday"
+ ],
+ "receipts": {
+  "chainMs": 1789967036615,
+  "futuresMs": 1789967036616
+ },
+ "expiry": "2026-09-24",
+ "expected": {
+  "status": "OK",
+  "forward": 74658.35830487608,
+  "T": 0.008782451325469304,
+  "df": 0.9994293035730345,
+  "atmStrike": 74700,
+  "candleRefPrice": 74667.55,
+  "resistances": [
+   {
+    "price": 74719.1436302682,
+    "touches": 8,
+    "sources": [
+     "vwap",
+     "swing_low"
+    ]
+   },
+   {
+    "price": 74754.65,
+    "touches": 9,
+    "sources": [
+     "swing_high",
+     "opening_range_high"
+    ]
+   },
+   {
+    "price": 74780,
+    "touches": 2,
+    "sources": [
+     "swing_high",
+     "session_high",
+     "consolidation_high"
+    ]
+   }
+  ],
+  "supports": [
+   {
+    "price": 74594.2,
+    "touches": 1,
+    "sources": [
+     "session_low",
+     "opening_range_low",
+     "consolidation_low"
+    ]
+   }
+  ],
+  "atr": 39.008090379007804,
+  "barMinutes": 5,
+  "legs": [
+   {
+    "strike": 74500,
+    "isCall": true,
+    "ivPct": 12.940283463527008,
+    "bid": 445,
+    "ask": 445.5,
+    "ltp": 445.7
+   },
+   {
+    "strike": 74500,
+    "isCall": false,
+    "ivPct": 12.941847841179355,
+    "bid": 286.7,
+    "ask": 287.35,
+    "ltp": 287.3
+   },
+   {
+    "strike": 74600,
+    "isCall": true,
+    "ivPct": 12.843013517550961,
+    "bid": 387.75,
+    "ask": 388.35,
+    "ltp": 388.35
+   },
+   {
+    "strike": 74600,
+    "isCall": false,
+    "ivPct": 12.841216650394859,
+    "bid": 329.35,
+    "ask": 330,
+    "ltp": 329.75
+   },
+   {
+    "strike": 74700,
+    "isCall": true,
+    "ivPct": 12.73816841236955,
+    "bid": 335,
+    "ask": 335.05,
+    "ltp": 335
+   },
+   {
+    "strike": 74700,
+    "isCall": false,
+    "ivPct": 12.736628214415285,
+    "bid": 376.3,
+    "ask": 376.9,
+    "ltp": 376.75
+   },
+   {
+    "strike": 74800,
+    "isCall": true,
+    "ivPct": 12.635600794354279,
+    "bid": 286.35,
+    "ask": 286.75,
+    "ltp": 286.75
+   },
+   {
+    "strike": 74800,
+    "isCall": false,
+    "ivPct": 12.641554961276801,
+    "bid": 428,
+    "ask": 428.55,
+    "ltp": 428.5
+   }
+  ],
+  "excludedLegs": [],
+  "snapshotMs": 1789967036615,
+  "candlesMs": 1789966800000,
+  "gateWarnings": []
+ }
+}

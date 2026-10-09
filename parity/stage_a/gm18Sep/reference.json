@@ -1,0 +1,169 @@
+{
+ "strikes": [
+  74100,
+  74200,
+  74300,
+  74400,
+  74500
+ ],
+ "asOfMs": 1789725600000,
+ "calls": [
+  "/optionchain/expirylist",
+  "/optionchain",
+  "/marketfeed/quote",
+  "/charts/intraday"
+ ],
+ "receipts": {
+  "chainMs": 1789725603008,
+  "futuresMs": 1789725603019
+ },
+ "expiry": "2026-09-24",
+ "expected": {
+  "status": "OK",
+  "forward": 74616.5744918025,
+  "T": 0.016438260781329275,
+  "df": 0.998932083678141,
+  "atmStrike": 74500,
+  "candleRefPrice": 74294.96,
+  "resistances": [
+   {
+    "price": 74509.41,
+    "touches": 9,
+    "sources": [
+     "swing_low",
+     "opening_range_low"
+    ]
+   },
+   {
+    "price": 74567.35,
+    "touches": 15,
+    "sources": [
+     "swing_high"
+    ]
+   },
+   {
+    "price": 74595.41666666667,
+    "touches": 21,
+    "sources": [
+     "consolidation_low",
+     "swing_high"
+    ]
+   },
+   {
+    "price": 74624.46599642538,
+    "touches": 13,
+    "sources": [
+     "vwap"
+    ]
+   },
+   {
+    "price": 74667.475,
+    "touches": 12,
+    "sources": [
+     "swing_high",
+     "opening_range_high"
+    ]
+   },
+   {
+    "price": 74781.65,
+    "touches": 4,
+    "sources": [
+     "swing_high",
+     "session_high",
+     "consolidation_high"
+    ]
+   }
+  ],
+  "supports": [],
+  "atr": 36.62798421514457,
+  "barMinutes": 5,
+  "legs": [
+   {
+    "strike": 74100,
+    "isCall": true,
+    "ivPct": 10.640997794716206,
+    "bid": 713.55,
+    "ask": 713.65,
+    "ltp": 713.6
+   },
+   {
+    "strike": 74100,
+    "isCall": false,
+    "ivPct": 10.961092624527302,
+    "bid": 208.25,
+    "ask": 208.35,
+    "ltp": 208.3
+   },
+   {
+    "strike": 74200,
+    "isCall": true,
+    "ivPct": 10.892088813196299,
+    "bid": 654.95,
+    "ask": 655.05,
+    "ltp": 655
+   },
+   {
+    "strike": 74200,
+    "isCall": false,
+    "ivPct": 10.830194491894016,
+    "bid": 236.65,
+    "ask": 236.75,
+    "ltp": 236.7
+   },
+   {
+    "strike": 74300,
+    "isCall": true,
+    "ivPct": 10.794253635265347,
+    "bid": 587.95,
+    "ask": 588.05,
+    "ltp": 588
+   },
+   {
+    "strike": 74300,
+    "isCall": false,
+    "ivPct": 10.747024037615367,
+    "bid": 270,
+    "ask": 270.1,
+    "ltp": 270.05
+   },
+   {
+    "strike": 74400,
+    "isCall": true,
+    "ivPct": 10.497820447128115,
+    "bid": 517.05,
+    "ask": 517.15,
+    "ltp": 517.1
+   },
+   {
+    "strike": 74400,
+    "isCall": false,
+    "ivPct": 10.576943796776403,
+    "bid": 303.65,
+    "ask": 303.75,
+    "ltp": 303.7
+   },
+   {
+    "strike": 74500,
+    "isCall": true,
+    "ivPct": 10.516756767485614,
+    "bid": 461.5,
+    "ask": 461.6,
+    "ltp": 461.55
+   },
+   {
+    "strike": 74500,
+    "isCall": false,
+    "ivPct": 10.516756767485383,
+    "bid": 345.05,
+    "ask": 345.15,
+    "ltp": 345.1
+   }
+  ],
+  "excludedLegs": [],
+  "snapshotMs": 1789725603008,
+  "candlesMs": 1789725900000,
+  "gateWarnings": [
+   "Index LTP 74294.96 sits 321.6145 points below the forward (0.43% carry over the remaining life). Do NOT use the index LTP as spot for option maths."
+  ]
+ }
+}

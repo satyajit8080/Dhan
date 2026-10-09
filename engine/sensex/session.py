@@ -1,0 +1,61 @@
+"""
+Market-session rules for the local scanner (Asia/Kolkata, UTC+05:30, no DST).
+
+Weekends are closed. Exchange HOLIDAYS are not hard-coded: no official
+holiday source has been verified in this project, so the user supplies a file
+of YYYY-MM-DD dates. Without one, a holiday is still caught at run time
+because the scan sees no fresh data (see scanner.py), but it is not known in
+advance — documented, not guessed.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import date, datetime, time, timedelta, timezone
+
+IST = timezone(timedelta(hours=5, minutes=30))
+MARKET_OPEN = time(9, 15)
+DEFAULT_STOP = time(15, 30)
+
+
+def to_ist(now: datetime) -> datetime:
+    if now.tzinfo is None:
+        raise ValueError("scanner clock must be timezone-aware")
+    return now.astimezone(IST)
+
+
+def load_holidays(path: str | None) -> frozenset:
+    if not path:
+        return frozenset()
+    out = set()
+    with open(path, "r", encoding="utf-8") as f:
+        for n, line in enumerate(f, 1):
+            s = line.split("#", 1)[0].strip()
+            if not s:
+                continue
+            try:
+                out.add(date.fromisoformat(s))
+            except ValueError:
+                raise ValueError("holiday file line %d is not YYYY-MM-DD: %r" % (n, s)) from None
+    return frozenset(out)
+
+
+@dataclass(frozen=True)
+class SessionState:
+    open: bool
+    reason: str          # OPEN | WEEKEND | HOLIDAY | BEFORE_OPEN | AFTER_STOP
+    seconds_to_stop: float
+
+
+def session_state(now: datetime, holidays=frozenset(), stop: time = DEFAULT_STOP) -> SessionState:
+    t = to_ist(now)
+    stop_dt = t.replace(hour=stop.hour, minute=stop.minute, second=0, microsecond=0)
+    if t.weekday() >= 5:
+        return SessionState(False, "WEEKEND", 0.0)
+    if t.date() in holidays:
+        return SessionState(False, "HOLIDAY", 0.0)
+    if t.time() < MARKET_OPEN:
+        return SessionState(False, "BEFORE_OPEN", (stop_dt - t).total_seconds())
+    if t >= stop_dt:
+        return SessionState(False, "AFTER_STOP", 0.0)
+    return SessionState(True, "OPEN", (stop_dt - t).total_seconds())

@@ -1,0 +1,27 @@
+{
+ "strikes": [
+  74100,
+  74200,
+  74300,
+  74400,
+  74500
+ ],
+ "asOfMs": 1789725600000,
+ "calls": [
+  "/optionchain/expirylist",
+  "/optionchain",
+  "/marketfeed/quote",
+  "/charts/intraday"
+ ],
+ "receipts": {
+  "chainMs": 1789725603003,
+  "futuresMs": 1789725603004
+ },
+ "expiry": "2026-09-24",
+ "expected": {
+  "status": "BLOCKED",
+  "reasons": [
+   "Parity forward 74616.5745 diverges from listed future 75200.0000 by 583.4255 points, above the 75-point limit."
+  ]
+ }
+}

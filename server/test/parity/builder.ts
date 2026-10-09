@@ -91,7 +91,7 @@ const candlesRaw = JSON.parse(
   readFileSync(new URL('../../../engine/samples/candles_raw.json', import.meta.url), 'utf8'),
 ) as unknown;
 
-const GM_AS_OF = istToEpochMs(GM.asOfIst);
+export const GM_AS_OF = istToEpochMs(GM.asOfIst);
 
 /** Dhan-shaped /optionchain `data` for the GM close. SYNTHETIC: ids, OI, depth. */
 export function gmRawChain(spreadAbs = 0.05) {
@@ -122,7 +122,7 @@ export function gmRawChain(spreadAbs = 0.05) {
 }
 
 /** 21-Sep-2026 10:33 IST refresh sample (engine/run_refresh.py legs). */
-const S21 = {
+export const S21 = {
   asOfMs: 1789967033611,
   expiry: '2026-09-24',
   indexLtp: 74667.55,

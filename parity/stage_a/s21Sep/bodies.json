@@ -1,0 +1,305 @@
+{
+ "note": "MOCK Dhan-shaped HTTP bodies (see server/test/parity/stageA.ts)",
+ "bodies": {
+  "/optionchain/expirylist": {
+   "status": "success",
+   "data": [
+    "2026-09-24",
+    "2026-10-01",
+    "2026-10-29"
+   ]
+  },
+  "/optionchain": {
+   "status": "success",
+   "data": {
+    "last_price": 74667.55,
+    "oc": {
+     "74500.000000": {
+      "ce": {
+       "security_id": 920745,
+       "last_price": 445.7,
+       "top_bid_price": 445,
+       "top_ask_price": 445.5,
+       "top_bid_quantity": 20,
+       "top_ask_quantity": 20,
+       "oi": 100000,
+       "previous_oi": 90000,
+       "volume": 50000
+      },
+      "pe": {
+       "security_id": 930745,
+       "last_price": 287.3,
+       "top_bid_price": 286.7,
+       "top_ask_price": 287.35,
+       "top_bid_quantity": 20,
+       "top_ask_quantity": 20,
+       "oi": 100000,
+       "previous_oi": 110000,
+       "volume": 50000
+      }
+     },
+     "74600.000000": {
+      "ce": {
+       "security_id": 920746,
+       "last_price": 388.35,
+       "top_bid_price": 387.75,
+       "top_ask_price": 388.35,
+       "top_bid_quantity": 20,
+       "top_ask_quantity": 20,
+       "oi": 100000,
+       "previous_oi": 90000,
+       "volume": 50000
+      },
+      "pe": {
+       "security_id": 930746,
+       "last_price": 329.75,
+       "top_bid_price": 329.35,
+       "top_ask_price": 330,
+       "top_bid_quantity": 20,
+       "top_ask_quantity": 20,
+       "oi": 100000,
+       "previous_oi": 110000,
+       "volume": 50000
+      }
+     },
+     "74700.000000": {
+      "ce": {
+       "security_id": 920747,
+       "last_price": 335,
+       "top_bid_price": 335,
+       "top_ask_price": 335.05,
+       "top_bid_quantity": 20,
+       "top_ask_quantity": 20,
+       "oi": 100000,
+       "previous_oi": 90000,
+       "volume": 50000
+      },
+      "pe": {
+       "security_id": 930747,
+       "last_price": 376.75,
+       "top_bid_price": 376.3,
+       "top_ask_price": 376.9,
+       "top_bid_quantity": 20,
+       "top_ask_quantity": 20,
+       "oi": 100000,
+       "previous_oi": 110000,
+       "volume": 50000
+      }
+     },
+     "74800.000000": {
+      "ce": {
+       "security_id": 920748,
+       "last_price": 286.75,
+       "top_bid_price": 286.35,
+       "top_ask_price": 286.75,
+       "top_bid_quantity": 20,
+       "top_ask_quantity": 20,
+       "oi": 100000,
+       "previous_oi": 90000,
+       "volume": 50000
+      },
+      "pe": {
+       "security_id": 930748,
+       "last_price": 428.5,
+       "top_bid_price": 428,
+       "top_ask_price": 428.55,
+       "top_bid_quantity": 20,
+       "top_ask_quantity": 20,
+       "oi": 100000,
+       "previous_oi": 110000,
+       "volume": 50000
+      }
+     }
+    }
+   }
+  },
+  "/marketfeed/quote": {
+   "status": "success",
+   "data": {
+    "BSE_FNO": {
+     "844615": {
+      "last_price": 74680,
+      "last_trade_time": "21/09/2026 10:33:50",
+      "ohlc": {
+       "open": 74530,
+       "high": 74800,
+       "low": 74480,
+       "close": 74650
+      },
+      "volume": 50000,
+      "oi": 120000,
+      "depth": {
+       "buy": [
+        {
+         "price": 74679.5,
+         "quantity": 20,
+         "orders": 1
+        },
+        {
+         "price": 74679,
+         "quantity": 40,
+         "orders": 2
+        },
+        {
+         "price": 74678.5,
+         "quantity": 60,
+         "orders": 3
+        },
+        {
+         "price": 74678,
+         "quantity": 80,
+         "orders": 4
+        },
+        {
+         "price": 74677.5,
+         "quantity": 100,
+         "orders": 5
+        }
+       ],
+       "sell": [
+        {
+         "price": 74680.5,
+         "quantity": 20,
+         "orders": 1
+        },
+        {
+         "price": 74681,
+         "quantity": 40,
+         "orders": 2
+        },
+        {
+         "price": 74681.5,
+         "quantity": 60,
+         "orders": 3
+        },
+        {
+         "price": 74682,
+         "quantity": 80,
+         "orders": 4
+        },
+        {
+         "price": 74682.5,
+         "quantity": 100,
+         "orders": 5
+        }
+       ]
+      }
+     }
+    }
+   }
+  },
+  "/charts/intraday": {
+   "status": "success",
+   "data": {
+    "timestamp": [
+     1789962300,
+     1789962600,
+     1789962900,
+     1789963200,
+     1789963500,
+     1789963800,
+     1789964100,
+     1789964400,
+     1789964700,
+     1789965000,
+     1789965300,
+     1789965600,
+     1789965900,
+     1789966200,
+     1789966500,
+     1789966800
+    ],
+    "open": [
+     74659.15,
+     74721.7,
+     74725,
+     74750,
+     74750.3,
+     74736.9,
+     74725,
+     74734.15,
+     74743.45,
+     74743.45,
+     74725.5,
+     74689.15,
+     74719.95,
+     74673.75,
+     74705,
+     74680
+    ],
+    "high": [
+     74734.65,
+     74755,
+     74750,
+     74780,
+     74775,
+     74736.9,
+     74739.9,
+     74754.3,
+     74743.45,
+     74743.45,
+     74725.5,
+     74725,
+     74719.95,
+     74705,
+     74705,
+     74680
+    ],
+    "low": [
+     74594.2,
+     74700,
+     74699.75,
+     74750,
+     74725.3,
+     74723.5,
+     74725,
+     74734.15,
+     74743.45,
+     74720,
+     74683.45,
+     74689.15,
+     74666.6,
+     74673.75,
+     74655.7,
+     74662.35
+    ],
+    "close": [
+     74721.7,
+     74725,
+     74750,
+     74750.3,
+     74736.9,
+     74725,
+     74734.15,
+     74743.45,
+     74743.45,
+     74725.5,
+     74689.15,
+     74719.95,
+     74673.75,
+     74705,
+     74680,
+     74667.55
+    ],
+    "volume": [
+     820,
+     280,
+     340,
+     600,
+     160,
+     80,
+     60,
+     100,
+     20,
+     40,
+     400,
+     60,
+     320,
+     20,
+     140,
+     40
+    ]
+   }
+  }
+ }
+}
