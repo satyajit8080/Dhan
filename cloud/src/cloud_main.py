@@ -75,7 +75,7 @@ from sensex.session import IST
 from bx_selftest_data import SELFTEST
 
 PROGRAM = "sensex-readonly-observer"
-VERSION = "6.7"
+VERSION = "6.8"
 EXIT_OK, EXIT_CONFIG, EXIT_AUTH, EXIT_SELFTEST = 0, 2, 3, 4
 
 
@@ -194,7 +194,8 @@ def live(log, redactor, loop: bool) -> int:
         return EXIT_CONFIG
     if not (_filled(CLIENT_ID) and _filled(ACCESS_TOKEN)):
         log("error", "credentials_missing", placeholders=_placeholder_status(),
-            action="Dhan Cloud did not substitute {{CLIENT_ID}} / {{ACCESS_TOKEN}}: check the account connection on the Cloud home screen")
+            action="Dhan Cloud did not substitute the two credential placeholders: check the account connection "
+                   "on the Cloud home screen")
         return EXIT_AUTH
     creds = Credentials(CLIENT_ID.strip(), ACCESS_TOKEN.strip())
     redactor.register(creds.access_token, creds.client_id)

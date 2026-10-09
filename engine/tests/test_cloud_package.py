@@ -262,6 +262,16 @@ class Safety(unittest.TestCase):
         self.assertEqual(sys.modules["bx_dhan_client"].READ_ONLY_ENDPOINTS, READ_ONLY_ENDPOINTS)
         self.assertEqual(load_single().FORBIDDEN_FRAGMENTS, FORBIDDEN_FRAGMENTS)
 
+    def test_placeholders_appear_only_on_the_two_credential_lines(self):
+        """Dhan Cloud substitutes every {{NAME}} it finds; any other occurrence (a message, a comment)
+        would put the real token into the log."""
+        import re
+        for f in [SINGLE, MULTI / "main.py"]:
+            lines = [l.strip() for l in f.read_text().splitlines() if "{{" in l]
+            self.assertEqual(lines, ['CLIENT_ID = "{{CLIENT_ID}}"', 'ACCESS_TOKEN = "{{ACCESS_TOKEN}}"'], f.name)
+        for f in sorted(MULTI.glob("bx_*.py")):
+            self.assertNotIn("{{", f.read_text(), f.name)
+
     def test_no_credentials_in_config(self):
         for label, tree in _bundle_trees():
             for n in ast.walk(tree):
