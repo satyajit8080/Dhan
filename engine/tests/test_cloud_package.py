@@ -289,8 +289,8 @@ def run_main(bundle, *, mode, env, clock_start=None, script=None, cfg=None, poll
         return real_client(creds, **kw)
     over = dict(MODE=mode, STRIKES=ref["strikes"], FUTURES_SECURITY_ID="844615", FUTURES_EXPIRY="2026-09-24",
                 STOP_TIME="10:45", RECORD_EVERY_N=4, RECORD_CHUNK=500)
-    over["CLIENT_ID"] = env.get("DHAN_CLIENT_ID", "{{DHAN_CLIENT_ID}}")      # what Cloud substitutes
-    over["ACCESS_TOKEN"] = env.get("DHAN_ACCESS_TOKEN", "{{DHAN_ACCESS_TOKEN}}")
+    over["CLIENT_ID"] = env.get("DHAN_CLIENT_ID", "{{CLIENT_ID}}")      # what Cloud substitutes
+    over["ACCESS_TOKEN"] = env.get("DHAN_ACCESS_TOKEN", "{{ACCESS_TOKEN}}")
     over.update(cfg or {})
     out = io.StringIO()
     with contextlib.ExitStack() as st:

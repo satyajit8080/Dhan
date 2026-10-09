@@ -2387,12 +2387,12 @@ POLL_S = 5                        # seconds between fast read-only price polls (
 LOT_SIZE = None                   # e.g. the SENSEX lot size, to report rupees (verify; never guessed)
 COST_PER_TRADE_RS = None          # brokerage + taxes per round trip, if you want net rupees
 
-# Credentials: Dhan Cloud fills these {{NAME}} placeholders from the strategy's
-# Env Variables (the program never reads the environment: Cloud blocks that).
-# Create Env Variables named DHAN_CLIENT_ID and DHAN_ACCESS_TOKEN in the Cloud
-# interface. NEVER replace the placeholders with real values in this file.
-CLIENT_ID = "{{DHAN_CLIENT_ID}}"
-ACCESS_TOKEN = "{{DHAN_ACCESS_TOKEN}}"
+# Credentials: Dhan Cloud replaces these two placeholders at run time with the
+# MANAGED credentials of your logged-in account (syntax per Dhan Cloud's
+# assistant, 9 Oct 2026; Env Variable CLIENT_ID is "managed and cannot be
+# overridden"). Add no Env Variables. NEVER put real values in this file.
+CLIENT_ID = "{{CLIENT_ID}}"
+ACCESS_TOKEN = "{{ACCESS_TOKEN}}"
 # ============================================================================
 
 import gzip
@@ -2401,7 +2401,7 @@ import sys
 import time as _bx_main__time
 from datetime import datetime, time as dtime, timezone
 PROGRAM = 'sensex-readonly-observer'
-VERSION = '6.6'
+VERSION = '6.7'
 EXIT_OK, EXIT_CONFIG, EXIT_AUTH, EXIT_SELFTEST = (0, 2, 3, 4)
 
 def _stdout_logger(redactor):
@@ -2466,7 +2466,7 @@ def _filled(value: str) -> bool:
     return bool(value) and (not (value.startswith('{' + '{') and value.endswith('}' + '}')))
 
 def _placeholder_status() -> dict:
-    return {'DHAN_CLIENT_ID': 'filled' if _filled(CLIENT_ID) else 'NOT filled', 'DHAN_ACCESS_TOKEN': 'filled' if _filled(ACCESS_TOKEN) else 'NOT filled'}
+    return {'CLIENT_ID': 'filled' if _filled(CLIENT_ID) else 'NOT filled', 'ACCESS_TOKEN': 'filled' if _filled(ACCESS_TOKEN) else 'NOT filled'}
 
 def _config_errors():
     errs = []
@@ -2494,14 +2494,14 @@ def live(log, redactor, loop: bool) -> int:
         log('error', 'config_blocked', errors=errs)
         return EXIT_CONFIG
     if not (_filled(CLIENT_ID) and _filled(ACCESS_TOKEN)):
-        log('error', 'credentials_missing', placeholders=_placeholder_status(), action='Create Env Variables DHAN_CLIENT_ID and DHAN_ACCESS_TOKEN in this strategy')
+        log('error', 'credentials_missing', placeholders=_placeholder_status(), action='Dhan Cloud did not substitute {{CLIENT_ID}} / {{ACCESS_TOKEN}}: check the account connection on the Cloud home screen')
         return EXIT_AUTH
     creds = Credentials(CLIENT_ID.strip(), ACCESS_TOKEN.strip())
     redactor.register(creds.access_token, creds.client_id)
     exp = creds.token_expiry_ms()
     now_ms = _bx_main__time.time() * 1000
     if exp is not None and exp <= now_ms:
-        log('error', 'token_expired', hours_ago=round((now_ms - exp) / 3600000.0, 2), action='Generate a new token in Dhan web and update the Cloud Env Variable DHAN_ACCESS_TOKEN')
+        log('error', 'token_expired', hours_ago=round((now_ms - exp) / 3600000.0, 2), action='The managed access token has expired: re-connect / refresh the Dhan account in Dhan Cloud')
         return EXIT_AUTH
     log('info', 'token_status', hours_left=None if exp is None else round((exp - now_ms) / 3600000.0, 2))
     recorder = MemoryRecorder(UrllibTransport())
