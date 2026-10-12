@@ -35,6 +35,13 @@ STRIKES = []                      # e.g. [81000, 81100, 81200, 81300, 81400]
 # expiry in Dhan web or the instrument master before use. Never guessed here.
 FUTURES_SECURITY_ID = ""          # e.g. "864571" (REPORTED OCT contract: re-verify)
 FUTURES_EXPIRY = ""               # "YYYY-MM-DD"; refused once expired
+# Or a list of VERIFIED contracts; each scan uses the nearest one expiring on or
+# after the option expiry (automatic roll). Overrides the two settings above.
+FUTURES_CONTRACTS = []            # e.g. [("864571", "2026-10-29"), ("1100929", "2026-11-26")]
+AUTO_STRIKES = 0                  # >0: table strikes = listed strikes ATM-N..ATM+N, re-centred every scan
+                                  # (observation only; chosen by the user 12 Oct 2026). 0 = use STRIKES
+WAIT_FOR_OPEN_MIN = 0             # OBSERVE started before 09:15 on a trading day: wait up to N minutes
+DAILY_PROFILE_CHECK = False       # one GET /profile at start: logs data-plan validity (no ids)
 
 INTERVAL_S = 60                   # seconds between scans (minimum 10)
 STOP_TIME = "15:30"               # IST; the loop ends here
@@ -52,6 +59,7 @@ PAPER_TAKE_PROFIT_PTS = 6         # your rule (9 Oct 2026), option premium point
 PAPER_STOP_LOSS_PTS = 11          # your rule (9 Oct 2026), option premium points
 PAPER_TIME_STOP_MIN = 10          # RULES.md §6 time stop
 POLL_S = 5                        # seconds between fast read-only price polls (min 2)
+PAPER_VARIANTS = ["FIRST_TOUCH"]  # add "CONFIRMED_CLOSE": enter only after a 1-min close beyond the trigger
 LOT_SIZE = None                   # e.g. the SENSEX lot size, to report rupees (verify; never guessed)
 COST_PER_TRADE_RS = None          # brokerage + taxes per round trip, if you want net rupees
 
@@ -68,7 +76,7 @@ import json
 import sys
 import urllib.request
 import time
-from datetime import datetime, time as dtime, timezone
+from datetime import date, datetime, time as dtime, timezone
 
 from sensex.dhan_client import (AuthError, Credentials, DhanClient, DhanClientError, Redactor, READ_ONLY_ENDPOINTS,
                                 RawResponse, UrllibTransport)
@@ -77,11 +85,12 @@ from sensex.paper import PaperConfig, PaperTracker
 from sensex.scan import in_no_trade_window
 from sensex.recording import MemoryRecorder
 from sensex.scanner import JsonLogger, Scanner, ScannerConfig
-from sensex.session import IST
+from sensex.instruments import FuturesContract
+from sensex.session import IST, session_state
 from bx_selftest_data import SELFTEST
 
 PROGRAM = "sensex-readonly-observer"
-VERSION = "6.9"
+VERSION = "7.0"
 EXIT_OK, EXIT_CONFIG, EXIT_AUTH, EXIT_SELFTEST = 0, 2, 3, 4
 
 
@@ -170,10 +179,13 @@ def _placeholder_status() -> dict:
 
 def _config_errors():
     errs = []
-    if not STRIKES:
-        errs.append("STRIKES is empty (ATM±2 rule undefined; list strikes explicitly)")
-    if not FUTURES_SECURITY_ID or not FUTURES_EXPIRY:
-        errs.append("FUTURES_SECURITY_ID / FUTURES_EXPIRY not set (automatic lookup is BLOCKED)")
+    if not STRIKES and not AUTO_STRIKES:
+        errs.append("STRIKES is empty and AUTO_STRIKES is 0")
+    if not FUTURES_CONTRACTS and (not FUTURES_SECURITY_ID or not FUTURES_EXPIRY):
+        errs.append("No futures contract: set FUTURES_CONTRACTS or FUTURES_SECURITY_ID / FUTURES_EXPIRY")
+    bad = [v for v in PAPER_VARIANTS if v not in ("FIRST_TOUCH", "CONFIRMED_CLOSE")]
+    if bad:
+        errs.append("Unknown PAPER_VARIANTS %s" % bad)
     if INTERVAL_S < 10:
         errs.append("INTERVAL_S must be >= 10")
     if PAPER_ENABLED and POLL_S < 2:
@@ -239,6 +251,10 @@ def profile_check(log, redactor) -> int:
     if creds is None:
         return EXIT_AUTH
     client = DhanClient(creds, transport=UrllibTransport(), redactor=redactor, logger=log)
+    return _profile(log, client)
+
+
+def _profile(log, client) -> int:
     try:
         r = client.profile()
     except DhanClientError as e:
@@ -249,6 +265,37 @@ def profile_check(log, redactor) -> int:
     log("info", "profile_check", ok=True, envelope=r.envelope, fieldsPresent=sorted(body.keys()),
         dataPlan=body.get("dataPlan"), dataValidity=body.get("dataValidity"), tokenValidity=body.get("tokenValidity"))
     return EXIT_OK
+
+
+def _now():
+    return datetime.now(timezone.utc)
+
+
+def _sleep(seconds):
+    time.sleep(seconds)
+
+
+def _holidays():
+    return frozenset(date.fromisoformat(d) for d in HOLIDAYS)
+
+
+def _wait_for_open(log, stop) -> bool:
+    """True when the session is open (after waiting, if started early); False when there is no session today."""
+    waited, last_note = 0.0, None
+    while True:
+        st = session_state(_now(), _holidays(), stop)
+        if st.open:
+            if waited:
+                log("info", "session_open", waitedMin=round(waited / 60, 1))
+            return True
+        if st.reason != "BEFORE_OPEN" or waited >= WAIT_FOR_OPEN_MIN * 60:
+            log("info", "no_session", reason=st.reason, note="nothing to observe now; exiting")
+            return False
+        if last_note is None or waited - last_note >= 600:
+            log("info", "waiting_for_open", istNow=_now().astimezone(IST).isoformat(timespec="seconds"))
+            last_note = waited
+        _sleep(30)
+        waited += 30
 
 
 def live(log, redactor, loop: bool) -> int:
@@ -274,17 +321,25 @@ def live(log, redactor, loop: bool) -> int:
     recorder = MemoryRecorder(UrllibTransport())
     client = DhanClient(creds, transport=recorder, redactor=redactor, logger=log)
     hh, mm = (int(x) for x in STOP_TIME.split(":"))
+    if loop and not _wait_for_open(log, dtime(hh, mm)):
+        return EXIT_OK
+    if DAILY_PROFILE_CHECK and _profile(log, client) != EXIT_OK:
+        return EXIT_AUTH
+    recorder.take()
+    contracts = [FuturesContract(str(i), date.fromisoformat(e), None, "BSE", e) for i, e in FUTURES_CONTRACTS] or None
     cfg = ScannerConfig(strikes=[float(s) for s in STRIKES], interval_s=float(INTERVAL_S), stop_time=dtime(hh, mm),
-                        holidays=frozenset(HOLIDAYS), futures_security_id=str(FUTURES_SECURITY_ID),
-                        futures_expiry=FUTURES_EXPIRY, max_scans=None if loop else 1,
+                        holidays=_holidays(), futures_security_id=str(FUTURES_SECURITY_ID),
+                        futures_expiry=FUTURES_EXPIRY, instrument_contracts=contracts,
+                        auto_strikes=int(AUTO_STRIKES), max_scans=None if loop else 1,
                         observe_leg_band=int(LEG_BAND), extra_series=bool(EXTRA_SERIES), poll_s=float(POLL_S))
     scanner = Scanner(client, cfg, log)
     if PAPER_ENABLED and loop:
-        tracker = PaperTracker(PaperConfig(take_profit_pts=float(PAPER_TAKE_PROFIT_PTS),
-                                           stop_loss_pts=float(PAPER_STOP_LOSS_PTS),
-                                           time_stop_s=float(PAPER_TIME_STOP_MIN) * 60, lot_size=LOT_SIZE,
-                                           cost_per_trade_rs=COST_PER_TRADE_RS), log, in_no_trade_window)
-        scanner.poller = FastPoller(client, tracker, log, cfg.strikes)
+        trackers = [PaperTracker(PaperConfig(take_profit_pts=float(PAPER_TAKE_PROFIT_PTS),
+                                             stop_loss_pts=float(PAPER_STOP_LOSS_PTS),
+                                             time_stop_s=float(PAPER_TIME_STOP_MIN) * 60, lot_size=LOT_SIZE,
+                                             cost_per_trade_rs=COST_PER_TRADE_RS, variant=v), log, in_no_trade_window)
+                    for v in PAPER_VARIANTS]
+        scanner.poller = FastPoller(client, trackers, log, cfg.strikes)
 
     def line(text):
         sys.stdout.write(redactor(text) + "\n")

@@ -74,19 +74,22 @@ class ScannerConfig:
     observe_leg_band: int = 5                  # strikes either side of ATM logged with IV/Greeks/OI/bid-ask
     extra_series: bool = False                 # also fetch 1-min index + 1-min futures candles (VWAP/volume facts)
     poll_s: float = 5.0                        # fast read-only poll between scans when a poller is attached
+    auto_strikes: int = 0                      # >0: use the listed strikes ATM±N (user choice for OBSERVATION,
+                                               # 12 Oct 2026), re-centred every scan; 0: use `strikes`
 
 
 @dataclass
 class ScanState:
     scans: int = 0
     last_fingerprint: str | None = None
+    last_atm: float | None = None
     stop_reason: str | None = None
     history: list = field(default_factory=list)
 
 
 class Scanner:
     def __init__(self, client, config: ScannerConfig, log, clock=None, sleep=time.sleep):
-        if not config.strikes:
+        if not config.strikes and config.auto_strikes <= 0:
             raise ValueError("strikes are required: ATM±2 selection is not defined yet (docs/PHASE4_PORT_PLAN.md P1)")
         if config.interval_s < config.min_interval_s:
             raise ValueError("interval must be >= %ss (Dhan option-chain limit is 1 per 3 s)" % config.min_interval_s)
@@ -215,20 +218,49 @@ class Scanner:
             detail["fut1m"] = self._optional_candles(rec, fut.security_id, FUT_SEG, "FUTIDX", day, "FUT_1M")
             detail["idx1m"] = self._optional_candles(rec, str(SENSEX_SCRIP), SENSEX_SEG, "INDEX", day, "INDEX_1M")
 
+        strikes = self._strikes(chain.payload, rec)
         scan = build_scan(raw_chain=chain.payload, raw_futures=raw_fut, candles=candles, expiry=expiry,
-                          strikes=self.cfg.strikes, chain_received_ms=chain.received_at_ms,
+                          strikes=strikes, chain_received_ms=chain.received_at_ms,
                           futures_received_ms=quote.received_at_ms, futures_security_id=fut.security_id,
                           futures_expiry=fut.expiry.isoformat(), risk_free_rate=self.cfg.risk_free_rate,
                           max_snapshot_skew_ms=self.cfg.max_snapshot_skew_ms, detail_out=detail)
         rows, table = run_refresh(scan, ist)
         rec.update(status=scan["status"], table=table, scanInputs=scan)
         if scan["status"] == "OK":
+            self.state.last_atm = scan["atmStrike"]
             rec.update(forward=scan["forward"], atmStrike=scan["atmStrike"],
                        rowStatuses=sorted({r.status for r in rows}) if rows else [],
                        excludedLegs=scan["excludedLegs"])
         else:
             rec["reason"] = " | ".join(scan.get("reasons", []))
         return rows
+
+    def _strikes(self, raw_chain, rec):
+        """Configured strikes, or the listed strikes ATM±N around the previous scan's parity-forward ATM
+        (first scan: the listed strike nearest the index LTP, used only to centre the display)."""
+        if self.cfg.auto_strikes <= 0:
+            return self.cfg.strikes
+        oc = raw_chain.get("oc") if isinstance(raw_chain, dict) else None
+        ladder = []
+        for k in (oc or {}):
+            try:
+                ladder.append(float(k))
+            except (TypeError, ValueError):
+                continue
+        ladder.sort()
+        if not ladder:
+            return self.cfg.strikes
+        centre, source = self.state.last_atm, "previous scan ATM (parity forward)"
+        if centre is None:
+            ltp = raw_chain.get("last_price")
+            if not isinstance(ltp, (int, float)) or isinstance(ltp, bool):
+                return self.cfg.strikes
+            centre, source = ltp, "index LTP (first scan only; display centring)"
+        i = min(range(len(ladder)), key=lambda j: abs(ladder[j] - centre))
+        n = self.cfg.auto_strikes
+        picked = ladder[max(0, i - n): i + n + 1]
+        rec.update(strikesUsed=picked, strikeSource=source)
+        return picked
 
     def _optional_candles(self, rec, security_id, segment, instrument, day, label):
         """1-minute series for observation only: failure is a warning, never a scan failure."""
@@ -288,8 +320,9 @@ class Scanner:
                     last_poll = self.clock()
                     remaining -= (last_poll - t0).total_seconds()
         if self.poller is not None:
-            self.poller.tracker.close_all(int(self.clock().timestamp() * 1000))
-            self.log("info", "paper_summary", **self.poller.tracker.summary())
+            for t in self.poller.trackers:
+                t.close_all(int(self.clock().timestamp() * 1000))
+                self.log("info", "paper_summary", **t.summary())
         reason = self.state.stop_reason or "STOPPED"
         self.log("info", "scanner_stop", reason=reason, scans=self.state.scans, statuses=self.state.history)
         return reason

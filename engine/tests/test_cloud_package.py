@@ -67,9 +67,22 @@ def load_multi():
     return _loaded["multi"]
 
 
+EVERYDAY = DIST / "everyday" / "main.py"
+
+
+def load_everyday():
+    if "everyday" not in _loaded:
+        spec = importlib.util.spec_from_file_location("bx_everyday_under_test", EVERYDAY)
+        m = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = m
+        spec.loader.exec_module(m)
+        _loaded["everyday"] = m
+    return _loaded["everyday"]
+
+
 def ns(bundle):
     """Namespace exposing the engine classes for either build."""
-    if bundle is load_single():
+    if bundle is load_single() or bundle is _loaded.get("everyday"):
         return bundle
     import bx_dhan_client, bx_scanner  # noqa: E401  (multi build on sys.path)
     return type("N", (), {**vars(bx_dhan_client), **vars(bx_scanner)})
@@ -195,6 +208,7 @@ HOST_QUERIES = {("sys", "platform"), ("sys", "implementation"), ("sys", "executa
 
 def _bundle_trees():
     yield "single", ast.parse(SINGLE.read_text())
+    yield "everyday", ast.parse((DIST / "everyday" / "main.py").read_text())
     for f in sorted(MULTI.glob("*.py")):
         yield "multi/" + f.name, ast.parse(f.read_text())
 
@@ -225,7 +239,7 @@ class Safety(unittest.TestCase):
 
     def test_no_pattern_the_cloud_scanner_blocked(self):
         import re
-        for f in [SINGLE] + sorted(MULTI.glob("*.py")):
+        for f in [SINGLE, DIST / "everyday" / "main.py"] + sorted(MULTI.glob("*.py")):
             text = f.read_text()
             for pat in BLOCKED_TEXT:
                 m = re.search(pat, text, re.M)
@@ -266,7 +280,7 @@ class Safety(unittest.TestCase):
         """Dhan Cloud substitutes every {{NAME}} it finds; any other occurrence (a message, a comment)
         would put the real token into the log."""
         import re
-        for f in [SINGLE, MULTI / "main.py"]:
+        for f in [SINGLE, MULTI / "main.py", DIST / "everyday" / "main.py"]:
             lines = [l.strip() for l in f.read_text().splitlines() if "{{" in l]
             self.assertEqual(lines, ['CLIENT_ID = "{{CLIENT_ID}}"', 'ACCESS_TOKEN = "{{ACCESS_TOKEN}}"'], f.name)
         for f in sorted(MULTI.glob("bx_*.py")):
@@ -309,6 +323,9 @@ def run_main(bundle, *, mode, env, clock_start=None, script=None, cfg=None, poll
         st.enter_context(mock.patch.object(bundle, "Scanner", scanner))
         st.enter_context(mock.patch.object(bundle, "DhanClient", client))
         st.enter_context(mock.patch.object(bundle, "UrllibTransport", lambda: t))
+        st.enter_context(mock.patch.object(bundle, "_now", lambda: now[0]))
+        st.enter_context(mock.patch.object(bundle, "_sleep",
+                                           lambda sec: now.__setitem__(0, now[0] + timedelta(seconds=sec))))
         st.enter_context(contextlib.redirect_stdout(out))
         code = bundle.main()
     return code, out.getvalue(), t
@@ -378,6 +395,46 @@ class EndToEnd(unittest.TestCase):
             self.assertIn("TAKE_PROFIT 4", report)
             self.assertNotIn(self.token, text)
             self.assertEqual(t.polls, 132)                                 # 11 polls in each of the 12 60-s waits
+
+    def test_everyday_file_waits_for_open_checks_plan_and_runs_both_variants(self):
+        m = load_everyday()
+        self.assertEqual((m.MODE, m.AUTO_STRIKES, m.PAPER_VARIANTS, m.DAILY_PROFILE_CHECK),
+                         ("OBSERVE", 2, ["FIRST_TOUCH", "CONFIRMED_CLOSE"], True))
+        self.assertEqual(m.FUTURES_CONTRACTS[0], ("864571", "2026-10-29"))
+
+        def poll(n, req):
+            up = n >= 130                       # index crosses 74725 after the 09:15-09:25 no-trade window
+            bid, ask = (107.5, 108.0) if n >= 150 else (100.0, 101.0)
+            legs = {str(i): {"last_price": 1, "depth": {"buy": [{"price": bid, "quantity": 1, "orders": 1}],
+                                                         "sell": [{"price": ask, "quantity": 1, "orders": 1}]}}
+                    for i in req.get("BSE_FNO", [])}
+            return {"IDX_I": {"51": {"last_price": 74730.0 if up else 74700.0}}, "BSE_FNO": legs}
+        profile = json.dumps({"dataPlan": "Active", "dataValidity": "2026-10-17 08:34:18.0"}).encode()
+        start = datetime(2026, 9, 21, 3, 30, tzinfo=timezone.utc)                  # 09:00 IST: before the open
+        code, text, t = run_main(m, mode="OBSERVE", env=self.env, clock_start=start, poll_fn=poll,
+                                 script={"/profile": [(200, profile)]},
+                                 cfg={"STRIKES": [], "STOP_TIME": "09:30",
+                                      "FUTURES_CONTRACTS": [("844615", "2026-09-24"), ("864571", "2026-10-29")]})
+        self.assertEqual(code, 0, text[-1500:])
+        ev = [json.loads(l[3:]) for l in text.splitlines() if l.startswith("BX|{")]
+        names = [e["event"] for e in ev]
+        self.assertLess(names.index("waiting_for_open"), names.index("session_open"))
+        self.assertLess(names.index("profile_check"), names.index("scanner_start"))
+        scans = [e for e in ev if e["event"] == "scan"]
+        self.assertEqual(scans[0]["startedIst"][11:16], "09:15")
+        self.assertEqual(scans[0]["futures"]["securityId"], "844615")
+        self.assertTrue(scans[0]["strikesUsed"])
+        variants = {e["variant"] for e in ev if e["event"] == "paper_summary"}
+        self.assertEqual(variants, {"FIRST_TOUCH", "CONFIRMED_CLOSE"})
+        entries = [e for e in ev if e["event"] == "paper_entry"]
+        self.assertEqual({e["variant"] for e in entries}, {"FIRST_TOUCH", "CONFIRMED_CLOSE"})
+        self.assertNotIn(self.token, text)
+
+    def test_everyday_file_exits_quietly_on_a_weekend(self):
+        sat = datetime(2026, 10, 17, 3, 30, tzinfo=timezone.utc)
+        code, text, t = run_main(load_everyday(), mode="OBSERVE", env=self.env, clock_start=sat, cfg={"STRIKES": []})
+        self.assertEqual((code, t.calls), (0, []))
+        self.assertIn('"reason": "WEEKEND"', text)
 
     def test_auth_failure_stops_and_leaks_nothing(self):
         echo = json.dumps({"errorCode": "DH-901", "errorMessage": "bad token " + self.token}).encode()

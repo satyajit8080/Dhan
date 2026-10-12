@@ -215,56 +215,60 @@ def summarize(events, replay_text=None) -> str:
               sum(1 for x in om if x.get("closedBelowBreakdown")),
               sum(1 for x in om if x.get("closedBelowBreakdown") and x.get("previousAlsoBelow"))))
 
-    # ---- PAPER exits (user rule: TP +6 / SL -11 premium points; no orders)
-    exits = [e for e in events if e.get("event") == "paper_exit"]
-    entries = [e for e in events if e.get("event") == "paper_entry"]
-    skips = [e for e in events if e.get("event") == "paper_skip"]
-    w("")
-    w("### PAPER trades — take profit +6 / stop loss −11 premium points, time stop 10 min (no orders)")
-    w("")
-    if not exits:
-        w("No paper trades (%d entries, %d skipped). Entries need the index to CROSS an OK trigger outside the "
-          "no-trade windows." % (len(entries), len(skips)))
-    else:
-        oc = Counter(e["outcome"] for e in exits)
-        tp, sl = oc.get("TAKE_PROFIT", 0), oc.get("STOP_LOSS", 0)
-        pnl = [e["pnlPts"] for e in exits if e.get("pnlPts") is not None]
-        w("Trades %d: %s. TP vs SL win rate %s (break-even for 6/11 is 64.7%%, before charges). "
-          "Total %s pts, average %s pts per trade (entry at ask, exit at bid: spread already included)." % (
-              len(exits), ", ".join("%s %d" % kv for kv in sorted(oc.items())),
-              ("%.1f%%" % (100 * tp / (tp + sl))) if tp + sl else "—", _fmt(sum(pnl), 2),
-              _fmt(sum(pnl) / len(pnl), 2) if pnl else "—"))
-        sp = [e.get("spreadPts") for e in entries]
-        w("Entry spread p50 %s / max %s pts. Median time to TP %s s, to SL %s s." % (
-            _fmt(_q(sp, .5), 2), _fmt(_q(sp, 1), 2),
-            _fmt(_q([e["heldS"] for e in exits if e["outcome"] == "TAKE_PROFIT"], .5), 0),
-            _fmt(_q([e["heldS"] for e in exits if e["outcome"] == "STOP_LOSS"], .5), 0)))
-        # one trigger crossing opens one paper trade per configured strike; they are not independent
-        by_ev = {}
-        ent = {e["paperId"]: e for e in entries}
-        for e in exits:
-            k = ((ent.get(e["paperId"]) or {}).get("ts", "")[11:16], e["side"], e["trigger"])
-            by_ev.setdefault(k, []).append(e)
-        won = sum(1 for v in by_ev.values() if sum(x["outcome"] == "TAKE_PROFIT" for x in v) * 2 > len(v))
-        lost = sum(1 for v in by_ev.values() if sum(x["outcome"] == "STOP_LOSS" for x in v) * 2 > len(v))
-        w("Crossing events (each opens one paper trade per strike): %d — mostly TP %d, mostly SL %d, mixed %d." % (
-            len(by_ev), won, lost, len(by_ev) - won - lost))
-        slr = [e["pnlPts"] for e in exits if e["outcome"] == "STOP_LOSS" and e.get("pnlPts") is not None]
-        tpr = [e["pnlPts"] for e in exits if e["outcome"] == "TAKE_PROFIT" and e.get("pnlPts") is not None]
-        if slr and tpr:
-            w("Realised stop average %s (worst %s) vs nominal −11; realised take-profit average %s vs nominal +6 "
-              "(discrete polling)." % (_fmt(sum(slr) / len(slr), 2), _fmt(min(slr), 2), _fmt(sum(tpr) / len(tpr), 2)))
-        rs = [e.get("pnlRsNet", e.get("pnlRsGross")) for e in exits if e.get("pnlRsGross") is not None]
-        if rs:
-            w("Rupees (%s): total %s." % ("net of your cost input" if any("pnlRsNet" in e for e in exits) else "gross",
-                                          _fmt(sum(rs), 2)))
+    # ---- PAPER exits per variant (user rule: TP +6 / SL -11 premium points; no orders)
+    all_exits = [e for e in events if e.get("event") == "paper_exit"]
+    variants = sorted({e.get("variant", "FIRST_TOUCH") for e in events if e.get("event") in ("paper_entry", "paper_exit", "paper_summary")}) or ["FIRST_TOUCH"]
+    for variant in variants:
+        _of = lambda e: e.get("variant", "FIRST_TOUCH") == variant
+        exits = [e for e in events if e.get("event") == "paper_exit" and _of(e)]
+        entries = [e for e in events if e.get("event") == "paper_entry" and _of(e)]
+        skips = [e for e in events if e.get("event") == "paper_skip" and _of(e)]
         w("")
-        w("| Id | Side | Strike | Trigger | Entry ask | Exit bid | P&L pts | Outcome | Held s | Best | Worst |")
-        w("|---|---|---|---|---|---|---|---|---|---|---|")
-        for e in exits[:40]:
-            w("| %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s |" % (
-                e["paperId"], e["side"], e["strike"], e["trigger"], e["entryAsk"], e.get("exitBid"), e.get("pnlPts"),
-                e["outcome"], e["heldS"], e["maxFavourablePts"], e["maxAdversePts"]))
+        w("### PAPER trades [%s] — take profit +6 / stop loss −11 premium points, time stop 10 min (no orders)" % variant)
+        w("")
+        if not exits:
+            w("No paper trades (%d entries, %d skipped). Entries need the index to CROSS an OK trigger outside the "
+              "no-trade windows." % (len(entries), len(skips)))
+        else:
+            oc = Counter(e["outcome"] for e in exits)
+            tp, sl = oc.get("TAKE_PROFIT", 0), oc.get("STOP_LOSS", 0)
+            pnl = [e["pnlPts"] for e in exits if e.get("pnlPts") is not None]
+            w("Trades %d: %s. TP vs SL win rate %s (break-even for 6/11 is 64.7%%, before charges). "
+              "Total %s pts, average %s pts per trade (entry at ask, exit at bid: spread already included)." % (
+                  len(exits), ", ".join("%s %d" % kv for kv in sorted(oc.items())),
+                  ("%.1f%%" % (100 * tp / (tp + sl))) if tp + sl else "—", _fmt(sum(pnl), 2),
+                  _fmt(sum(pnl) / len(pnl), 2) if pnl else "—"))
+            sp = [e.get("spreadPts") for e in entries]
+            w("Entry spread p50 %s / max %s pts. Median time to TP %s s, to SL %s s." % (
+                _fmt(_q(sp, .5), 2), _fmt(_q(sp, 1), 2),
+                _fmt(_q([e["heldS"] for e in exits if e["outcome"] == "TAKE_PROFIT"], .5), 0),
+                _fmt(_q([e["heldS"] for e in exits if e["outcome"] == "STOP_LOSS"], .5), 0)))
+            # one trigger crossing opens one paper trade per configured strike; they are not independent
+            by_ev = {}
+            ent = {e["paperId"]: e for e in entries}
+            for e in exits:
+                k = ((ent.get(e["paperId"]) or {}).get("ts", "")[11:16], e["side"], e["trigger"])
+                by_ev.setdefault(k, []).append(e)
+            won = sum(1 for v in by_ev.values() if sum(x["outcome"] == "TAKE_PROFIT" for x in v) * 2 > len(v))
+            lost = sum(1 for v in by_ev.values() if sum(x["outcome"] == "STOP_LOSS" for x in v) * 2 > len(v))
+            w("Crossing events (each opens one paper trade per strike): %d — mostly TP %d, mostly SL %d, mixed %d." % (
+                len(by_ev), won, lost, len(by_ev) - won - lost))
+            slr = [e["pnlPts"] for e in exits if e["outcome"] == "STOP_LOSS" and e.get("pnlPts") is not None]
+            tpr = [e["pnlPts"] for e in exits if e["outcome"] == "TAKE_PROFIT" and e.get("pnlPts") is not None]
+            if slr and tpr:
+                w("Realised stop average %s (worst %s) vs nominal −11; realised take-profit average %s vs nominal +6 "
+                  "(discrete polling)." % (_fmt(sum(slr) / len(slr), 2), _fmt(min(slr), 2), _fmt(sum(tpr) / len(tpr), 2)))
+            rs = [e.get("pnlRsNet", e.get("pnlRsGross")) for e in exits if e.get("pnlRsGross") is not None]
+            if rs:
+                w("Rupees (%s): total %s." % ("net of your cost input" if any("pnlRsNet" in e for e in exits) else "gross",
+                                              _fmt(sum(rs), 2)))
+            w("")
+            w("| Id | Side | Strike | Trigger | Entry ask | Exit bid | P&L pts | Outcome | Held s | Best | Worst |")
+            w("|---|---|---|---|---|---|---|---|---|---|---|")
+            for e in exits[:40]:
+                w("| %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s |" % (
+                    e["paperId"], e["side"], e["strike"], e["trigger"], e["entryAsk"], e.get("exitBid"), e.get("pnlPts"),
+                    e["outcome"], e["heldS"], e["maxFavourablePts"], e["maxAdversePts"]))
     w("")
     w("_Generated by tools/summarize_observation.py from Cloud logs. Facts only; no thresholds proposed._")
     return "\n".join(out) + "\n"

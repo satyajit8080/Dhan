@@ -243,5 +243,48 @@ class LoopIntegration(unittest.TestCase):
         self.assertIn('"event": "paper_summary"', out.getvalue())
 
 
+class ConfirmedClose(unittest.TestCase):
+    def tracker(self):
+        log = Log()
+        return PaperTracker(PaperConfig(variant="CONFIRMED_CLOSE"), log, in_no_trade_window), log
+
+    def test_enters_only_after_a_one_minute_close_beyond_the_trigger(self):
+        t, log = self.tracker()
+        t.arm([Row(100.0, "CE", 1000.0)], LEGS, True)
+        m0 = T10 - T10 % 60000                                  # start of a minute
+        t.on_tick(m0 + 5000, 999.0, {"11": (49.0, 50.0)})
+        t.on_tick(m0 + 10000, 1001.0, {"11": (49.5, 50.5)})     # crossing: pending, no entry yet
+        self.assertEqual((t.open, list(t.pending)), ([], [("CE", 1000.0)]))
+        t.on_tick(m0 + 55000, 1003.0, {"11": (51.0, 52.0)})     # last poll of the minute: close ~1003
+        t.on_tick(m0 + 60000, 1004.0, {"11": (52.0, 53.0)})     # minute rolled: confirmed -> entry at 53
+        self.assertEqual(len(t.open), 1)
+        e = [f for n, f in log.events if n == "paper_entry"][0]
+        self.assertEqual((e["variant"], e["entryAsk"], e["confirmClose"], e["side"]), ("CONFIRMED_CLOSE", 53.0, 1003.0, "CE"))
+        t.on_tick(m0 + 65000, 1008.0, {"11": (59.5, 60.0)})
+        self.assertEqual((t.closed[0]["outcome"], t.closed[0]["paperId"]), ("TAKE_PROFIT", "C001"))
+
+    def test_touch_that_closes_back_inside_is_skipped(self):
+        t, log = self.tracker()
+        t.arm([Row(100.0, "CE", 1000.0)], LEGS, True)
+        m0 = T10 - T10 % 60000
+        t.on_tick(m0 + 5000, 999.0, {"11": (49.0, 50.0)})
+        t.on_tick(m0 + 10000, 1001.0, {"11": (49.5, 50.5)})     # touch
+        t.on_tick(m0 + 55000, 998.0, {"11": (48.0, 49.0)})      # closes back below
+        t.on_tick(m0 + 60000, 998.0, {"11": (48.0, 49.0)})
+        t.on_tick(m0 + 120000, 997.0, {"11": (48.0, 49.0)})     # second minute also below -> give up
+        self.assertEqual(t.open, [])
+        self.assertEqual(t.pending, {})
+        self.assertIn("no 1-min close beyond", [f for n, f in log.events if n == "paper_skip"][0]["reason"])
+
+    def test_two_variants_share_polls_in_the_poller(self):
+        p, tr, t, out = poller([(200, quote_body(999.0, {"11": (49.0, 50.0)}), T10),
+                                (200, quote_body(1001.0, {"11": (49.5, 50.5)}), T10 + 5000)])
+        second = PaperTracker(PaperConfig(variant="CONFIRMED_CLOSE"), Log(), in_no_trade_window)
+        p.trackers.append(second)
+        p.after_scan({"status": "OK", "strikesUsed": [100.0]}, {"chain": Poller.CHAIN}, [Row(100.0, "CE", 1000.0)])
+        p.tick(); p.tick()
+        self.assertEqual((len(tr.open), len(second.open), list(second.pending)), (1, 0, [("CE", 1000.0)]))
+
+
 if __name__ == "__main__":
     unittest.main()

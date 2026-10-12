@@ -32,6 +32,9 @@ class PaperConfig:
     max_open: int = 40
     lot_size: int | None = None        # set to report rupees; never guessed
     cost_per_trade_rs: float | None = None   # brokerage + statutory per round trip, if you supply it
+    variant: str = "FIRST_TOUCH"       # FIRST_TOUCH: enter at the crossing poll
+                                       # CONFIRMED_CLOSE: enter only after a 1-min close beyond the trigger
+    confirm_within_min: int = 2        # CONFIRMED_CLOSE: give up if no close beyond within N closed minutes
 
 
 @dataclass
@@ -40,6 +43,7 @@ class _Arm:
     trigger: float
     strikes: list
     fired: bool = False
+    sids: dict = field(default_factory=dict)   # strike -> security id at arming (strikes may re-centre later)
 
 
 @dataclass
@@ -71,6 +75,10 @@ class PaperTracker:
         self.last_index: float | None = None
         self.legs: dict = {}             # (strike, side) -> security id
         self.seq = 0
+        self.pending: dict = {}          # CONFIRMED_CLOSE: key -> (arm, minute of the crossing)
+        self.minute = None               # current minute (epoch ms // 60000) seen by the polls
+        self.minute_last = None          # last index LTP polled inside that minute (~ its 1-min close)
+        self.prefix = "P" if cfg.variant == "FIRST_TOUCH" else "C"
 
     # ------------------------------------------------------------ from scans
     def arm(self, rows, legs: dict, scan_ok: bool):
@@ -88,10 +96,12 @@ class PaperTracker:
             self.arms.setdefault(key, _Arm(r.side, float(r.trigger), []))
             if r.strike not in self.arms[key].strikes:
                 self.arms[key].strikes.append(r.strike)
+                self.arms[key].sids[r.strike] = self.legs.get((r.strike, r.side))
 
     def watch_ids(self) -> list:
         ids = {self.legs[k] for k in self.legs if self.legs[k]}
         ids |= {t.security_id for t in self.open}
+        ids |= {sid for arm, _ in self.pending.values() for sid in arm.sids.values() if sid}
         return sorted(ids)
 
     # ------------------------------------------------------------- per poll
@@ -99,11 +109,13 @@ class PaperTracker:
         """quotes: security_id -> (bid, ask). Returns nothing; logs events."""
         for t in list(self.open):
             self._update(t, now_ms, quotes.get(t.security_id))
+        closed = self._roll_minute(now_ms, index_ltp)
         prev, self.last_index = self.last_index, index_ltp
-        if index_ltp is None or prev is None:
-            return
         now = datetime.fromtimestamp(now_ms / 1000, timezone.utc)
-        if self.in_skip_window(now):
+        in_window = self.in_skip_window(now)
+        if closed is not None and self.pending:
+            self._confirm(closed, now_ms, index_ltp, quotes, in_window)
+        if index_ltp is None or prev is None or in_window:
             return
         for key, arm in list(self.arms.items()):
             crossed = (prev < arm.trigger <= index_ltp) if arm.side == "CE" else (prev > arm.trigger >= index_ltp)
@@ -111,13 +123,47 @@ class PaperTracker:
                 continue
             self.fired.add(key)
             del self.arms[key]
+            if self.cfg.variant == "CONFIRMED_CLOSE":
+                self.pending[key] = (arm, now_ms // 60000)
+                continue
             for strike in arm.strikes:
                 self._enter(arm, strike, now_ms, index_ltp, quotes)
 
-    def _enter(self, arm, strike, now_ms, index_ltp, quotes):
-        sid = self.legs.get((strike, arm.side))
+    def _roll_minute(self, now_ms, index_ltp):
+        """Returns (minute, close) of the minute that just ended, approximated by its last polled LTP."""
+        m = now_ms // 60000
+        out = None
+        if self.minute is not None and m > self.minute and self.minute_last is not None:
+            out = (self.minute, self.minute_last)
+        if self.minute is None or m > self.minute:
+            self.minute, self.minute_last = m, None
+        if index_ltp is not None:
+            self.minute_last = index_ltp
+        return out
+
+    def _confirm(self, closed, now_ms, index_ltp, quotes, in_window):
+        minute, close = closed
+        for key, (arm, since) in list(self.pending.items()):
+            if minute < since:
+                continue
+            beyond = close > arm.trigger if arm.side == "CE" else close < arm.trigger
+            if beyond and not in_window:
+                del self.pending[key]
+                for strike in arm.strikes:
+                    self._enter(arm, strike, now_ms, index_ltp, quotes, confirm_close=close)
+            elif minute - since + 1 >= self.cfg.confirm_within_min or in_window:
+                del self.pending[key]
+                self.log("info", "paper_skip", variant=self.cfg.variant, side=arm.side, trigger=arm.trigger,
+                         reason="no 1-min close beyond the trigger within %d minute(s)" % self.cfg.confirm_within_min
+                         if not in_window else "no-trade window began before confirmation")
+
+    def _enter(self, arm, strike, now_ms, index_ltp, quotes, confirm_close=None):
+        sid = arm.sids.get(strike) or self.legs.get((strike, arm.side))
         q = quotes.get(sid) if sid else None
-        base = {"side": arm.side, "strike": strike, "trigger": arm.trigger, "indexAtCross": index_ltp}
+        base = {"variant": self.cfg.variant, "side": arm.side, "strike": strike, "trigger": arm.trigger,
+                "indexAtCross": index_ltp}
+        if confirm_close is not None:
+            base["confirmClose"] = confirm_close
         if q is None or not q[1] or q[1] <= 0:
             self.log("info", "paper_skip", reason="no ask quote for the leg at the crossing", **base)
             return
@@ -126,7 +172,7 @@ class PaperTracker:
             return
         self.seq += 1
         bid, ask = q
-        t = _Trade("P%03d" % self.seq, arm.side, strike, sid, arm.trigger, now_ms, ask, bid, index_ltp)
+        t = _Trade("%s%03d" % (self.prefix, self.seq), arm.side, strike, sid, arm.trigger, now_ms, ask, bid, index_ltp)
         self.open.append(t)
         self.log("info", "paper_entry", paperId=t.tid, entryAsk=ask, entryBid=bid,
                  spreadPts=round(ask - bid, 2) if bid else None,
@@ -155,7 +201,7 @@ class PaperTracker:
     def _close(self, t, now_ms, outcome, exit_bid):
         self.open.remove(t)
         pnl = None if exit_bid is None else round(exit_bid - t.entry_ask, 2)
-        rec = {"paperId": t.tid, "outcome": outcome, "side": t.side, "strike": t.strike, "trigger": t.trigger,
+        rec = {"paperId": t.tid, "variant": self.cfg.variant, "outcome": outcome, "side": t.side, "strike": t.strike, "trigger": t.trigger,
                "entryAsk": t.entry_ask, "exitBid": exit_bid, "pnlPts": pnl,
                "heldS": round((now_ms - t.entry_ms) / 1000, 1), "maxFavourablePts": round(t.best, 2),
                "maxAdversePts": round(t.worst, 2), "ticks": t.ticks, "quoteGaps": t.gaps, "path": t.path}
@@ -176,7 +222,7 @@ class PaperTracker:
             out[r["outcome"]] = out.get(r["outcome"], 0) + 1
         decided = [r for r in self.closed if r["outcome"] in ("TAKE_PROFIT", "STOP_LOSS")]
         pnls = [r["pnlPts"] for r in self.closed if r["pnlPts"] is not None]
-        return {"trades": len(self.closed), "byOutcome": out,
+        return {"variant": self.cfg.variant, "trades": len(self.closed), "byOutcome": out,
                 "winRateTpVsSl": round(sum(r["outcome"] == "TAKE_PROFIT" for r in decided) / len(decided), 3) if decided else None,
                 "breakEvenWinRate": round(self.cfg.stop_loss_pts / (self.cfg.stop_loss_pts + self.cfg.take_profit_pts), 3),
                 "totalPnlPts": round(sum(pnls), 2) if pnls else 0.0,

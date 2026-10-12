@@ -86,3 +86,21 @@ decision (D1–D8).
 | `previous_oi` present in live chains | `legsWithoutPreviousOi` |
 | Cloud log streaming, line limits, scheduling accuracy | Log timestamps and `decode_report.json` |
 | ATM±2, legs without IV, D1–D8, automatic futures lookup | **Not settled by observation.** They need your decision or the verified instrument-master header |
+
+## 8. Everyday file (v7.0, from 13 Oct 2026)
+
+Upload `cloud/dist/everyday/main.py` once; it is never edited afterwards.
+
+- **Start:** Dhan Cloud **Schedule** Mon–Fri ~09:05 IST (or press Run before 09:15). The program waits for 09:15
+  (up to 60 min), observes until 15:30 and exits. Weekend/holiday/after hours: logs `no_session` and exits at once.
+  A 24/7 process is not used: the managed token is substituted once per start and is valid 24 h; renewing it from
+  the program is token renewal, which is out of scope.
+- **Strikes:** `AUTO_STRIKES = 2` — the listed strikes ATM−2…ATM+2, re-centred every scan on the previous scan's
+  parity-forward ATM (first scan: nearest to the index LTP). User choice for observation (12 Oct); RULES.md unchanged.
+- **Futures:** `FUTURES_CONTRACTS` Oct 864571 (29 Oct) → Nov 1100929 (26 Nov) → Dec 1145756 (31 Dec), verified from
+  Dhan's instrument file; the nearest contract expiring on/after the option expiry is used. Extend before 31 Dec.
+- **Paper variants:** `FIRST_TOUCH` (enter at the crossing poll) and `CONFIRMED_CLOSE` (enter only after a 1-min close
+  beyond the trigger, within 2 minutes), both +6/−11 and 10-min time stop, reported separately.
+- **Morning check:** one `GET /profile` logs data-plan validity (`dataValidity`). The plan observed on 9 Oct expires
+  **17 Oct 08:34** — renew it in Dhan before the next run after that.
+- **After 15:30:** download the run log (Runs & Logs) and send it; decode → replay → report as in §3.

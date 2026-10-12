@@ -1890,6 +1890,8 @@ class PaperConfig:
     max_open: int = 40
     lot_size: int | None = None
     cost_per_trade_rs: float | None = None
+    variant: str = 'FIRST_TOUCH'
+    confirm_within_min: int = 2
 
 @dataclass
 class _Arm:
@@ -1897,6 +1899,7 @@ class _Arm:
     trigger: float
     strikes: list
     fired: bool = False
+    sids: dict = field(default_factory=dict)
 
 @dataclass
 class _Trade:
@@ -1927,6 +1930,10 @@ class PaperTracker:
         self.last_index: float | None = None
         self.legs: dict = {}
         self.seq = 0
+        self.pending: dict = {}
+        self.minute = None
+        self.minute_last = None
+        self.prefix = 'P' if cfg.variant == 'FIRST_TOUCH' else 'C'
 
     def arm(self, rows, legs: dict, scan_ok: bool):
         self.legs = dict(legs)
@@ -1942,20 +1949,24 @@ class PaperTracker:
             self.arms.setdefault(key, _Arm(r.side, float(r.trigger), []))
             if r.strike not in self.arms[key].strikes:
                 self.arms[key].strikes.append(r.strike)
+                self.arms[key].sids[r.strike] = self.legs.get((r.strike, r.side))
 
     def watch_ids(self) -> list:
         ids = {self.legs[k] for k in self.legs if self.legs[k]}
         ids |= {t.security_id for t in self.open}
+        ids |= {sid for arm, _ in self.pending.values() for sid in arm.sids.values() if sid}
         return sorted(ids)
 
     def on_tick(self, now_ms: int, index_ltp, quotes: dict):
         for t in list(self.open):
             self._update(t, now_ms, quotes.get(t.security_id))
+        closed = self._roll_minute(now_ms, index_ltp)
         prev, self.last_index = (self.last_index, index_ltp)
-        if index_ltp is None or prev is None:
-            return
         now = datetime.fromtimestamp(now_ms / 1000, timezone.utc)
-        if self.in_skip_window(now):
+        in_window = self.in_skip_window(now)
+        if closed is not None and self.pending:
+            self._confirm(closed, now_ms, index_ltp, quotes, in_window)
+        if index_ltp is None or prev is None or in_window:
             return
         for key, arm in list(self.arms.items()):
             crossed = prev < arm.trigger <= index_ltp if arm.side == 'CE' else prev > arm.trigger >= index_ltp
@@ -1963,13 +1974,43 @@ class PaperTracker:
                 continue
             self.fired.add(key)
             del self.arms[key]
+            if self.cfg.variant == 'CONFIRMED_CLOSE':
+                self.pending[key] = (arm, now_ms // 60000)
+                continue
             for strike in arm.strikes:
                 self._enter(arm, strike, now_ms, index_ltp, quotes)
 
-    def _enter(self, arm, strike, now_ms, index_ltp, quotes):
-        sid = self.legs.get((strike, arm.side))
+    def _roll_minute(self, now_ms, index_ltp):
+        m = now_ms // 60000
+        out = None
+        if self.minute is not None and m > self.minute and (self.minute_last is not None):
+            out = (self.minute, self.minute_last)
+        if self.minute is None or m > self.minute:
+            self.minute, self.minute_last = (m, None)
+        if index_ltp is not None:
+            self.minute_last = index_ltp
+        return out
+
+    def _confirm(self, closed, now_ms, index_ltp, quotes, in_window):
+        minute, close = closed
+        for key, (arm, since) in list(self.pending.items()):
+            if minute < since:
+                continue
+            beyond = close > arm.trigger if arm.side == 'CE' else close < arm.trigger
+            if beyond and (not in_window):
+                del self.pending[key]
+                for strike in arm.strikes:
+                    self._enter(arm, strike, now_ms, index_ltp, quotes, confirm_close=close)
+            elif minute - since + 1 >= self.cfg.confirm_within_min or in_window:
+                del self.pending[key]
+                self.log('info', 'paper_skip', variant=self.cfg.variant, side=arm.side, trigger=arm.trigger, reason='no 1-min close beyond the trigger within %d minute(s)' % self.cfg.confirm_within_min if not in_window else 'no-trade window began before confirmation')
+
+    def _enter(self, arm, strike, now_ms, index_ltp, quotes, confirm_close=None):
+        sid = arm.sids.get(strike) or self.legs.get((strike, arm.side))
         q = quotes.get(sid) if sid else None
-        base = {'side': arm.side, 'strike': strike, 'trigger': arm.trigger, 'indexAtCross': index_ltp}
+        base = {'variant': self.cfg.variant, 'side': arm.side, 'strike': strike, 'trigger': arm.trigger, 'indexAtCross': index_ltp}
+        if confirm_close is not None:
+            base['confirmClose'] = confirm_close
         if q is None or not q[1] or q[1] <= 0:
             self.log('info', 'paper_skip', reason='no ask quote for the leg at the crossing', **base)
             return
@@ -1978,7 +2019,7 @@ class PaperTracker:
             return
         self.seq += 1
         bid, ask = q
-        t = _Trade('P%03d' % self.seq, arm.side, strike, sid, arm.trigger, now_ms, ask, bid, index_ltp)
+        t = _Trade('%s%03d' % (self.prefix, self.seq), arm.side, strike, sid, arm.trigger, now_ms, ask, bid, index_ltp)
         self.open.append(t)
         self.log('info', 'paper_entry', paperId=t.tid, entryAsk=ask, entryBid=bid, spreadPts=round(ask - bid, 2) if bid else None, spreadPct=round((ask - bid) / ((ask + bid) / 2) * 100, 3) if bid else None, takeProfitAt=round(ask + self.cfg.take_profit_pts, 2), stopLossAt=round(ask - self.cfg.stop_loss_pts, 2), note='PAPER (no order); exploratory trigger crossing, not a signal', **base)
 
@@ -2003,7 +2044,7 @@ class PaperTracker:
     def _close(self, t, now_ms, outcome, exit_bid):
         self.open.remove(t)
         pnl = None if exit_bid is None else round(exit_bid - t.entry_ask, 2)
-        rec = {'paperId': t.tid, 'outcome': outcome, 'side': t.side, 'strike': t.strike, 'trigger': t.trigger, 'entryAsk': t.entry_ask, 'exitBid': exit_bid, 'pnlPts': pnl, 'heldS': round((now_ms - t.entry_ms) / 1000, 1), 'maxFavourablePts': round(t.best, 2), 'maxAdversePts': round(t.worst, 2), 'ticks': t.ticks, 'quoteGaps': t.gaps, 'path': t.path}
+        rec = {'paperId': t.tid, 'variant': self.cfg.variant, 'outcome': outcome, 'side': t.side, 'strike': t.strike, 'trigger': t.trigger, 'entryAsk': t.entry_ask, 'exitBid': exit_bid, 'pnlPts': pnl, 'heldS': round((now_ms - t.entry_ms) / 1000, 1), 'maxFavourablePts': round(t.best, 2), 'maxAdversePts': round(t.worst, 2), 'ticks': t.ticks, 'quoteGaps': t.gaps, 'path': t.path}
         if pnl is not None and self.cfg.lot_size:
             rec['pnlRsGross'] = round(pnl * self.cfg.lot_size, 2)
             if self.cfg.cost_per_trade_rs is not None:
@@ -2021,7 +2062,7 @@ class PaperTracker:
             out[r['outcome']] = out.get(r['outcome'], 0) + 1
         decided = [r for r in self.closed if r['outcome'] in ('TAKE_PROFIT', 'STOP_LOSS')]
         pnls = [r['pnlPts'] for r in self.closed if r['pnlPts'] is not None]
-        return {'trades': len(self.closed), 'byOutcome': out, 'winRateTpVsSl': round(sum((r['outcome'] == 'TAKE_PROFIT' for r in decided)) / len(decided), 3) if decided else None, 'breakEvenWinRate': round(self.cfg.stop_loss_pts / (self.cfg.stop_loss_pts + self.cfg.take_profit_pts), 3), 'totalPnlPts': round(sum(pnls), 2) if pnls else 0.0, 'note': 'PAPER results; entry at ask, exit at bid; no orders were placed'}
+        return {'variant': self.cfg.variant, 'trades': len(self.closed), 'byOutcome': out, 'winRateTpVsSl': round(sum((r['outcome'] == 'TAKE_PROFIT' for r in decided)) / len(decided), 3) if decided else None, 'breakEvenWinRate': round(self.cfg.stop_loss_pts / (self.cfg.stop_loss_pts + self.cfg.take_profit_pts), 3), 'totalPnlPts': round(sum(pnls), 2) if pnls else 0.0, 'note': 'PAPER results; entry at ask, exit at bid; no orders were placed'}
 
 # ----------------------------------------------------------------------
 # module: engine/sensex/fastpoll.py
@@ -2036,7 +2077,9 @@ def _top(depth, side):
 class FastPoller:
 
     def __init__(self, client, tracker, log, strikes):
-        self.client, self.tracker, self.log = (client, tracker, log)
+        self.trackers = list(tracker) if isinstance(tracker, (list, tuple)) else [tracker]
+        self.tracker = self.trackers[0]
+        self.client, self.log = (client, log)
         self.strikes = set((float(s) for s in strikes))
         self.polls = self.failures = 0
         self.index_missing_logged = False
@@ -2044,6 +2087,8 @@ class FastPoller:
     def after_scan(self, rec: dict, detail: dict, rows):
         chain = detail.get('chain')
         legs = {}
+        if rec.get('strikesUsed'):
+            self.strikes = set((float(s) for s in rec['strikesUsed']))
         if chain:
             for s in chain['strikes']:
                 if float(s['strike']) not in self.strikes:
@@ -2051,10 +2096,11 @@ class FastPoller:
                 for side, leg in (('CE', s['ce']), ('PE', s['pe'])):
                     if leg and leg['securityId']:
                         legs[s['strike'], side] = leg['securityId']
-        self.tracker.arm(rows, legs, rec.get('status') == 'OK')
+        for t in self.trackers:
+            t.arm(rows, legs, rec.get('status') == 'OK')
 
     def tick(self) -> bool:
-        ids = self.tracker.watch_ids()
+        ids = sorted({i for t in self.trackers for i in t.watch_ids()})
         body = {INDEX_SEG: [INDEX_ID]}
         if ids:
             body[LEG_SEG] = [int(i) for i in ids]
@@ -2084,7 +2130,8 @@ class FastPoller:
             if isinstance(raw, dict):
                 q = normalize_quote(raw, str(sid), LEG_SEG, 'poll', r.received_at_ms, '/marketfeed/quote')
                 quotes[str(sid)] = (_top(q['depth'], 'buy'), _top(q['depth'], 'sell'))
-        self.tracker.on_tick(r.received_at_ms, index, quotes)
+        for t in self.trackers:
+            t.on_tick(r.received_at_ms, index, quotes)
         return True
 
 # ----------------------------------------------------------------------
@@ -2132,18 +2179,20 @@ class ScannerConfig:
     observe_leg_band: int = 5
     extra_series: bool = False
     poll_s: float = 5.0
+    auto_strikes: int = 0
 
 @dataclass
 class ScanState:
     scans: int = 0
     last_fingerprint: str | None = None
+    last_atm: float | None = None
     stop_reason: str | None = None
     history: list = field(default_factory=list)
 
 class Scanner:
 
     def __init__(self, client, config: ScannerConfig, log, clock=None, sleep=_bx_scanner__time.sleep):
-        if not config.strikes:
+        if not config.strikes and config.auto_strikes <= 0:
             raise ValueError('strikes are required: ATM±2 selection is not defined yet (docs/PHASE4_PORT_PLAN.md P1)')
         if config.interval_s < config.min_interval_s:
             raise ValueError('interval must be >= %ss (Dhan option-chain limit is 1 per 3 s)' % config.min_interval_s)
@@ -2253,14 +2302,41 @@ class Scanner:
         if self.cfg.extra_series:
             detail['fut1m'] = self._optional_candles(rec, fut.security_id, FUT_SEG, 'FUTIDX', day, 'FUT_1M')
             detail['idx1m'] = self._optional_candles(rec, str(SENSEX_SCRIP), SENSEX_SEG, 'INDEX', day, 'INDEX_1M')
-        scan = build_scan(raw_chain=chain.payload, raw_futures=raw_fut, candles=candles, expiry=expiry, strikes=self.cfg.strikes, chain_received_ms=chain.received_at_ms, futures_received_ms=quote.received_at_ms, futures_security_id=fut.security_id, futures_expiry=fut.expiry.isoformat(), risk_free_rate=self.cfg.risk_free_rate, max_snapshot_skew_ms=self.cfg.max_snapshot_skew_ms, detail_out=detail)
+        strikes = self._strikes(chain.payload, rec)
+        scan = build_scan(raw_chain=chain.payload, raw_futures=raw_fut, candles=candles, expiry=expiry, strikes=strikes, chain_received_ms=chain.received_at_ms, futures_received_ms=quote.received_at_ms, futures_security_id=fut.security_id, futures_expiry=fut.expiry.isoformat(), risk_free_rate=self.cfg.risk_free_rate, max_snapshot_skew_ms=self.cfg.max_snapshot_skew_ms, detail_out=detail)
         rows, table = run_refresh(scan, ist)
         rec.update(status=scan['status'], table=table, scanInputs=scan)
         if scan['status'] == 'OK':
+            self.state.last_atm = scan['atmStrike']
             rec.update(forward=scan['forward'], atmStrike=scan['atmStrike'], rowStatuses=sorted({r.status for r in rows}) if rows else [], excludedLegs=scan['excludedLegs'])
         else:
             rec['reason'] = ' | '.join(scan.get('reasons', []))
         return rows
+
+    def _strikes(self, raw_chain, rec):
+        if self.cfg.auto_strikes <= 0:
+            return self.cfg.strikes
+        oc = raw_chain.get('oc') if isinstance(raw_chain, dict) else None
+        ladder = []
+        for k in oc or {}:
+            try:
+                ladder.append(float(k))
+            except (TypeError, ValueError):
+                continue
+        ladder.sort()
+        if not ladder:
+            return self.cfg.strikes
+        centre, source = (self.state.last_atm, 'previous scan ATM (parity forward)')
+        if centre is None:
+            ltp = raw_chain.get('last_price')
+            if not isinstance(ltp, (int, float)) or isinstance(ltp, bool):
+                return self.cfg.strikes
+            centre, source = (ltp, 'index LTP (first scan only; display centring)')
+        i = min(range(len(ladder)), key=lambda j: abs(ladder[j] - centre))
+        n = self.cfg.auto_strikes
+        picked = ladder[max(0, i - n):i + n + 1]
+        rec.update(strikesUsed=picked, strikeSource=source)
+        return picked
 
     def _optional_candles(self, rec, security_id, segment, instrument, day, label):
         try:
@@ -2313,8 +2389,9 @@ class Scanner:
                     last_poll = self.clock()
                     remaining -= (last_poll - t0).total_seconds()
         if self.poller is not None:
-            self.poller.tracker.close_all(int(self.clock().timestamp() * 1000))
-            self.log('info', 'paper_summary', **self.poller.tracker.summary())
+            for t in self.poller.trackers:
+                t.close_all(int(self.clock().timestamp() * 1000))
+                self.log('info', 'paper_summary', **t.summary())
         reason = self.state.stop_reason or 'STOPPED'
         self.log('info', 'scanner_stop', reason=reason, scans=self.state.scans, statuses=self.state.history)
         return reason
@@ -2367,6 +2444,13 @@ STRIKES = []                      # e.g. [81000, 81100, 81200, 81300, 81400]
 # expiry in Dhan web or the instrument master before use. Never guessed here.
 FUTURES_SECURITY_ID = ""          # e.g. "864571" (REPORTED OCT contract: re-verify)
 FUTURES_EXPIRY = ""               # "YYYY-MM-DD"; refused once expired
+# Or a list of VERIFIED contracts; each scan uses the nearest one expiring on or
+# after the option expiry (automatic roll). Overrides the two settings above.
+FUTURES_CONTRACTS = []            # e.g. [("864571", "2026-10-29"), ("1100929", "2026-11-26")]
+AUTO_STRIKES = 0                  # >0: table strikes = listed strikes ATM-N..ATM+N, re-centred every scan
+                                  # (observation only; chosen by the user 12 Oct 2026). 0 = use STRIKES
+WAIT_FOR_OPEN_MIN = 0             # OBSERVE started before 09:15 on a trading day: wait up to N minutes
+DAILY_PROFILE_CHECK = False       # one GET /profile at start: logs data-plan validity (no ids)
 
 INTERVAL_S = 60                   # seconds between scans (minimum 10)
 STOP_TIME = "15:30"               # IST; the loop ends here
@@ -2384,6 +2468,7 @@ PAPER_TAKE_PROFIT_PTS = 6         # your rule (9 Oct 2026), option premium point
 PAPER_STOP_LOSS_PTS = 11          # your rule (9 Oct 2026), option premium points
 PAPER_TIME_STOP_MIN = 10          # RULES.md §6 time stop
 POLL_S = 5                        # seconds between fast read-only price polls (min 2)
+PAPER_VARIANTS = ["FIRST_TOUCH"]  # add "CONFIRMED_CLOSE": enter only after a 1-min close beyond the trigger
 LOT_SIZE = None                   # e.g. the SENSEX lot size, to report rupees (verify; never guessed)
 COST_PER_TRADE_RS = None          # brokerage + taxes per round trip, if you want net rupees
 
@@ -2400,9 +2485,9 @@ import json
 import sys
 import urllib.request
 import time as _bx_main__time
-from datetime import datetime, time as dtime, timezone
+from datetime import date, datetime, time as dtime, timezone
 PROGRAM = 'sensex-readonly-observer'
-VERSION = '6.9'
+VERSION = '7.0'
 EXIT_OK, EXIT_CONFIG, EXIT_AUTH, EXIT_SELFTEST = (0, 2, 3, 4)
 
 def _stdout_logger(redactor):
@@ -2471,10 +2556,13 @@ def _placeholder_status() -> dict:
 
 def _config_errors():
     errs = []
-    if not STRIKES:
-        errs.append('STRIKES is empty (ATM±2 rule undefined; list strikes explicitly)')
-    if not FUTURES_SECURITY_ID or not FUTURES_EXPIRY:
-        errs.append('FUTURES_SECURITY_ID / FUTURES_EXPIRY not set (automatic lookup is BLOCKED)')
+    if not STRIKES and (not AUTO_STRIKES):
+        errs.append('STRIKES is empty and AUTO_STRIKES is 0')
+    if not FUTURES_CONTRACTS and (not FUTURES_SECURITY_ID or not FUTURES_EXPIRY):
+        errs.append('No futures contract: set FUTURES_CONTRACTS or FUTURES_SECURITY_ID / FUTURES_EXPIRY')
+    bad = [v for v in PAPER_VARIANTS if v not in ('FIRST_TOUCH', 'CONFIRMED_CLOSE')]
+    if bad:
+        errs.append('Unknown PAPER_VARIANTS %s' % bad)
     if INTERVAL_S < 10:
         errs.append('INTERVAL_S must be >= 10')
     if PAPER_ENABLED and POLL_S < 2:
@@ -2525,6 +2613,9 @@ def profile_check(log, redactor) -> int:
     if creds is None:
         return EXIT_AUTH
     client = DhanClient(creds, transport=UrllibTransport(), redactor=redactor, logger=log)
+    return _profile(log, client)
+
+def _profile(log, client) -> int:
     try:
         r = client.profile()
     except DhanClientError as e:
@@ -2533,6 +2624,32 @@ def profile_check(log, redactor) -> int:
     body = r.payload if isinstance(r.payload, dict) else {}
     log('info', 'profile_check', ok=True, envelope=r.envelope, fieldsPresent=sorted(body.keys()), dataPlan=body.get('dataPlan'), dataValidity=body.get('dataValidity'), tokenValidity=body.get('tokenValidity'))
     return EXIT_OK
+
+def _now():
+    return datetime.now(timezone.utc)
+
+def _sleep(seconds):
+    _bx_main__time.sleep(seconds)
+
+def _holidays():
+    return frozenset((date.fromisoformat(d) for d in HOLIDAYS))
+
+def _wait_for_open(log, stop) -> bool:
+    waited, last_note = (0.0, None)
+    while True:
+        st = session_state(_now(), _holidays(), stop)
+        if st.open:
+            if waited:
+                log('info', 'session_open', waitedMin=round(waited / 60, 1))
+            return True
+        if st.reason != 'BEFORE_OPEN' or waited >= WAIT_FOR_OPEN_MIN * 60:
+            log('info', 'no_session', reason=st.reason, note='nothing to observe now; exiting')
+            return False
+        if last_note is None or waited - last_note >= 600:
+            log('info', 'waiting_for_open', istNow=_now().astimezone(IST).isoformat(timespec='seconds'))
+            last_note = waited
+        _sleep(30)
+        waited += 30
 
 def live(log, redactor, loop: bool) -> int:
     errs = _config_errors()
@@ -2553,11 +2670,17 @@ def live(log, redactor, loop: bool) -> int:
     recorder = MemoryRecorder(UrllibTransport())
     client = DhanClient(creds, transport=recorder, redactor=redactor, logger=log)
     hh, mm = (int(x) for x in STOP_TIME.split(':'))
-    cfg = ScannerConfig(strikes=[float(s) for s in STRIKES], interval_s=float(INTERVAL_S), stop_time=dtime(hh, mm), holidays=frozenset(HOLIDAYS), futures_security_id=str(FUTURES_SECURITY_ID), futures_expiry=FUTURES_EXPIRY, max_scans=None if loop else 1, observe_leg_band=int(LEG_BAND), extra_series=bool(EXTRA_SERIES), poll_s=float(POLL_S))
+    if loop and (not _wait_for_open(log, dtime(hh, mm))):
+        return EXIT_OK
+    if DAILY_PROFILE_CHECK and _profile(log, client) != EXIT_OK:
+        return EXIT_AUTH
+    recorder.take()
+    contracts = [FuturesContract(str(i), date.fromisoformat(e), None, 'BSE', e) for i, e in FUTURES_CONTRACTS] or None
+    cfg = ScannerConfig(strikes=[float(s) for s in STRIKES], interval_s=float(INTERVAL_S), stop_time=dtime(hh, mm), holidays=_holidays(), futures_security_id=str(FUTURES_SECURITY_ID), futures_expiry=FUTURES_EXPIRY, instrument_contracts=contracts, auto_strikes=int(AUTO_STRIKES), max_scans=None if loop else 1, observe_leg_band=int(LEG_BAND), extra_series=bool(EXTRA_SERIES), poll_s=float(POLL_S))
     scanner = Scanner(client, cfg, log)
     if PAPER_ENABLED and loop:
-        tracker = PaperTracker(PaperConfig(take_profit_pts=float(PAPER_TAKE_PROFIT_PTS), stop_loss_pts=float(PAPER_STOP_LOSS_PTS), time_stop_s=float(PAPER_TIME_STOP_MIN) * 60, lot_size=LOT_SIZE, cost_per_trade_rs=COST_PER_TRADE_RS), log, in_no_trade_window)
-        scanner.poller = FastPoller(client, tracker, log, cfg.strikes)
+        trackers = [PaperTracker(PaperConfig(take_profit_pts=float(PAPER_TAKE_PROFIT_PTS), stop_loss_pts=float(PAPER_STOP_LOSS_PTS), time_stop_s=float(PAPER_TIME_STOP_MIN) * 60, lot_size=LOT_SIZE, cost_per_trade_rs=COST_PER_TRADE_RS, variant=v), log, in_no_trade_window) for v in PAPER_VARIANTS]
+        scanner.poller = FastPoller(client, trackers, log, cfg.strikes)
 
     def line(text):
         sys.stdout.write(redactor(text) + '\n')

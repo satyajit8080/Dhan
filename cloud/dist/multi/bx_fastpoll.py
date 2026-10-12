@@ -24,7 +24,10 @@ def _top(depth, side):
 
 class FastPoller:
     def __init__(self, client, tracker, log, strikes):
-        self.client, self.tracker, self.log = client, tracker, log
+        """`tracker`: one PaperTracker or a list (e.g. FIRST_TOUCH and CONFIRMED_CLOSE fed the same polls)."""
+        self.trackers = list(tracker) if isinstance(tracker, (list, tuple)) else [tracker]
+        self.tracker = self.trackers[0]
+        self.client, self.log = client, log
         self.strikes = set(float(s) for s in strikes)
         self.polls = self.failures = 0
         self.index_missing_logged = False
@@ -32,6 +35,8 @@ class FastPoller:
     def after_scan(self, rec: dict, detail: dict, rows):
         chain = detail.get("chain")
         legs = {}
+        if rec.get("strikesUsed"):
+            self.strikes = set(float(s) for s in rec["strikesUsed"])
         if chain:
             for s in chain["strikes"]:
                 if float(s["strike"]) not in self.strikes:
@@ -39,11 +44,12 @@ class FastPoller:
                 for side, leg in (("CE", s["ce"]), ("PE", s["pe"])):
                     if leg and leg["securityId"]:
                         legs[(s["strike"], side)] = leg["securityId"]
-        self.tracker.arm(rows, legs, rec.get("status") == "OK")
+        for t in self.trackers:
+            t.arm(rows, legs, rec.get("status") == "OK")
 
     def tick(self) -> bool:
         """One poll. Returns False when the scanner must stop (auth/plan)."""
-        ids = self.tracker.watch_ids()
+        ids = sorted({i for t in self.trackers for i in t.watch_ids()})
         body = {INDEX_SEG: [INDEX_ID]}
         if ids:
             body[LEG_SEG] = [int(i) for i in ids]
@@ -74,5 +80,6 @@ class FastPoller:
             if isinstance(raw, dict):
                 q = normalize_quote(raw, str(sid), LEG_SEG, "poll", r.received_at_ms, "/marketfeed/quote")
                 quotes[str(sid)] = (_top(q["depth"], "buy"), _top(q["depth"], "sell"))
-        self.tracker.on_tick(r.received_at_ms, index, quotes)
+        for t in self.trackers:
+            t.on_tick(r.received_at_ms, index, quotes)
         return True

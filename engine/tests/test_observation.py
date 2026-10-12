@@ -60,5 +60,25 @@ class Observation(unittest.TestCase):
         self.assertNotIn("MOCKCLIENT", out.getvalue())
 
 
+class AutoStrikesAndRoll(unittest.TestCase):
+    def test_auto_strikes_centre_on_index_then_on_previous_atm(self):
+        sc = scanner_for("s21Sep", cfg_over={"strikes": [], "auto_strikes": 1})[0]
+        a = sc.run_once()
+        self.assertEqual((a["strikesUsed"], a["strikeSource"][:9]), ([74600.0, 74700.0, 74800.0], "index LTP"))
+        b = sc.run_once()
+        self.assertEqual(b["strikeSource"], "previous scan ATM (parity forward)")
+        self.assertEqual(b["strikesUsed"], [74600.0, 74700.0, 74800.0])          # ATM 74700 from the forward
+        self.assertEqual(sorted({r.split(" | ")[0].strip("| ") for r in b["table"].splitlines()[2:]}), ["74600", "74700", "74800"])
+
+    def test_futures_roll_picks_nearest_contract_not_before_option_expiry(self):
+        from datetime import date
+        from sensex.instruments import FuturesContract, select_future
+        cs = [FuturesContract("864571", date(2026, 10, 29), None, "BSE", ""),
+              FuturesContract("1100929", date(2026, 11, 26), None, "BSE", "")]
+        self.assertEqual(select_future(cs, date(2026, 10, 15), date(2026, 10, 13)).security_id, "864571")
+        self.assertEqual(select_future(cs, date(2026, 10, 29), date(2026, 10, 29)).security_id, "864571")
+        self.assertEqual(select_future(cs, date(2026, 11, 5), date(2026, 10, 30)).security_id, "1100929")
+
+
 if __name__ == "__main__":
     unittest.main()

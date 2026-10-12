@@ -304,9 +304,35 @@ def _drop_config_assigns(body: str) -> str:
     return ast.unparse(tree)
 
 
+# The everyday file: the single-file build with these CONFIG values (user, 12 Oct 2026: "same file every day").
+# Futures ids/expiries are the ones verified from Dhan's instrument file on 9 Oct 2026.
+EVERYDAY = {
+    "MODE": '"OBSERVE"',
+    "FUTURES_CONTRACTS": '[("864571", "2026-10-29"), ("1100929", "2026-11-26"), ("1145756", "2026-12-31")]',
+    "AUTO_STRIKES": "2",
+    "WAIT_FOR_OPEN_MIN": "60",
+    "DAILY_PROFILE_CHECK": "True",
+    "PAPER_VARIANTS": '["FIRST_TOUCH", "CONFIRMED_CLOSE"]',
+}
+
+
+def with_config(text: str, values: dict) -> str:
+    lines = text.split("\n")
+    for name, value in values.items():
+        hits = [i for i, l in enumerate(lines) if l.startswith(name + " = ")]
+        if len(hits) != 1:
+            raise SystemExit("CONFIG %s found %d times" % (name, len(hits)))
+        i = hits[0]
+        comment = lines[i].split("#", 1)[1] if "#" in lines[i] else ""
+        head = "%s = %s" % (name, value)
+        lines[i] = head.ljust(max(34, len(head) + 2)) + ("# " + comment.strip() if comment else "")
+    return "\n".join(lines)
+
+
 def build() -> dict:
     files = {"multi/" + k: v for k, v in build_multi().items()}
     files["single/sensex_observer.py"] = build_single()
+    files["everyday/main.py"] = with_config(files["single/sensex_observer.py"], EVERYDAY)
     return files
 
 
