@@ -239,6 +239,21 @@ def summarize(events, replay_text=None) -> str:
             _fmt(_q(sp, .5), 2), _fmt(_q(sp, 1), 2),
             _fmt(_q([e["heldS"] for e in exits if e["outcome"] == "TAKE_PROFIT"], .5), 0),
             _fmt(_q([e["heldS"] for e in exits if e["outcome"] == "STOP_LOSS"], .5), 0)))
+        # one trigger crossing opens one paper trade per configured strike; they are not independent
+        by_ev = {}
+        ent = {e["paperId"]: e for e in entries}
+        for e in exits:
+            k = ((ent.get(e["paperId"]) or {}).get("ts", "")[11:16], e["side"], e["trigger"])
+            by_ev.setdefault(k, []).append(e)
+        won = sum(1 for v in by_ev.values() if sum(x["outcome"] == "TAKE_PROFIT" for x in v) * 2 > len(v))
+        lost = sum(1 for v in by_ev.values() if sum(x["outcome"] == "STOP_LOSS" for x in v) * 2 > len(v))
+        w("Crossing events (each opens one paper trade per strike): %d — mostly TP %d, mostly SL %d, mixed %d." % (
+            len(by_ev), won, lost, len(by_ev) - won - lost))
+        slr = [e["pnlPts"] for e in exits if e["outcome"] == "STOP_LOSS" and e.get("pnlPts") is not None]
+        tpr = [e["pnlPts"] for e in exits if e["outcome"] == "TAKE_PROFIT" and e.get("pnlPts") is not None]
+        if slr and tpr:
+            w("Realised stop average %s (worst %s) vs nominal −11; realised take-profit average %s vs nominal +6 "
+              "(discrete polling)." % (_fmt(sum(slr) / len(slr), 2), _fmt(min(slr), 2), _fmt(sum(tpr) / len(tpr), 2)))
         rs = [e.get("pnlRsNet", e.get("pnlRsGross")) for e in exits if e.get("pnlRsGross") is not None]
         if rs:
             w("Rupees (%s): total %s." % ("net of your cost input" if any("pnlRsNet" in e for e in exits) else "gross",
