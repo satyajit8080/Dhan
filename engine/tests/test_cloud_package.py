@@ -424,6 +424,11 @@ class EndToEnd(unittest.TestCase):
         self.assertEqual(scans[0]["startedIst"][11:16], "09:15")
         self.assertEqual(scans[0]["futures"]["securityId"], "844615")
         self.assertTrue(scans[0]["strikesUsed"])
+        # replay metadata carries the scan's resolved strikes and contract, not the empty config (13 Oct log)
+        _, records, _, _, _ = decode_cloud_log.decode_lines(text.splitlines())
+        meta = records[scans[0]["scanId"]]["meta"]
+        self.assertEqual((meta["strikes"], meta["futuresSecurityId"], meta["futuresExpiry"]),
+                         (scans[0]["strikesUsed"], "844615", "2026-09-24"))
         variants = {e["variant"] for e in ev if e["event"] == "paper_summary"}
         self.assertEqual(variants, {"FIRST_TOUCH", "CONFIRMED_CLOSE"})
         entries = [e for e in ev if e["event"] == "paper_entry"]

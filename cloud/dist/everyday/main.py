@@ -2570,7 +2570,8 @@ def _config_errors():
     return errs
 
 def _emit_record(scanner_rec, recorder, cfg, clock_utc, log_line):
-    payload = {'scanId': scanner_rec['scanId'], 'meta': {'strikes': cfg.strikes, 'futuresSecurityId': cfg.futures_security_id, 'futuresExpiry': cfg.futures_expiry, 'clockUtc': clock_utc}}
+    fut = scanner_rec.get('futures') or {}
+    payload = {'scanId': scanner_rec['scanId'], 'meta': {'strikes': scanner_rec.get('strikesUsed') or cfg.strikes, 'futuresSecurityId': fut.get('securityId') or cfg.futures_security_id, 'futuresExpiry': fut.get('expiry') or cfg.futures_expiry, 'clockUtc': clock_utc}}
     payload.update(recorder.take())
     blob = gzip.compress(json.dumps(payload).encode('utf-8')).hex()
     parts = [blob[i:i + RECORD_CHUNK] for i in range(0, len(blob), RECORD_CHUNK)] or ['']

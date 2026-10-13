@@ -195,8 +195,11 @@ def _config_errors():
 
 def _emit_record(scanner_rec, recorder, cfg, clock_utc, log_line):
     """Chunked, gzip+hex replay record: market-data bodies only."""
-    payload = {"scanId": scanner_rec["scanId"], "meta": {"strikes": cfg.strikes,
-               "futuresSecurityId": cfg.futures_security_id, "futuresExpiry": cfg.futures_expiry,
+    fut = scanner_rec.get("futures") or {}   # the scan's resolved contract and strikes (auto strikes / roll)
+    payload = {"scanId": scanner_rec["scanId"], "meta": {
+               "strikes": scanner_rec.get("strikesUsed") or cfg.strikes,
+               "futuresSecurityId": fut.get("securityId") or cfg.futures_security_id,
+               "futuresExpiry": fut.get("expiry") or cfg.futures_expiry,
                "clockUtc": clock_utc}}
     payload.update(recorder.take())
     blob = gzip.compress(json.dumps(payload).encode("utf-8")).hex()
