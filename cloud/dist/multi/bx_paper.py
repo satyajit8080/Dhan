@@ -13,6 +13,15 @@ Entry event (exploratory, NOT a CE/PE signal; D1-D8 are undecided):
   (CE: from below to >= breakoutAbove; PE: from above to <= breakdownBelow),
   outside the no-trade windows. Each (side, trigger) fires once per session,
   for every configured strike of that side (one paper trade per strike).
+FILTERED variant (user, 16 Oct 2026, from the 12-16 Oct paper analysis; observation only, not a rule):
+  enters like FIRST_TOUCH but only when, at the crossing,
+    1. the side agrees with the day trend: listed-futures LTP above its day open for CE, below for PE
+       (futures LTP and open from the latest scan);
+    2. the level behind the trigger has fewer than `filter_min_touches` touches and the session range so
+       far (1-min index bars) is at least `filter_min_range_pts`;
+    3. the strike is not in the money by more than `filter_max_itm_pts` (checked per strike);
+    4. the index is less than `filter_max_overshoot_pts` beyond the trigger.
+  Missing data fails a filter (no entry). Every skipped crossing logs `paper_skip` with the reasons.
 Fill model: entry at the option's ASK at the first poll after the crossing;
   exits evaluated on the BID (what a sell would get). Both sides of the spread
   are therefore already inside the result. Polling is discrete (every few
@@ -37,6 +46,28 @@ class PaperConfig:
     variant: str = "FIRST_TOUCH"       # FIRST_TOUCH: enter at the crossing poll
                                        # CONFIRMED_CLOSE: enter only after a 1-min close beyond the trigger
     confirm_within_min: int = 2        # CONFIRMED_CLOSE: give up if no close beyond within N closed minutes
+                                       # FILTERED: FIRST_TOUCH entry plus the four filters below (user, 16 Oct)
+    filter_min_touches: int = 3        # skip a level already touched this many times or more
+    filter_min_range_pts: float = 300.0   # skip while the session range so far is narrower
+    filter_max_itm_pts: float = 150.0     # skip strikes deeper in the money than this
+    filter_max_overshoot_pts: float = 20.0  # skip if the index is already this far beyond the trigger
+
+
+VARIANT_PREFIX = {"FIRST_TOUCH": "P", "CONFIRMED_CLOSE": "C", "FILTERED": "F"}
+
+
+def scan_context(detail: dict) -> dict:
+    """Facts from one scan for the FILTERED variant: futures vs its day open, session range, level touches."""
+    fut = (detail or {}).get("futures") or {}
+    ohlc = fut.get("ohlc") or {}
+    bars = (detail or {}).get("idx1m") or []
+    lv = (detail or {}).get("levels") or {}
+    res, sup = lv.get("resistance"), lv.get("support")
+    return {"futuresLtp": fut.get("ltp"), "futuresOpen": ohlc.get("open"),
+            "sessionHigh": max(b["high"] for b in bars) if bars else None,
+            "sessionLow": min(b["low"] for b in bars) if bars else None,
+            "touches": {("CE", lv.get("breakoutAbove")): res["touches"] if res else None,
+                        ("PE", lv.get("breakdownBelow")): sup["touches"] if sup else None}}
 
 
 @dataclass
@@ -46,6 +77,7 @@ class _Arm:
     strikes: list
     fired: bool = False
     sids: dict = field(default_factory=dict)   # strike -> security id at arming (strikes may re-centre later)
+    touches: int | None = None                  # touches of the level behind this trigger (FILTERED)
 
 
 @dataclass
@@ -80,12 +112,14 @@ class PaperTracker:
         self.pending: dict = {}          # CONFIRMED_CLOSE: key -> (arm, minute of the crossing)
         self.minute = None               # current minute (epoch ms // 60000) seen by the polls
         self.minute_last = None          # last index LTP polled inside that minute (~ its 1-min close)
-        self.prefix = "P" if cfg.variant == "FIRST_TOUCH" else "C"
+        self.prefix = VARIANT_PREFIX[cfg.variant]
+        self.ctx: dict = {}              # latest scan_context (FILTERED)
 
     # ------------------------------------------------------------ from scans
-    def arm(self, rows, legs: dict, scan_ok: bool):
+    def arm(self, rows, legs: dict, scan_ok: bool, ctx: dict | None = None):
         """Replace the armed triggers with the latest scan's OK rows."""
         self.legs = dict(legs)
+        self.ctx = ctx or {}
         self.arms = {}
         if not scan_ok or not rows:
             return
@@ -95,7 +129,8 @@ class PaperTracker:
             key = (r.side, float(r.trigger))
             if key in self.fired:
                 continue
-            self.arms.setdefault(key, _Arm(r.side, float(r.trigger), []))
+            touches = (self.ctx.get("touches") or {}).get((r.side, r.trigger))
+            self.arms.setdefault(key, _Arm(r.side, float(r.trigger), [], touches=touches))
             if r.strike not in self.arms[key].strikes:
                 self.arms[key].strikes.append(r.strike)
                 self.arms[key].sids[r.strike] = self.legs.get((r.strike, r.side))
@@ -128,8 +163,40 @@ class PaperTracker:
             if self.cfg.variant == "CONFIRMED_CLOSE":
                 self.pending[key] = (arm, now_ms // 60000)
                 continue
+            if self.cfg.variant == "FILTERED":
+                self._enter_filtered(arm, now_ms, index_ltp, quotes)
+                continue
             for strike in arm.strikes:
                 self._enter(arm, strike, now_ms, index_ltp, quotes)
+
+    def _enter_filtered(self, arm, now_ms, index_ltp, quotes):
+        c, sgn = self.ctx, (1 if arm.side == "CE" else -1)
+        fl, fo, hi, lo = c.get("futuresLtp"), c.get("futuresOpen"), c.get("sessionHigh"), c.get("sessionLow")
+        trend = (fl - fo) * sgn if fl is not None and fo else None
+        rng = hi - lo if hi is not None and lo is not None else None
+        over = (index_ltp - arm.trigger) * sgn
+        facts = {"futuresVsOpen": None if trend is None else round(trend * sgn, 2), "levelTouches": arm.touches,
+                 "sessionRange": None if rng is None else round(rng, 2), "overshoot": round(over, 2)}
+        fails = []
+        if trend is None or trend <= 0:
+            fails.append("against the day trend (futures vs open)" if trend is not None else "futures open unavailable")
+        if arm.touches is None or arm.touches >= self.cfg.filter_min_touches:
+            fails.append("level touched %s time(s)" % arm.touches)
+        if rng is None or rng < self.cfg.filter_min_range_pts:
+            fails.append("session range %s < %s" % (facts["sessionRange"], self.cfg.filter_min_range_pts))
+        if over >= self.cfg.filter_max_overshoot_pts:
+            fails.append("index already %.1f beyond the trigger" % over)
+        if fails:
+            self.log("info", "paper_skip", variant=self.cfg.variant, side=arm.side, trigger=arm.trigger,
+                     reason="filters: " + "; ".join(fails), filterFacts=facts)
+            return
+        for strike in arm.strikes:
+            itm = (index_ltp - strike) * sgn            # > 0: in the money by this many points
+            if itm > self.cfg.filter_max_itm_pts:
+                self.log("info", "paper_skip", variant=self.cfg.variant, side=arm.side, trigger=arm.trigger,
+                         strike=strike, reason="strike %.0f pts in the money" % itm)
+                continue
+            self._enter(arm, strike, now_ms, index_ltp, quotes, filter_facts=facts)
 
     def _roll_minute(self, now_ms, index_ltp):
         """Returns (minute, close) of the minute that just ended, approximated by its last polled LTP."""
@@ -159,13 +226,15 @@ class PaperTracker:
                          reason="no 1-min close beyond the trigger within %d minute(s)" % self.cfg.confirm_within_min
                          if not in_window else "no-trade window began before confirmation")
 
-    def _enter(self, arm, strike, now_ms, index_ltp, quotes, confirm_close=None):
+    def _enter(self, arm, strike, now_ms, index_ltp, quotes, confirm_close=None, filter_facts=None):
         sid = arm.sids.get(strike) or self.legs.get((strike, arm.side))
         q = quotes.get(sid) if sid else None
         base = {"variant": self.cfg.variant, "side": arm.side, "strike": strike, "trigger": arm.trigger,
                 "indexAtCross": index_ltp}
         if confirm_close is not None:
             base["confirmClose"] = confirm_close
+        if filter_facts is not None:
+            base["filterFacts"] = filter_facts
         if q is None or not q[1] or q[1] <= 0:
             self.log("info", "paper_skip", reason="no ask quote for the leg at the crossing", **base)
             return

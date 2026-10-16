@@ -399,7 +399,7 @@ class EndToEnd(unittest.TestCase):
     def test_everyday_file_waits_for_open_checks_plan_and_runs_both_variants(self):
         m = load_everyday()
         self.assertEqual((m.MODE, m.AUTO_STRIKES, m.PAPER_VARIANTS, m.DAILY_PROFILE_CHECK),
-                         ("OBSERVE", 2, ["FIRST_TOUCH", "CONFIRMED_CLOSE"], True))
+                         ("OBSERVE", 2, ["FIRST_TOUCH", "CONFIRMED_CLOSE", "FILTERED"], True))
         self.assertEqual(m.FUTURES_CONTRACTS[0], ("864571", "2026-10-29"))
 
         def poll(n, req):
@@ -430,9 +430,12 @@ class EndToEnd(unittest.TestCase):
         self.assertEqual((meta["strikes"], meta["futuresSecurityId"], meta["futuresExpiry"]),
                          (scans[0]["strikesUsed"], "844615", "2026-09-24"))
         variants = {e["variant"] for e in ev if e["event"] == "paper_summary"}
-        self.assertEqual(variants, {"FIRST_TOUCH", "CONFIRMED_CLOSE"})
+        self.assertEqual(variants, {"FIRST_TOUCH", "CONFIRMED_CLOSE", "FILTERED"})
         entries = [e for e in ev if e["event"] == "paper_entry"]
-        self.assertEqual({e["variant"] for e in entries}, {"FIRST_TOUCH", "CONFIRMED_CLOSE"})
+        self.assertTrue({"FIRST_TOUCH", "CONFIRMED_CLOSE"} <= {e["variant"] for e in entries})
+        filtered = [e for e in ev if e["event"] in ("paper_entry", "paper_skip") and e.get("variant") == "FILTERED"]
+        self.assertTrue(filtered)                       # the FILTERED variant saw the crossing and decided
+        self.assertEqual([e for e in ev if e["event"] == "runtime"][0]["version"], "7.1")
         self.assertNotIn(self.token, text)
 
     def test_everyday_file_exits_quietly_on_a_weekend(self):

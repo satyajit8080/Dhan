@@ -101,6 +101,11 @@ Upload `cloud/dist/everyday/main.py` once; it is never edited afterwards.
   Dhan's instrument file; the nearest contract expiring on/after the option expiry is used. Extend before 31 Dec.
 - **Paper variants:** `FIRST_TOUCH` (enter at the crossing poll) and `CONFIRMED_CLOSE` (enter only after a 1-min close
   beyond the trigger, within 2 minutes), both +6/−11 and 10-min time stop, reported separately.
+- **FILTERED (v7.1, user 16 Oct):** a third paper variant, FIRST_TOUCH entry only when (1) futures LTP is on the
+  trade's side of its day open, (2) the level has < 3 touches and the session range so far is ≥ 300 pts, (3) the strike
+  is not > 150 pts in the money, (4) the index is < 20 pts beyond the trigger. Cut points come from the 12–16 Oct
+  in-sample analysis (`docs/sessions/2026-10-16_WIN_LOSS_ANALYSIS.md`); forward test only, RULES.md unchanged.
+  Skipped crossings log `paper_skip` with the failed filters and their values.
 - **Morning check:** one `GET /profile` logs data-plan validity (`dataValidity`). The plan observed on 9 Oct expires
   **17 Oct 08:34** — renew it in Dhan before the next run after that.
 - **After 15:30:** download the run log (Runs & Logs) and send it; decode → replay → report as in §3.

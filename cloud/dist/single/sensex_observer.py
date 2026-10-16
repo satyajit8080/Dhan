@@ -1892,6 +1892,19 @@ class PaperConfig:
     cost_per_trade_rs: float | None = None
     variant: str = 'FIRST_TOUCH'
     confirm_within_min: int = 2
+    filter_min_touches: int = 3
+    filter_min_range_pts: float = 300.0
+    filter_max_itm_pts: float = 150.0
+    filter_max_overshoot_pts: float = 20.0
+VARIANT_PREFIX = {'FIRST_TOUCH': 'P', 'CONFIRMED_CLOSE': 'C', 'FILTERED': 'F'}
+
+def scan_context(detail: dict) -> dict:
+    fut = (detail or {}).get('futures') or {}
+    ohlc = fut.get('ohlc') or {}
+    bars = (detail or {}).get('idx1m') or []
+    lv = (detail or {}).get('levels') or {}
+    res, sup = (lv.get('resistance'), lv.get('support'))
+    return {'futuresLtp': fut.get('ltp'), 'futuresOpen': ohlc.get('open'), 'sessionHigh': max((b['high'] for b in bars)) if bars else None, 'sessionLow': min((b['low'] for b in bars)) if bars else None, 'touches': {('CE', lv.get('breakoutAbove')): res['touches'] if res else None, ('PE', lv.get('breakdownBelow')): sup['touches'] if sup else None}}
 
 @dataclass
 class _Arm:
@@ -1900,6 +1913,7 @@ class _Arm:
     strikes: list
     fired: bool = False
     sids: dict = field(default_factory=dict)
+    touches: int | None = None
 
 @dataclass
 class _Trade:
@@ -1933,10 +1947,12 @@ class PaperTracker:
         self.pending: dict = {}
         self.minute = None
         self.minute_last = None
-        self.prefix = 'P' if cfg.variant == 'FIRST_TOUCH' else 'C'
+        self.prefix = VARIANT_PREFIX[cfg.variant]
+        self.ctx: dict = {}
 
-    def arm(self, rows, legs: dict, scan_ok: bool):
+    def arm(self, rows, legs: dict, scan_ok: bool, ctx: dict | None=None):
         self.legs = dict(legs)
+        self.ctx = ctx or {}
         self.arms = {}
         if not scan_ok or not rows:
             return
@@ -1946,7 +1962,8 @@ class PaperTracker:
             key = (r.side, float(r.trigger))
             if key in self.fired:
                 continue
-            self.arms.setdefault(key, _Arm(r.side, float(r.trigger), []))
+            touches = (self.ctx.get('touches') or {}).get((r.side, r.trigger))
+            self.arms.setdefault(key, _Arm(r.side, float(r.trigger), [], touches=touches))
             if r.strike not in self.arms[key].strikes:
                 self.arms[key].strikes.append(r.strike)
                 self.arms[key].sids[r.strike] = self.legs.get((r.strike, r.side))
@@ -1977,8 +1994,37 @@ class PaperTracker:
             if self.cfg.variant == 'CONFIRMED_CLOSE':
                 self.pending[key] = (arm, now_ms // 60000)
                 continue
+            if self.cfg.variant == 'FILTERED':
+                self._enter_filtered(arm, now_ms, index_ltp, quotes)
+                continue
             for strike in arm.strikes:
                 self._enter(arm, strike, now_ms, index_ltp, quotes)
+
+    def _enter_filtered(self, arm, now_ms, index_ltp, quotes):
+        c, sgn = (self.ctx, 1 if arm.side == 'CE' else -1)
+        fl, fo, hi, lo = (c.get('futuresLtp'), c.get('futuresOpen'), c.get('sessionHigh'), c.get('sessionLow'))
+        trend = (fl - fo) * sgn if fl is not None and fo else None
+        rng = hi - lo if hi is not None and lo is not None else None
+        over = (index_ltp - arm.trigger) * sgn
+        facts = {'futuresVsOpen': None if trend is None else round(trend * sgn, 2), 'levelTouches': arm.touches, 'sessionRange': None if rng is None else round(rng, 2), 'overshoot': round(over, 2)}
+        fails = []
+        if trend is None or trend <= 0:
+            fails.append('against the day trend (futures vs open)' if trend is not None else 'futures open unavailable')
+        if arm.touches is None or arm.touches >= self.cfg.filter_min_touches:
+            fails.append('level touched %s time(s)' % arm.touches)
+        if rng is None or rng < self.cfg.filter_min_range_pts:
+            fails.append('session range %s < %s' % (facts['sessionRange'], self.cfg.filter_min_range_pts))
+        if over >= self.cfg.filter_max_overshoot_pts:
+            fails.append('index already %.1f beyond the trigger' % over)
+        if fails:
+            self.log('info', 'paper_skip', variant=self.cfg.variant, side=arm.side, trigger=arm.trigger, reason='filters: ' + '; '.join(fails), filterFacts=facts)
+            return
+        for strike in arm.strikes:
+            itm = (index_ltp - strike) * sgn
+            if itm > self.cfg.filter_max_itm_pts:
+                self.log('info', 'paper_skip', variant=self.cfg.variant, side=arm.side, trigger=arm.trigger, strike=strike, reason='strike %.0f pts in the money' % itm)
+                continue
+            self._enter(arm, strike, now_ms, index_ltp, quotes, filter_facts=facts)
 
     def _roll_minute(self, now_ms, index_ltp):
         m = now_ms // 60000
@@ -2005,12 +2051,14 @@ class PaperTracker:
                 del self.pending[key]
                 self.log('info', 'paper_skip', variant=self.cfg.variant, side=arm.side, trigger=arm.trigger, reason='no 1-min close beyond the trigger within %d minute(s)' % self.cfg.confirm_within_min if not in_window else 'no-trade window began before confirmation')
 
-    def _enter(self, arm, strike, now_ms, index_ltp, quotes, confirm_close=None):
+    def _enter(self, arm, strike, now_ms, index_ltp, quotes, confirm_close=None, filter_facts=None):
         sid = arm.sids.get(strike) or self.legs.get((strike, arm.side))
         q = quotes.get(sid) if sid else None
         base = {'variant': self.cfg.variant, 'side': arm.side, 'strike': strike, 'trigger': arm.trigger, 'indexAtCross': index_ltp}
         if confirm_close is not None:
             base['confirmClose'] = confirm_close
+        if filter_facts is not None:
+            base['filterFacts'] = filter_facts
         if q is None or not q[1] or q[1] <= 0:
             self.log('info', 'paper_skip', reason='no ask quote for the leg at the crossing', **base)
             return
@@ -2096,8 +2144,9 @@ class FastPoller:
                 for side, leg in (('CE', s['ce']), ('PE', s['pe'])):
                     if leg and leg['securityId']:
                         legs[s['strike'], side] = leg['securityId']
+        ctx = scan_context(detail)
         for t in self.trackers:
-            t.arm(rows, legs, rec.get('status') == 'OK')
+            t.arm(rows, legs, rec.get('status') == 'OK', ctx)
 
     def tick(self) -> bool:
         ids = sorted({i for t in self.trackers for i in t.watch_ids()})
@@ -2468,7 +2517,7 @@ PAPER_TAKE_PROFIT_PTS = 6         # your rule (9 Oct 2026), option premium point
 PAPER_STOP_LOSS_PTS = 11          # your rule (9 Oct 2026), option premium points
 PAPER_TIME_STOP_MIN = 10          # RULES.md §6 time stop
 POLL_S = 5                        # seconds between fast read-only price polls (min 2)
-PAPER_VARIANTS = ["FIRST_TOUCH"]  # add "CONFIRMED_CLOSE": enter only after a 1-min close beyond the trigger
+PAPER_VARIANTS = ["FIRST_TOUCH"]  # add "CONFIRMED_CLOSE" (1-min close beyond the trigger) and/or "FILTERED" (4 filters, 16 Oct)
 LOT_SIZE = None                   # e.g. the SENSEX lot size, to report rupees (verify; never guessed)
 COST_PER_TRADE_RS = None          # brokerage + taxes per round trip, if you want net rupees
 
@@ -2487,7 +2536,7 @@ import urllib.request
 import time as _bx_main__time
 from datetime import date, datetime, time as dtime, timezone
 PROGRAM = 'sensex-readonly-observer'
-VERSION = '7.0'
+VERSION = '7.1'
 EXIT_OK, EXIT_CONFIG, EXIT_AUTH, EXIT_SELFTEST = (0, 2, 3, 4)
 
 def _stdout_logger(redactor):
@@ -2560,7 +2609,7 @@ def _config_errors():
         errs.append('STRIKES is empty and AUTO_STRIKES is 0')
     if not FUTURES_CONTRACTS and (not FUTURES_SECURITY_ID or not FUTURES_EXPIRY):
         errs.append('No futures contract: set FUTURES_CONTRACTS or FUTURES_SECURITY_ID / FUTURES_EXPIRY')
-    bad = [v for v in PAPER_VARIANTS if v not in ('FIRST_TOUCH', 'CONFIRMED_CLOSE')]
+    bad = [v for v in PAPER_VARIANTS if v not in ('FIRST_TOUCH', 'CONFIRMED_CLOSE', 'FILTERED')]
     if bad:
         errs.append('Unknown PAPER_VARIANTS %s' % bad)
     if INTERVAL_S < 10:

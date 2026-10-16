@@ -10,6 +10,7 @@ from __future__ import annotations
 from .dhan_client import AuthError, DhanClientError, PlanError
 from .jscompat import is_number, js_get
 from .normalize import normalize_quote
+from .paper import scan_context
 
 INDEX_SEG, INDEX_ID, LEG_SEG = "IDX_I", 51, "BSE_FNO"
 
@@ -42,8 +43,9 @@ class FastPoller:
                 for side, leg in (("CE", s["ce"]), ("PE", s["pe"])):
                     if leg and leg["securityId"]:
                         legs[(s["strike"], side)] = leg["securityId"]
+        ctx = scan_context(detail)
         for t in self.trackers:
-            t.arm(rows, legs, rec.get("status") == "OK")
+            t.arm(rows, legs, rec.get("status") == "OK", ctx)
 
     def tick(self) -> bool:
         """One poll. Returns False when the scanner must stop (auth/plan)."""

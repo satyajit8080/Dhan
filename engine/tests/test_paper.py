@@ -288,3 +288,72 @@ class ConfirmedClose(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Filtered(unittest.TestCase):
+    """FILTERED variant (user, 16 Oct): FIRST_TOUCH entry gated by day trend, level touches, session range,
+    strike moneyness and overshoot."""
+    LEGS = {(800.0, "CE"): "8", (900.0, "CE"): "9", (1100.0, "CE"): "11", (1100.0, "PE"): "12"}
+    Q = {"8": (200.0, 201.0), "9": (110.0, 111.0), "11": (20.0, 21.0), "12": (99.0, 100.0)}
+
+    def ctx(self, fut=1010.0, opn=990.0, hi=1300.0, lo=900.0, ce_touches=2, pe_touches=2):
+        return {"futuresLtp": fut, "futuresOpen": opn, "sessionHigh": hi, "sessionLow": lo,
+                "touches": {("CE", 1000.0): ce_touches, ("PE", 990.0): pe_touches}}
+
+    def run_cross(self, ctx, index_at_cross=1001.0, rows=None):
+        t, log = tracker(variant="FILTERED")
+        rows = rows or [Row(800.0, "CE", 1000.0), Row(900.0, "CE", 1000.0), Row(1100.0, "CE", 1000.0)]
+        t.arm(rows, self.LEGS, True, ctx)
+        t.on_tick(T10, 995.0, self.Q)
+        t.on_tick(T10 + 5000, index_at_cross, self.Q)
+        return t, log
+
+    def test_all_filters_pass_enters_except_deep_itm_strike(self):
+        t, log = self.run_cross(self.ctx())
+        entries = [f for e, f in log.events if e == "paper_entry"]
+        self.assertEqual(sorted(f["strike"] for f in entries), [900.0, 1100.0])   # 800 is 201 pts ITM
+        self.assertTrue(all(f["variant"] == "FILTERED" and f["filterFacts"]["levelTouches"] == 2 for f in entries))
+        self.assertTrue(all(o.tid.startswith("F") for o in t.open))
+        skip = [f for e, f in log.events if e == "paper_skip"]
+        self.assertEqual(len(skip), 1)
+        self.assertIn("in the money", skip[0]["reason"])
+
+    def assert_skipped(self, ctx, text, **kw):
+        t, log = self.run_cross(ctx, **kw)
+        self.assertEqual(t.open, [])
+        reasons = " ".join(f["reason"] for e, f in log.events if e == "paper_skip")
+        self.assertIn(text, reasons)
+
+    def test_against_day_trend_is_skipped(self):
+        self.assert_skipped(self.ctx(fut=980.0, opn=990.0), "against the day trend")
+
+    def test_level_touched_three_times_is_skipped(self):
+        self.assert_skipped(self.ctx(ce_touches=3), "level touched 3 time(s)")
+
+    def test_narrow_session_is_skipped(self):
+        self.assert_skipped(self.ctx(hi=1100.0, lo=900.0), "session range 200.0 < 300.0")
+
+    def test_late_entry_is_skipped(self):
+        self.assert_skipped(self.ctx(), "already 25.0 beyond", index_at_cross=1025.0)
+
+    def test_missing_data_fails_closed(self):
+        self.assert_skipped({}, "futures open unavailable")
+
+    def test_pe_uses_its_own_trend_and_touches(self):
+        t, log = tracker(variant="FILTERED")
+        t.arm([Row(1100.0, "PE", 990.0)], self.LEGS, True, self.ctx(fut=980.0, opn=995.0))
+        t.on_tick(T10, 995.0, self.Q)
+        t.on_tick(T10 + 5000, 989.0, self.Q)
+        self.assertEqual([o.strike for o in t.open], [1100.0])        # PE 1100 is 111 pts ITM: under 150
+
+    def test_scan_context_from_detail(self):
+        from sensex.paper import scan_context
+        d = {"futures": {"ltp": 1010.0, "ohlc": {"open": 990.0}},
+             "idx1m": [{"high": 1005.0, "low": 950.0}, {"high": 1300.0, "low": 990.0}],
+             "levels": {"breakoutAbove": 1000.0, "breakdownBelow": 990.0,
+                        "resistance": {"touches": 4}, "support": None}}
+        c = scan_context(d)
+        self.assertEqual((c["futuresLtp"], c["futuresOpen"], c["sessionHigh"], c["sessionLow"]),
+                         (1010.0, 990.0, 1300.0, 950.0))
+        self.assertEqual(c["touches"], {("CE", 1000.0): 4, ("PE", 990.0): None})
+        self.assertEqual(scan_context({})["sessionHigh"], None)
