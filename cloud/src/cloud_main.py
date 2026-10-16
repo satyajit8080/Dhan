@@ -59,7 +59,7 @@ PAPER_TAKE_PROFIT_PTS = 6         # your rule (9 Oct 2026), option premium point
 PAPER_STOP_LOSS_PTS = 11          # your rule (9 Oct 2026), option premium points
 PAPER_TIME_STOP_MIN = 10          # RULES.md §6 time stop
 POLL_S = 5                        # seconds between fast read-only price polls (min 2)
-PAPER_VARIANTS = ["FIRST_TOUCH"]  # add "CONFIRMED_CLOSE" (1-min close beyond the trigger) and/or "FILTERED" (4 filters, 16 Oct)
+PAPER_VARIANTS = ["FIRST_TOUCH"]  # also: "CONFIRMED_CLOSE" (1-min close beyond), "FILTERED" (filter experiment)
 LOT_SIZE = None                   # e.g. the SENSEX lot size, to report rupees (verify; never guessed)
 COST_PER_TRADE_RS = None          # brokerage + taxes per round trip, if you want net rupees
 
@@ -81,8 +81,8 @@ from datetime import date, datetime, time as dtime, timezone
 from sensex.dhan_client import (AuthError, Credentials, DhanClient, DhanClientError, Redactor, READ_ONLY_ENDPOINTS,
                                 RawResponse, UrllibTransport)
 from sensex.fastpoll import FastPoller
-from sensex.paper import PaperConfig, PaperTracker
-from sensex.scan import in_no_trade_window
+from sensex.paper import PaperConfig, PaperTracker, scan_context
+from sensex.scan import in_no_trade_window, run_refresh, selected_levels
 from sensex.recording import MemoryRecorder
 from sensex.scanner import JsonLogger, Scanner, ScannerConfig
 from sensex.instruments import FuturesContract
@@ -90,7 +90,7 @@ from sensex.session import IST, session_state
 from bx_selftest_data import SELFTEST
 
 PROGRAM = "sensex-readonly-observer"
-VERSION = "7.1"
+VERSION = "7.2"
 EXIT_OK, EXIT_CONFIG, EXIT_AUTH, EXIT_SELFTEST = 0, 2, 3, 4
 
 
@@ -165,7 +165,29 @@ def _paper_selftest() -> bool:
     t.on_tick(base + 15000, 989.0, {"1": (40.0, 41.0), "2": (70.0, 71.0)})       # PE crosses: entry ask 71
     t.on_tick(base + 20000, 999.0, {"1": (50.0, 51.0), "2": (59.0, 60.0)})       # bid 59 = -12 -> SL
     out = [r["outcome"] for r in t.closed]
-    return out == ["TAKE_PROFIT", "STOP_LOSS"] and t.closed[0]["pnlPts"] == 6.0 and t.closed[1]["pnlPts"] == -12.0
+    ok = out == ["TAKE_PROFIT", "STOP_LOSS"] and t.closed[0]["pnlPts"] == 6.0 and t.closed[1]["pnlPts"] == -12.0
+    return ok and _filtered_selftest(base)
+
+
+def _filtered_selftest(base) -> bool:
+    """FILTERED level identity through this build's refresh table: the nearest resistance (1 touch) is not the
+    selected one (2 touches, trigger 1015); the filter must report the selected level's 2 touches."""
+    events = []
+    scan = {"status": "OK", "forward": 1000.0, "T": 0.01, "df": 0.999, "candleRefPrice": 1000.0,
+            "resistances": [{"price": 1003.0, "touches": 1, "sources": ["session_high"]},
+                            {"price": 1012.0, "touches": 2, "sources": ["swing_high"]}], "supports": [],
+            "atr": 10.0, "barMinutes": 5, "snapshotMs": base, "candlesMs": base - 60000,
+            "legs": [{"strike": 1000.0, "isCall": True, "ivPct": 15.0, "bid": 20.0, "ask": 21.0, "ltp": 20.5}]}
+    rows, _ = run_refresh(scan, datetime.fromtimestamp(base / 1000, timezone.utc))
+    detail = {"futures": {"ltp": 1010.0, "ohlc": {"open": 990.0}, "lastTradeTimeMs": base, "provenance": {"epochMs": base}},
+              "idx1m": [{"timestampMs": base - 2700000, "open": 950.0, "high": 1300.0, "low": 900.0, "close": 990.0}]}
+    t = PaperTracker(PaperConfig(variant="FILTERED"), lambda *a, **k: events.append((a, k)), in_no_trade_window)
+    t.arm(rows, {(1000.0, "CE"): "1"}, True, scan_context(detail, selected_levels(scan)))
+    t.on_tick(base, 1000.0, {"1": (20.0, 21.0)})
+    t.on_tick(base + 5000, 1016.0, {"1": (20.0, 21.0)})
+    checks = [k for a, k in events if a[1] == "filter_check"]
+    return len(checks) == 1 and checks[0]["filters"]["levelTouches"]["touches"] == 2 and \
+        checks[0]["filters"]["levelTouches"]["result"] == "PASS" and checks[0]["decision"] == "ENTER"
 
 
 def _filled(value: str) -> bool:

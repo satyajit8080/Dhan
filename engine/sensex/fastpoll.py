@@ -11,6 +11,7 @@ from .dhan_client import AuthError, DhanClientError, PlanError
 from .jscompat import is_number, js_get
 from .normalize import normalize_quote
 from .paper import scan_context
+from .scan import selected_levels
 
 INDEX_SEG, INDEX_ID, LEG_SEG = "IDX_I", 51, "BSE_FNO"
 
@@ -43,7 +44,7 @@ class FastPoller:
                 for side, leg in (("CE", s["ce"]), ("PE", s["pe"])):
                     if leg and leg["securityId"]:
                         legs[(s["strike"], side)] = leg["securityId"]
-        ctx = scan_context(detail)
+        ctx = scan_context(detail, selected_levels(rec.get("scanInputs") or {}))
         for t in self.trackers:
             t.arm(rows, legs, rec.get("status") == "OK", ctx)
 

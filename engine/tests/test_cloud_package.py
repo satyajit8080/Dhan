@@ -433,10 +433,36 @@ class EndToEnd(unittest.TestCase):
         self.assertEqual(variants, {"FIRST_TOUCH", "CONFIRMED_CLOSE", "FILTERED"})
         entries = [e for e in ev if e["event"] == "paper_entry"]
         self.assertTrue({"FIRST_TOUCH", "CONFIRMED_CLOSE"} <= {e["variant"] for e in entries})
-        filtered = [e for e in ev if e["event"] in ("paper_entry", "paper_skip") and e.get("variant") == "FILTERED"]
-        self.assertTrue(filtered)                       # the FILTERED variant saw the crossing and decided
-        self.assertEqual([e for e in ev if e["event"] == "runtime"][0]["version"], "7.1")
+        checks = [e for e in ev if e["event"] == "filter_check"]
+        self.assertEqual(len(checks), 1)                # one diagnostics event for the one crossing
+        c = checks[0]
+        self.assertEqual((c["variant"], c["eventId"], c["side"]), ("FILTERED", "F-E001", "CE"))
+        # the bundle's own refresh table selected the level behind this exact trigger
+        self.assertEqual((c["selectedLevel"]["touchSource"], float(c["selectedLevel"]["trigger"])),
+                         ("refresh_table.pick_level", c["trigger"]))
+        self.assertEqual(c["filters"]["levelTouches"]["touches"], c["selectedLevel"]["touches"])
+        self.assertEqual(c["filters"]["dayTrend"]["result"], "STALE")   # fixture's futures last trade is 656.6 s old
+        self.assertEqual(c["decision"], "REJECT")
+        self.assertFalse([e for e in ev if e["event"] == "paper_entry" and e["variant"] == "FILTERED"])
+        report = summarize_observation.summarize(ev, None)
+        for v in ("FIRST_TOUCH", "CONFIRMED_CLOSE", "FILTERED"):
+            self.assertIn("### PAPER trades [%s]" % v, report)
+        self.assertIn("### FILTERED diagnostics", report)
+        self.assertIn("| dayTrend | 0 | 0 | 0 | 0 | 1 |", report)
+        self.assertEqual([e for e in ev if e["event"] == "runtime"][0]["version"], "7.2")
         self.assertNotIn(self.token, text)
+
+    def test_everyday_file_self_test_checks_filtered_level_identity(self):
+        m = load_everyday()
+        self.assertTrue(m._paper_selftest())
+        base = int(datetime(2026, 9, 21, 4, 30, tzinfo=timezone.utc).timestamp() * 1000)
+        real = m.selected_levels
+        try:
+            m.selected_levels = lambda scan: {}                  # level identity lost -> self-test must fail
+            self.assertFalse(m._filtered_selftest(base))
+        finally:
+            m.selected_levels = real
+        self.assertTrue(m._filtered_selftest(base))
 
     def test_everyday_file_exits_quietly_on_a_weekend(self):
         sat = datetime(2026, 10, 17, 3, 30, tzinfo=timezone.utc)

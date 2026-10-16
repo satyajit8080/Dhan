@@ -132,8 +132,10 @@ def to_compact(rows: list[Row]) -> str:
 class _BX_RT:
     Leg = Leg
     Level = Level
+    _round_to = staticmethod(_round_to)
     build_refresh_table = staticmethod(build_refresh_table)
     in_skip_window = staticmethod(in_skip_window)
+    pick_level = staticmethod(pick_level)
     to_compact = staticmethod(to_compact)
 
 
@@ -1217,13 +1219,30 @@ def build_scan(*, raw_chain, raw_futures, candles, expiry, strikes, chain_receiv
                 continue
             legs.append({'strike': k, 'isCall': typ == 'CE', 'ivPct': priced['ivPct'], 'bid': raw['topBidPrice'] if raw['topBidPrice'] is not None else 0, 'ask': raw['topAskPrice'] if raw['topAskPrice'] is not None else 0, 'ltp': raw['lastPrice']})
     return {'status': 'OK', 'forward': p['forward'], 'T': p['T'], 'df': p['discountFactor'], 'atmStrike': p['atmStrike'], 'candleRefPrice': spot, 'resistances': [{'price': l['price'], 'touches': l['touches'], 'sources': list(l['sources'])} for l in lv['allResistance']], 'supports': [{'price': l['price'], 'touches': l['touches'], 'sources': list(l['sources'])} for l in lv['allSupport']], 'atr': lv['atr14'], 'barMinutes': lv['timeframeMinutes'], 'legs': legs, 'excludedLegs': excluded, 'snapshotMs': p['asOfMs'], 'candlesMs': candles[-1]['timestampMs'] if candles else None, 'gateWarnings': p['gate']['warnings']}
+REFRESH_BUFFER = 5.0
+REFRESH_ROUND_STEP = 5.0
+REFRESH_MIN_TOUCHES = 2
 
 def run_refresh(scan: dict, now):
     if scan.get('status') != 'OK' or scan.get('candlesMs') is None:
         return (None, BLANK_TABLE)
     rt = _BX_RT
-    rows = rt.build_refresh_table(forward=scan['forward'], T=scan['T'], df=scan['df'], candle_ref_price=scan['candleRefPrice'], resistances=[rt.Level(l['price'], l['touches'], l['sources']) for l in scan['resistances']], supports=[rt.Level(l['price'], l['touches'], l['sources']) for l in scan['supports']], atr=scan['atr'] if scan['atr'] is not None else 0.0, bar_minutes=int(scan['barMinutes']) if scan['barMinutes'] else 5, legs=[rt.Leg(l['strike'], l['isCall'], l['ivPct'], l['bid'], l['ask'], l['ltp']) for l in scan['legs']], snapshot_ms=scan['snapshotMs'], candles_ms=scan['candlesMs'], now=now)
+    rows = rt.build_refresh_table(forward=scan['forward'], T=scan['T'], df=scan['df'], candle_ref_price=scan['candleRefPrice'], resistances=[rt.Level(l['price'], l['touches'], l['sources']) for l in scan['resistances']], supports=[rt.Level(l['price'], l['touches'], l['sources']) for l in scan['supports']], atr=scan['atr'] if scan['atr'] is not None else 0.0, bar_minutes=int(scan['barMinutes']) if scan['barMinutes'] else 5, legs=[rt.Leg(l['strike'], l['isCall'], l['ivPct'], l['bid'], l['ask'], l['ltp']) for l in scan['legs']], snapshot_ms=scan['snapshotMs'], candles_ms=scan['candlesMs'], now=now, buffer=REFRESH_BUFFER, round_step=REFRESH_ROUND_STEP, min_touches=REFRESH_MIN_TOUCHES)
     return (rows, rt.to_compact(rows))
+
+def selected_levels(scan: dict) -> dict:
+    if scan.get('status') != 'OK' or scan.get('candlesMs') is None:
+        return {}
+    rt = _BX_RT
+    out = {}
+    for side, key, above in (('CE', 'resistances', True), ('PE', 'supports', False)):
+        levels = [rt.Level(lv['price'], lv['touches'], lv['sources']) for lv in scan.get(key) or []]
+        lvl, weak = rt.pick_level(levels, scan['candleRefPrice'], above, REFRESH_MIN_TOUCHES)
+        if lvl is None:
+            continue
+        trig = rt._round_to(lvl.price + (REFRESH_BUFFER if above else -REFRESH_BUFFER), REFRESH_ROUND_STEP)
+        out[side] = {'trigger': int(trig), 'levelPrice': lvl.price, 'touches': lvl.touches, 'sources': list(lvl.sources), 'weak': weak, 'touchSource': 'refresh_table.pick_level'}
+    return out
 
 def in_no_trade_window(now) -> bool:
     rt = _BX_RT
@@ -1879,6 +1898,7 @@ def build_observation(*, rec: dict, detail: dict, endpoints: list, rows, contrac
 # ----------------------------------------------------------------------
 # module: engine/sensex/paper.py
 # ----------------------------------------------------------------------
+import math
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
@@ -1892,19 +1912,26 @@ class PaperConfig:
     cost_per_trade_rs: float | None = None
     variant: str = 'FIRST_TOUCH'
     confirm_within_min: int = 2
+    confirm_max_overshoot_pts: float | None = None
     filter_min_touches: int = 3
     filter_min_range_pts: float = 300.0
     filter_max_itm_pts: float = 150.0
-    filter_max_overshoot_pts: float = 20.0
+    filter_max_futures_age_s: float = 120.0
+    filter_clock_tolerance_s: float = 5.0
 VARIANT_PREFIX = {'FIRST_TOUCH': 'P', 'CONFIRMED_CLOSE': 'C', 'FILTERED': 'F'}
+_IST_S = 19800
+_OPEN_0915_S = 9 * 3600 + 15 * 60
 
-def scan_context(detail: dict) -> dict:
+def _finite(v) -> bool:
+    return isinstance(v, (int, float)) and (not isinstance(v, bool)) and math.isfinite(v)
+
+def scan_context(detail: dict, selected: dict | None=None) -> dict:
     fut = (detail or {}).get('futures') or {}
-    ohlc = fut.get('ohlc') or {}
     bars = (detail or {}).get('idx1m') or []
-    lv = (detail or {}).get('levels') or {}
-    res, sup = (lv.get('resistance'), lv.get('support'))
-    return {'futuresLtp': fut.get('ltp'), 'futuresOpen': ohlc.get('open'), 'sessionHigh': max((b['high'] for b in bars)) if bars else None, 'sessionLow': min((b['low'] for b in bars)) if bars else None, 'touches': {('CE', lv.get('breakoutAbove')): res['touches'] if res else None, ('PE', lv.get('breakdownBelow')): sup['touches'] if sup else None}}
+    ok = bool(bars) and all((_finite(b.get('high')) and _finite(b.get('low')) and (b['high'] >= b['low']) for b in bars))
+    first = bars[0] if bars else None
+    index_open = first['open'] if first and _finite(first.get('timestampMs')) and _finite(first.get('open')) and ((first['timestampMs'] // 1000 + _IST_S) % 86400 == _OPEN_0915_S) else None
+    return {'futuresLtp': fut.get('ltp'), 'futuresOpen': (fut.get('ohlc') or {}).get('open'), 'futuresLastTradeMs': fut.get('lastTradeTimeMs'), 'futuresFetchedMs': (fut.get('provenance') or {}).get('epochMs'), 'sessionHigh': max((b['high'] for b in bars)) if ok else None, 'sessionLow': min((b['low'] for b in bars)) if ok else None, 'sessionBarsValid': ok if bars else None, 'indexOpen0915': index_open, 'selected': dict(selected or {})}
 
 @dataclass
 class _Arm:
@@ -1913,7 +1940,7 @@ class _Arm:
     strikes: list
     fired: bool = False
     sids: dict = field(default_factory=dict)
-    touches: int | None = None
+    level: dict | None = None
 
 @dataclass
 class _Trade:
@@ -1949,6 +1976,7 @@ class PaperTracker:
         self.minute_last = None
         self.prefix = VARIANT_PREFIX[cfg.variant]
         self.ctx: dict = {}
+        self.checks = 0
 
     def arm(self, rows, legs: dict, scan_ok: bool, ctx: dict | None=None):
         self.legs = dict(legs)
@@ -1962,8 +1990,9 @@ class PaperTracker:
             key = (r.side, float(r.trigger))
             if key in self.fired:
                 continue
-            touches = (self.ctx.get('touches') or {}).get((r.side, r.trigger))
-            self.arms.setdefault(key, _Arm(r.side, float(r.trigger), [], touches=touches))
+            sel = (self.ctx.get('selected') or {}).get(r.side)
+            level = sel if sel and float(sel['trigger']) == float(r.trigger) else None
+            self.arms.setdefault(key, _Arm(r.side, float(r.trigger), [], level=level))
             if r.strike not in self.arms[key].strikes:
                 self.arms[key].strikes.append(r.strike)
                 self.arms[key].sids[r.strike] = self.legs.get((r.strike, r.side))
@@ -2001,30 +2030,74 @@ class PaperTracker:
                 self._enter(arm, strike, now_ms, index_ltp, quotes)
 
     def _enter_filtered(self, arm, now_ms, index_ltp, quotes):
-        c, sgn = (self.ctx, 1 if arm.side == 'CE' else -1)
-        fl, fo, hi, lo = (c.get('futuresLtp'), c.get('futuresOpen'), c.get('sessionHigh'), c.get('sessionLow'))
-        trend = (fl - fo) * sgn if fl is not None and fo else None
-        rng = hi - lo if hi is not None and lo is not None else None
-        over = (index_ltp - arm.trigger) * sgn
-        facts = {'futuresVsOpen': None if trend is None else round(trend * sgn, 2), 'levelTouches': arm.touches, 'sessionRange': None if rng is None else round(rng, 2), 'overshoot': round(over, 2)}
-        fails = []
-        if trend is None or trend <= 0:
-            fails.append('against the day trend (futures vs open)' if trend is not None else 'futures open unavailable')
-        if arm.touches is None or arm.touches >= self.cfg.filter_min_touches:
-            fails.append('level touched %s time(s)' % arm.touches)
-        if rng is None or rng < self.cfg.filter_min_range_pts:
-            fails.append('session range %s < %s' % (facts['sessionRange'], self.cfg.filter_min_range_pts))
-        if over >= self.cfg.filter_max_overshoot_pts:
-            fails.append('index already %.1f beyond the trigger' % over)
-        if fails:
-            self.log('info', 'paper_skip', variant=self.cfg.variant, side=arm.side, trigger=arm.trigger, reason='filters: ' + '; '.join(fails), filterFacts=facts)
-            return
+        cfg, c, sgn = (self.cfg, self.ctx, 1 if arm.side == 'CE' else -1)
+        self.checks += 1
+        filters = {'dayTrend': self._trend(c, sgn, now_ms), 'levelTouches': self._touches(arm), 'sessionRange': self._range(c)}
+        strikes = []
         for strike in arm.strikes:
-            itm = (index_ltp - strike) * sgn
-            if itm > self.cfg.filter_max_itm_pts:
-                self.log('info', 'paper_skip', variant=self.cfg.variant, side=arm.side, trigger=arm.trigger, strike=strike, reason='strike %.0f pts in the money' % itm)
-                continue
-            self._enter(arm, strike, now_ms, index_ltp, quotes, filter_facts=facts)
+            itm = round((index_ltp - strike) * sgn, 2)
+            strikes.append({'strike': strike, 'itmPts': itm, 'maxItmPts': cfg.filter_max_itm_pts, 'result': 'PASS' if itm <= cfg.filter_max_itm_pts else 'FAIL'})
+        reasons = ['%s %s: %s' % (k, v['result'], v['reason']) for k, v in filters.items() if v['result'] != 'PASS']
+        enter = [x['strike'] for x in strikes if x['result'] == 'PASS'] if not reasons else []
+        if not reasons and (not enter):
+            reasons.append('every strike more than %s pts in the money' % cfg.filter_max_itm_pts)
+        io = c.get('indexOpen0915')
+        diagnostics = {'overshootPts': round((index_ltp - arm.trigger) * sgn, 2), 'spotVsOpen0915': {'note': 'diagnostic only, not used in the decision', 'indexOpen0915': io, 'indexLtp': index_ltp, 'result': 'MISSING' if not _finite(io) else 'PASS' if (index_ltp - io) * sgn > 0 else 'FAIL'}}
+        self.log('info', 'filter_check', eventId='%s-E%03d' % (self.prefix, self.checks), variant=cfg.variant, crossingMs=now_ms, side=arm.side, trigger=arm.trigger, indexLtp=index_ltp, selectedLevel=arm.level, filters=filters, strikes=strikes, diagnostics=diagnostics, decision='ENTER' if enter else 'REJECT', enterStrikes=enter, reasons=reasons, strikeReference='SENSEX index LTP at the crossing poll (IDX_I:51)')
+        for strike in enter:
+            self._enter(arm, strike, now_ms, index_ltp, quotes, event_id='%s-E%03d' % (self.prefix, self.checks))
+
+    def _trend(self, c, sgn, now_ms) -> dict:
+        cfg = self.cfg
+        ltp, opn, ltt = (c.get('futuresLtp'), c.get('futuresOpen'), c.get('futuresLastTradeMs'))
+        out = {'futuresLtp': ltp, 'futuresOpen': opn, 'lastTradeMs': ltt, 'fetchedMs': c.get('futuresFetchedMs'), 'ageS': None, 'maxAgeS': cfg.filter_max_futures_age_s}
+        if ltp is None or opn is None:
+            return dict(out, result='MISSING', reason='futures LTP or day open missing')
+        if not (_finite(ltp) and _finite(opn) and (ltp > 0) and (opn > 0)):
+            return dict(out, result='INVALID', reason='futures LTP or day open not a positive number')
+        if ltt is None:
+            return dict(out, result='MISSING', reason='futures last-trade time missing')
+        if not _finite(ltt):
+            return dict(out, result='INVALID', reason='futures last-trade time not a number')
+        age = (now_ms - ltt) / 1000
+        out['ageS'] = round(age, 3)
+        if age < -cfg.filter_clock_tolerance_s:
+            return dict(out, result='INVALID', reason='futures last-trade time %.3f s after the crossing' % -age)
+        if age > cfg.filter_max_futures_age_s:
+            return dict(out, result='STALE', reason='futures last trade %.3f s old > %s s' % (age, cfg.filter_max_futures_age_s))
+        diff = round((ltp - opn) * sgn, 2)
+        out['diffInTradeDirection'] = diff
+        if diff > 0:
+            return dict(out, result='PASS', reason='')
+        return dict(out, result='FAIL', reason='futures %s day open (%+.2f in trade direction)' % ('at' if diff == 0 else 'against', diff))
+
+    def _touches(self, arm) -> dict:
+        lvl, lim = (arm.level, self.cfg.filter_min_touches)
+        out = {'touches': None, 'rejectAt': lim, 'touchSource': None}
+        if lvl is None:
+            return dict(out, result='MISSING', reason='selected level for this trigger not identified')
+        out.update(touches=lvl.get('touches'), touchSource=lvl.get('touchSource'), levelPrice=lvl.get('levelPrice'))
+        t = lvl.get('touches')
+        if t is None:
+            return dict(out, result='MISSING', reason='touch count missing')
+        if not (isinstance(t, int) and (not isinstance(t, bool)) and (t >= 0)):
+            return dict(out, result='INVALID', reason='touch count not a non-negative integer')
+        if t >= lim:
+            return dict(out, result='FAIL', reason='level touched %d time(s), limit < %d' % (t, lim))
+        return dict(out, result='PASS', reason='')
+
+    def _range(self, c) -> dict:
+        hi, lo, lim = (c.get('sessionHigh'), c.get('sessionLow'), self.cfg.filter_min_range_pts)
+        out = {'sessionHigh': hi, 'sessionLow': lo, 'rangePts': None, 'minRangePts': lim}
+        if c.get('sessionBarsValid') is False:
+            return dict(out, result='INVALID', reason='1-min index bars with missing or inverted high/low')
+        if hi is None or lo is None:
+            return dict(out, result='MISSING', reason='no 1-min index bars')
+        rng = round(hi - lo, 2)
+        out['rangePts'] = rng
+        if rng >= lim:
+            return dict(out, result='PASS', reason='')
+        return dict(out, result='FAIL', reason='session range %.2f < %s' % (rng, lim))
 
     def _roll_minute(self, now_ms, index_ltp):
         m = now_ms // 60000
@@ -2045,20 +2118,26 @@ class PaperTracker:
             beyond = close > arm.trigger if arm.side == 'CE' else close < arm.trigger
             if beyond and (not in_window):
                 del self.pending[key]
+                lim = self.cfg.confirm_max_overshoot_pts
+                if lim is not None:
+                    over = None if index_ltp is None else (index_ltp - arm.trigger) * (1 if arm.side == 'CE' else -1)
+                    if over is None or over >= lim:
+                        self.log('info', 'paper_skip', variant=self.cfg.variant, side=arm.side, trigger=arm.trigger, overshootPts=None if over is None else round(over, 2), maxOvershootPts=lim, reason='index LTP missing at the entry poll' if over is None else 'index %.2f pts beyond the trigger at the entry poll (limit < %s)' % (over, lim))
+                        continue
                 for strike in arm.strikes:
                     self._enter(arm, strike, now_ms, index_ltp, quotes, confirm_close=close)
             elif minute - since + 1 >= self.cfg.confirm_within_min or in_window:
                 del self.pending[key]
                 self.log('info', 'paper_skip', variant=self.cfg.variant, side=arm.side, trigger=arm.trigger, reason='no 1-min close beyond the trigger within %d minute(s)' % self.cfg.confirm_within_min if not in_window else 'no-trade window began before confirmation')
 
-    def _enter(self, arm, strike, now_ms, index_ltp, quotes, confirm_close=None, filter_facts=None):
+    def _enter(self, arm, strike, now_ms, index_ltp, quotes, confirm_close=None, event_id=None):
         sid = arm.sids.get(strike) or self.legs.get((strike, arm.side))
         q = quotes.get(sid) if sid else None
         base = {'variant': self.cfg.variant, 'side': arm.side, 'strike': strike, 'trigger': arm.trigger, 'indexAtCross': index_ltp}
         if confirm_close is not None:
             base['confirmClose'] = confirm_close
-        if filter_facts is not None:
-            base['filterFacts'] = filter_facts
+        if event_id is not None:
+            base['eventId'] = event_id
         if q is None or not q[1] or q[1] <= 0:
             self.log('info', 'paper_skip', reason='no ask quote for the leg at the crossing', **base)
             return
@@ -2144,7 +2223,7 @@ class FastPoller:
                 for side, leg in (('CE', s['ce']), ('PE', s['pe'])):
                     if leg and leg['securityId']:
                         legs[s['strike'], side] = leg['securityId']
-        ctx = scan_context(detail)
+        ctx = scan_context(detail, selected_levels(rec.get('scanInputs') or {}))
         for t in self.trackers:
             t.arm(rows, legs, rec.get('status') == 'OK', ctx)
 
@@ -2517,7 +2596,7 @@ PAPER_TAKE_PROFIT_PTS = 6         # your rule (9 Oct 2026), option premium point
 PAPER_STOP_LOSS_PTS = 11          # your rule (9 Oct 2026), option premium points
 PAPER_TIME_STOP_MIN = 10          # RULES.md §6 time stop
 POLL_S = 5                        # seconds between fast read-only price polls (min 2)
-PAPER_VARIANTS = ["FIRST_TOUCH", "CONFIRMED_CLOSE", "FILTERED"]  # add "CONFIRMED_CLOSE" (1-min close beyond the trigger) and/or "FILTERED" (4 filters, 16 Oct)
+PAPER_VARIANTS = ["FIRST_TOUCH", "CONFIRMED_CLOSE", "FILTERED"]  # also: "CONFIRMED_CLOSE" (1-min close beyond), "FILTERED" (filter experiment)
 LOT_SIZE = None                   # e.g. the SENSEX lot size, to report rupees (verify; never guessed)
 COST_PER_TRADE_RS = None          # brokerage + taxes per round trip, if you want net rupees
 
@@ -2536,7 +2615,7 @@ import urllib.request
 import time as _bx_main__time
 from datetime import date, datetime, time as dtime, timezone
 PROGRAM = 'sensex-readonly-observer'
-VERSION = '7.1'
+VERSION = '7.2'
 EXIT_OK, EXIT_CONFIG, EXIT_AUTH, EXIT_SELFTEST = (0, 2, 3, 4)
 
 def _stdout_logger(redactor):
@@ -2595,7 +2674,20 @@ def _paper_selftest() -> bool:
     t.on_tick(base + 15000, 989.0, {'1': (40.0, 41.0), '2': (70.0, 71.0)})
     t.on_tick(base + 20000, 999.0, {'1': (50.0, 51.0), '2': (59.0, 60.0)})
     out = [r['outcome'] for r in t.closed]
-    return out == ['TAKE_PROFIT', 'STOP_LOSS'] and t.closed[0]['pnlPts'] == 6.0 and (t.closed[1]['pnlPts'] == -12.0)
+    ok = out == ['TAKE_PROFIT', 'STOP_LOSS'] and t.closed[0]['pnlPts'] == 6.0 and (t.closed[1]['pnlPts'] == -12.0)
+    return ok and _filtered_selftest(base)
+
+def _filtered_selftest(base) -> bool:
+    events = []
+    scan = {'status': 'OK', 'forward': 1000.0, 'T': 0.01, 'df': 0.999, 'candleRefPrice': 1000.0, 'resistances': [{'price': 1003.0, 'touches': 1, 'sources': ['session_high']}, {'price': 1012.0, 'touches': 2, 'sources': ['swing_high']}], 'supports': [], 'atr': 10.0, 'barMinutes': 5, 'snapshotMs': base, 'candlesMs': base - 60000, 'legs': [{'strike': 1000.0, 'isCall': True, 'ivPct': 15.0, 'bid': 20.0, 'ask': 21.0, 'ltp': 20.5}]}
+    rows, _ = run_refresh(scan, datetime.fromtimestamp(base / 1000, timezone.utc))
+    detail = {'futures': {'ltp': 1010.0, 'ohlc': {'open': 990.0}, 'lastTradeTimeMs': base, 'provenance': {'epochMs': base}}, 'idx1m': [{'timestampMs': base - 2700000, 'open': 950.0, 'high': 1300.0, 'low': 900.0, 'close': 990.0}]}
+    t = PaperTracker(PaperConfig(variant='FILTERED'), lambda *a, **k: events.append((a, k)), in_no_trade_window)
+    t.arm(rows, {(1000.0, 'CE'): '1'}, True, scan_context(detail, selected_levels(scan)))
+    t.on_tick(base, 1000.0, {'1': (20.0, 21.0)})
+    t.on_tick(base + 5000, 1016.0, {'1': (20.0, 21.0)})
+    checks = [k for a, k in events if a[1] == 'filter_check']
+    return len(checks) == 1 and checks[0]['filters']['levelTouches']['touches'] == 2 and (checks[0]['filters']['levelTouches']['result'] == 'PASS') and (checks[0]['decision'] == 'ENTER')
 
 def _filled(value: str) -> bool:
     return bool(value) and (not (value.startswith('{' + '{') and value.endswith('}' + '}')))

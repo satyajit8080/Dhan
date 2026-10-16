@@ -105,6 +105,13 @@ def build_scan(*, raw_chain, raw_futures, candles, expiry, strikes,
     }
 
 
+# The values build_refresh_table is called with (equal to its own defaults; a test pins that). They are
+# passed explicitly so selected_levels() repeats exactly the same level choice and trigger rounding.
+REFRESH_BUFFER = 5.0
+REFRESH_ROUND_STEP = 5.0
+REFRESH_MIN_TOUCHES = 2
+
+
 def run_refresh(scan: dict, now):
     """Feed a scan into the existing refresh_table. Blank table when the scan
     is not OK, exactly as RULES.md §5 requires."""
@@ -122,8 +129,30 @@ def run_refresh(scan: dict, now):
         bar_minutes=int(scan["barMinutes"]) if scan["barMinutes"] else 5,
         legs=[rt.Leg(l["strike"], l["isCall"], l["ivPct"], l["bid"], l["ask"], l["ltp"]) for l in scan["legs"]],
         snapshot_ms=scan["snapshotMs"], candles_ms=scan["candlesMs"], now=now,
+        buffer=REFRESH_BUFFER, round_step=REFRESH_ROUND_STEP, min_touches=REFRESH_MIN_TOUCHES,
     )
     return rows, rt.to_compact(rows)
+
+
+def selected_levels(scan: dict) -> dict:
+    """The level the refresh table selects for each side of this scan and the trigger it produces from it.
+
+    Same function (refresh_table.pick_level), same inputs (the scan's resistances/supports and candle
+    reference price), same buffer and rounding (refresh_table._round_to) as run_refresh, so the trigger
+    here equals the rows' trigger for that side. Returns {} when run_refresh would produce no rows."""
+    if scan.get("status") != "OK" or scan.get("candlesMs") is None:
+        return {}
+    import bx_refresh_table as rt
+    out = {}
+    for side, key, above in (("CE", "resistances", True), ("PE", "supports", False)):
+        levels = [rt.Level(lv["price"], lv["touches"], lv["sources"]) for lv in scan.get(key) or []]
+        lvl, weak = rt.pick_level(levels, scan["candleRefPrice"], above, REFRESH_MIN_TOUCHES)
+        if lvl is None:
+            continue
+        trig = rt._round_to(lvl.price + (REFRESH_BUFFER if above else -REFRESH_BUFFER), REFRESH_ROUND_STEP)
+        out[side] = {"trigger": int(trig), "levelPrice": lvl.price, "touches": lvl.touches,
+                     "sources": list(lvl.sources), "weak": weak, "touchSource": "refresh_table.pick_level"}
+    return out
 
 
 def in_no_trade_window(now) -> bool:
