@@ -445,9 +445,15 @@ class Filtered(unittest.TestCase):
     def test_spot_vs_0915_open_is_diagnostic_only(self):
         _, _, (c,) = run_filtered(ctx_of())                  # 09:15 bar open 950 < index 1001
         self.assertEqual(c["diagnostics"]["spotVsOpen0915"]["result"], "PASS")
-        late = [{"timestampMs": T0915 + 60_000, "open": 1050.0, "high": 1300.0, "low": 900.0, "close": 1.0}]
-        _, _, (c,) = run_filtered(ctx_of(bars=late))         # first bar is not 09:15: open unknown
-        self.assertEqual(c["diagnostics"]["spotVsOpen0915"]["result"], "MISSING")
+        self.assertEqual(c["diagnostics"]["spotVsOpen0915"]["openBarIst"], "09:15")
+        dhan = [{"timestampMs": T0915 + 60_000, "open": 950.0, "high": 1300.0, "low": 900.0, "close": 1.0}]
+        _, _, (c,) = run_filtered(ctx_of(bars=dhan))         # Dhan's real first bar is stamped 09:16
+        self.assertEqual((c["diagnostics"]["spotVsOpen0915"]["result"],
+                          c["diagnostics"]["spotVsOpen0915"]["openBarIst"]), ("PASS", "09:16"))
+        late = [{"timestampMs": T0915 + 120_000, "open": 1050.0, "high": 1300.0, "low": 900.0, "close": 1.0}]
+        _, _, (c,) = run_filtered(ctx_of(bars=late))         # series starts 09:17: the open is unknown
+        self.assertEqual((c["diagnostics"]["spotVsOpen0915"]["result"],
+                          c["diagnostics"]["spotVsOpen0915"]["openBarIst"]), ("MISSING", None))
         above = [{"timestampMs": T0915, "open": 1050.0, "high": 1300.0, "low": 900.0, "close": 1.0}]
         _, _, (c,) = run_filtered(ctx_of(bars=above))        # spot below its open, futures above theirs
         self.assertEqual((c["diagnostics"]["spotVsOpen0915"]["result"], c["decision"]), ("FAIL", "ENTER"))

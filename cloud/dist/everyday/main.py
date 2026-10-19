@@ -1921,6 +1921,7 @@ class PaperConfig:
 VARIANT_PREFIX = {'FIRST_TOUCH': 'P', 'CONFIRMED_CLOSE': 'C', 'FILTERED': 'F'}
 _IST_S = 19800
 _OPEN_0915_S = 9 * 3600 + 15 * 60
+_FIRST_BAR_S = (_OPEN_0915_S, _OPEN_0915_S + 60)
 
 def _finite(v) -> bool:
     return isinstance(v, (int, float)) and (not isinstance(v, bool)) and math.isfinite(v)
@@ -1930,8 +1931,10 @@ def scan_context(detail: dict, selected: dict | None=None) -> dict:
     bars = (detail or {}).get('idx1m') or []
     ok = bool(bars) and all((_finite(b.get('high')) and _finite(b.get('low')) and (b['high'] >= b['low']) for b in bars))
     first = bars[0] if bars else None
-    index_open = first['open'] if first and _finite(first.get('timestampMs')) and _finite(first.get('open')) and ((first['timestampMs'] // 1000 + _IST_S) % 86400 == _OPEN_0915_S) else None
-    return {'futuresLtp': fut.get('ltp'), 'futuresOpen': (fut.get('ohlc') or {}).get('open'), 'futuresLastTradeMs': fut.get('lastTradeTimeMs'), 'futuresFetchedMs': (fut.get('provenance') or {}).get('epochMs'), 'sessionHigh': max((b['high'] for b in bars)) if ok else None, 'sessionLow': min((b['low'] for b in bars)) if ok else None, 'sessionBarsValid': ok if bars else None, 'indexOpen0915': index_open, 'selected': dict(selected or {})}
+    tod = (first['timestampMs'] // 1000 + _IST_S) % 86400 if first and _finite(first.get('timestampMs')) else None
+    index_open = first['open'] if tod in _FIRST_BAR_S and _finite(first.get('open')) else None
+    open_bar = None if index_open is None else '%02d:%02d' % (tod // 3600, tod % 3600 // 60)
+    return {'futuresLtp': fut.get('ltp'), 'futuresOpen': (fut.get('ohlc') or {}).get('open'), 'futuresLastTradeMs': fut.get('lastTradeTimeMs'), 'futuresFetchedMs': (fut.get('provenance') or {}).get('epochMs'), 'sessionHigh': max((b['high'] for b in bars)) if ok else None, 'sessionLow': min((b['low'] for b in bars)) if ok else None, 'sessionBarsValid': ok if bars else None, 'indexOpen0915': index_open, 'indexOpenBarIst': open_bar, 'selected': dict(selected or {})}
 
 @dataclass
 class _Arm:
@@ -2042,7 +2045,7 @@ class PaperTracker:
         if not reasons and (not enter):
             reasons.append('every strike more than %s pts in the money' % cfg.filter_max_itm_pts)
         io = c.get('indexOpen0915')
-        diagnostics = {'overshootPts': round((index_ltp - arm.trigger) * sgn, 2), 'spotVsOpen0915': {'note': 'diagnostic only, not used in the decision', 'indexOpen0915': io, 'indexLtp': index_ltp, 'result': 'MISSING' if not _finite(io) else 'PASS' if (index_ltp - io) * sgn > 0 else 'FAIL'}}
+        diagnostics = {'overshootPts': round((index_ltp - arm.trigger) * sgn, 2), 'spotVsOpen0915': {'note': 'diagnostic only, not used in the decision', 'indexOpen0915': io, 'openBarIst': c.get('indexOpenBarIst'), 'indexLtp': index_ltp, 'result': 'MISSING' if not _finite(io) else 'PASS' if (index_ltp - io) * sgn > 0 else 'FAIL'}}
         self.log('info', 'filter_check', eventId='%s-E%03d' % (self.prefix, self.checks), variant=cfg.variant, crossingMs=now_ms, side=arm.side, trigger=arm.trigger, indexLtp=index_ltp, selectedLevel=arm.level, filters=filters, strikes=strikes, diagnostics=diagnostics, decision='ENTER' if enter else 'REJECT', enterStrikes=enter, reasons=reasons, strikeReference='SENSEX index LTP at the crossing poll (IDX_I:51)')
         for strike in enter:
             self._enter(arm, strike, now_ms, index_ltp, quotes, event_id='%s-E%03d' % (self.prefix, self.checks))
@@ -2615,7 +2618,7 @@ import urllib.request
 import time as _bx_main__time
 from datetime import date, datetime, time as dtime, timezone
 PROGRAM = 'sensex-readonly-observer'
-VERSION = '7.2'
+VERSION = '7.3'
 EXIT_OK, EXIT_CONFIG, EXIT_AUTH, EXIT_SELFTEST = (0, 2, 3, 4)
 
 def _stdout_logger(redactor):

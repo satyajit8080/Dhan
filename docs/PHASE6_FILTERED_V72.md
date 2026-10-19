@@ -27,3 +27,9 @@ end-to-end scenario: identical paper events and identical HTTP calls).
 Each filter can be evaluated alone from `filter_check` events and the matching FIRST_TOUCH trades (same crossing,
 same fills). Fix the thresholds before the test; count crossing events, not trades. Four in-sample sessions are not
 evidence of an edge.
+
+## v7.3 (19 Oct): 09:15-open diagnostic fixed
+Dhan's 1-min SENSEX series starts with a bar stamped **09:16** (bar-start stamps; verified on 13, 16 and 19 Oct
+records). v7.2 looked for a 09:15 bar, so `diagnostics.spotVsOpen0915` was always MISSING. v7.3 uses the day's first
+bar when it is stamped 09:15 or 09:16 and logs it as `openBarIst`. Diagnostic only: no decision changed. The
+session range is likewise computed from 09:16 onward (Dhan supplies no 09:15 1-min bar).

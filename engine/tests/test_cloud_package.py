@@ -449,7 +449,7 @@ class EndToEnd(unittest.TestCase):
             self.assertIn("### PAPER trades [%s]" % v, report)
         self.assertIn("### FILTERED diagnostics", report)
         self.assertIn("| dayTrend | 0 | 0 | 0 | 0 | 1 |", report)
-        self.assertEqual([e for e in ev if e["event"] == "runtime"][0]["version"], "7.2")
+        self.assertEqual([e for e in ev if e["event"] == "runtime"][0]["version"], "7.3")
         self.assertNotIn(self.token, text)
 
     def test_everyday_file_self_test_checks_filtered_level_identity(self):

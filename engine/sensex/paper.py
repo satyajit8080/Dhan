@@ -65,6 +65,7 @@ class PaperConfig:
 VARIANT_PREFIX = {"FIRST_TOUCH": "P", "CONFIRMED_CLOSE": "C", "FILTERED": "F"}
 _IST_S = 19800
 _OPEN_0915_S = 9 * 3600 + 15 * 60
+_FIRST_BAR_S = (_OPEN_0915_S, _OPEN_0915_S + 60)   # Dhan's 1-min index series starts with a bar stamped 09:16 (seen 13-19 Oct)
 
 
 def _finite(v) -> bool:
@@ -77,15 +78,16 @@ def scan_context(detail: dict, selected: dict | None = None) -> dict:
     bars = (detail or {}).get("idx1m") or []
     ok = bool(bars) and all(_finite(b.get("high")) and _finite(b.get("low")) and b["high"] >= b["low"] for b in bars)
     first = bars[0] if bars else None
-    index_open = first["open"] if first and _finite(first.get("timestampMs")) and _finite(first.get("open")) \
-        and (first["timestampMs"] // 1000 + _IST_S) % 86400 == _OPEN_0915_S else None
+    tod = (first["timestampMs"] // 1000 + _IST_S) % 86400 if first and _finite(first.get("timestampMs")) else None
+    index_open = first["open"] if tod in _FIRST_BAR_S and _finite(first.get("open")) else None
+    open_bar = None if index_open is None else "%02d:%02d" % (tod // 3600, tod % 3600 // 60)
     return {"futuresLtp": fut.get("ltp"), "futuresOpen": (fut.get("ohlc") or {}).get("open"),
             "futuresLastTradeMs": fut.get("lastTradeTimeMs"),
             "futuresFetchedMs": (fut.get("provenance") or {}).get("epochMs"),
             "sessionHigh": max(b["high"] for b in bars) if ok else None,
             "sessionLow": min(b["low"] for b in bars) if ok else None,
             "sessionBarsValid": ok if bars else None,
-            "indexOpen0915": index_open,
+            "indexOpen0915": index_open, "indexOpenBarIst": open_bar,
             "selected": dict(selected or {})}
 
 
@@ -209,6 +211,7 @@ class PaperTracker:
         diagnostics = {
             "overshootPts": round((index_ltp - arm.trigger) * sgn, 2),
             "spotVsOpen0915": {"note": "diagnostic only, not used in the decision", "indexOpen0915": io,
+                               "openBarIst": c.get("indexOpenBarIst"),
                                "indexLtp": index_ltp,
                                "result": "MISSING" if not _finite(io) else
                                ("PASS" if (index_ltp - io) * sgn > 0 else "FAIL")}}
