@@ -48,3 +48,10 @@ session range is likewise computed from 09:16 onward (Dhan supplies no 09:15 1-m
   trigger. +6 / −11 / 10-min time stop unchanged. Source: offline what-if `docs/sessions/2026-10-23_WHATIF_EXIT_STRIKE.md`.
 - Everyday file runs FIRST_TOUCH, CONFIRMED_CLOSE, FILTERED, FRESH_LEVEL, FRESH_EXIT; existing ones unchanged.
   Compare FRESH_LEVEL vs FRESH_EXIT live for 10+ days. Paper only; RULES.md unchanged.
+
+## v7.6 — FRESH_SL8 variant and post-exit recording (user, 23 Oct 2026)
+- `FRESH_SL8` (ids `S…`, events `S-E###`): FRESH_LEVEL entries, stop −8 instead of −11; target +6 and time stop
+  unchanged; break-even 57.1 %. Source: offline stop test 12–23 Oct (+6/−8 +408.5 vs +6/−11 +361.5 on 150 fresh trades).
+- FRESH_LEVEL now records each exited trade's option bid for 10 more minutes (`paper_after_exit`, recording only;
+  results unchanged) so larger targets (+8, +10) can be evaluated later.
+- Everyday file runs FIRST_TOUCH, CONFIRMED_CLOSE, FILTERED, FRESH_LEVEL, FRESH_EXIT, FRESH_SL8. Paper only; RULES.md unchanged.

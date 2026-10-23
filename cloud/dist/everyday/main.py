@@ -1899,7 +1899,7 @@ def build_observation(*, rec: dict, detail: dict, endpoints: list, rows, contrac
 # module: engine/sensex/paper.py
 # ----------------------------------------------------------------------
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 
 @dataclass
@@ -1918,7 +1918,10 @@ class PaperConfig:
     filter_max_itm_pts: float = 150.0
     filter_max_futures_age_s: float = 120.0
     filter_clock_tolerance_s: float = 5.0
-VARIANT_PREFIX = {'FIRST_TOUCH': 'P', 'CONFIRMED_CLOSE': 'C', 'FILTERED': 'F', 'FRESH_LEVEL': 'L', 'FRESH_EXIT': 'X'}
+    post_exit_track_s: float = 0.0
+VARIANT_PREFIX = {'FIRST_TOUCH': 'P', 'CONFIRMED_CLOSE': 'C', 'FILTERED': 'F', 'FRESH_LEVEL': 'L', 'FRESH_EXIT': 'X', 'FRESH_SL8': 'S'}
+FRESH_VARIANTS = ('FRESH_LEVEL', 'FRESH_EXIT', 'FRESH_SL8')
+FRESH_SL8_STOP_PTS = 8.0
 _IST_S = 19800
 _OPEN_0915_S = 9 * 3600 + 15 * 60
 _FIRST_BAR_S = (_OPEN_0915_S, _OPEN_0915_S + 60)
@@ -1966,7 +1969,10 @@ class _Trade:
 class PaperTracker:
 
     def __init__(self, cfg: PaperConfig, log, in_skip_window):
+        if cfg.variant == 'FRESH_SL8':
+            cfg = replace(cfg, stop_loss_pts=FRESH_SL8_STOP_PTS)
         self.cfg, self.log, self.in_skip_window = (cfg, log, in_skip_window)
+        self.after: list = []
         self.arms: dict = {}
         self.fired: set = set()
         self.open: list = []
@@ -2003,12 +2009,14 @@ class PaperTracker:
     def watch_ids(self) -> list:
         ids = {self.legs[k] for k in self.legs if self.legs[k]}
         ids |= {t.security_id for t in self.open}
+        ids |= {a['sid'] for a in self.after}
         ids |= {sid for arm, _ in self.pending.values() for sid in arm.sids.values() if sid}
         return sorted(ids)
 
     def on_tick(self, now_ms: int, index_ltp, quotes: dict):
         for t in list(self.open):
             self._update(t, now_ms, quotes.get(t.security_id))
+        self._track_after(now_ms, quotes)
         closed = self._roll_minute(now_ms, index_ltp)
         if closed is not None and self.cfg.variant == 'FRESH_EXIT':
             self._exit_on_close_back(closed, now_ms, quotes)
@@ -2028,7 +2036,7 @@ class PaperTracker:
             if self.cfg.variant == 'CONFIRMED_CLOSE':
                 self.pending[key] = (arm, now_ms // 60000)
                 continue
-            if self.cfg.variant in ('FILTERED', 'FRESH_LEVEL', 'FRESH_EXIT'):
+            if self.cfg.variant == 'FILTERED' or self.cfg.variant in FRESH_VARIANTS:
                 self._enter_filtered(arm, now_ms, index_ltp, quotes)
                 continue
             for strike in arm.strikes:
@@ -2036,7 +2044,7 @@ class PaperTracker:
 
     def _enter_filtered(self, arm, now_ms, index_ltp, quotes):
         cfg, c, sgn = (self.cfg, self.ctx, 1 if arm.side == 'CE' else -1)
-        fresh = cfg.variant in ('FRESH_LEVEL', 'FRESH_EXIT')
+        fresh = cfg.variant in FRESH_VARIANTS
         self.checks += 1
         filters = {'levelTouches': self._touches(arm)} if fresh else {'dayTrend': self._trend(c, sgn, now_ms), 'levelTouches': self._touches(arm), 'sessionRange': self._range(c)}
         strikes = []
@@ -2194,10 +2202,24 @@ class PaperTracker:
                 rec['pnlRsNet'] = round(pnl * self.cfg.lot_size - self.cfg.cost_per_trade_rs, 2)
         self.closed.append(rec)
         self.log('info', 'paper_exit', note='PAPER (no order)', **rec)
+        if self.cfg.post_exit_track_s > 0 and t.security_id:
+            self.after.append({'tid': t.tid, 'sid': t.security_id, 'entry_ms': t.entry_ms, 'exit_ms': now_ms, 'entry_ask': t.entry_ask, 'outcome': outcome, 'path': []})
+
+    def _track_after(self, now_ms, quotes, flush_reason=None):
+        for a in list(self.after):
+            q = quotes.get(a['sid'])
+            if flush_reason is None and q and q[0] and (q[0] > 0) and (now_ms > a['exit_ms']):
+                a['path'].append([round((now_ms - a['entry_ms']) / 1000, 1), q[0]])
+            done = (now_ms - a['exit_ms']) / 1000 >= self.cfg.post_exit_track_s
+            if done or flush_reason:
+                self.after.remove(a)
+                pnl = [round(b - a['entry_ask'], 2) for _, b in a['path']]
+                self.log('info', 'paper_after_exit', note='PAPER (no order); recording only', paperId=a['tid'], variant=self.cfg.variant, outcome=a['outcome'], entryAsk=a['entry_ask'], trackS=self.cfg.post_exit_track_s, endReason=flush_reason or 'TRACK_TIME_DONE', bestPnlAfterPts=max(pnl) if pnl else None, worstPnlAfterPts=min(pnl) if pnl else None, path=a['path'])
 
     def close_all(self, now_ms: int, reason: str='SESSION_END'):
         for t in list(self.open):
             self._close(t, now_ms, reason, t.last_bid)
+        self._track_after(now_ms, {}, flush_reason=reason)
 
     def summary(self) -> dict:
         out = {}
@@ -2612,7 +2634,8 @@ PAPER_TAKE_PROFIT_PTS = 6         # your rule (9 Oct 2026), option premium point
 PAPER_STOP_LOSS_PTS = 11          # your rule (9 Oct 2026), option premium points
 PAPER_TIME_STOP_MIN = 10          # RULES.md §6 time stop
 POLL_S = 5                        # seconds between fast read-only price polls (min 2)
-PAPER_VARIANTS = ["FIRST_TOUCH", "CONFIRMED_CLOSE", "FILTERED", "FRESH_LEVEL", "FRESH_EXIT"]  # also: "CONFIRMED_CLOSE" (1-min close beyond), "FILTERED" (filter experiment), "FRESH_LEVEL" (touches < 3 only), "FRESH_EXIT" (FRESH_LEVEL + exit on a 1-min close back)
+PAPER_VARIANTS = ["FIRST_TOUCH", "CONFIRMED_CLOSE", "FILTERED", "FRESH_LEVEL", "FRESH_EXIT", "FRESH_SL8"]  # also: "CONFIRMED_CLOSE" (1-min close beyond), "FILTERED" (filter experiment), "FRESH_LEVEL" (touches < 3 only), "FRESH_EXIT" (FRESH_LEVEL + exit on a 1-min close back), "FRESH_SL8" (FRESH_LEVEL, stop -8)
+PAPER_AFTER_EXIT_S = 600         # FRESH_LEVEL: keep recording the option bid 10 min after each exit (recording only)
 LOT_SIZE = None                   # e.g. the SENSEX lot size, to report rupees (verify; never guessed)
 COST_PER_TRADE_RS = None          # brokerage + taxes per round trip, if you want net rupees
 
@@ -2631,7 +2654,7 @@ import urllib.request
 import time as _bx_main__time
 from datetime import date, datetime, time as dtime, timezone
 PROGRAM = 'sensex-readonly-observer'
-VERSION = '7.5'
+VERSION = '7.6'
 EXIT_OK, EXIT_CONFIG, EXIT_AUTH, EXIT_SELFTEST = (0, 2, 3, 4)
 
 def _stdout_logger(redactor):
@@ -2717,7 +2740,7 @@ def _config_errors():
         errs.append('STRIKES is empty and AUTO_STRIKES is 0')
     if not FUTURES_CONTRACTS and (not FUTURES_SECURITY_ID or not FUTURES_EXPIRY):
         errs.append('No futures contract: set FUTURES_CONTRACTS or FUTURES_SECURITY_ID / FUTURES_EXPIRY')
-    bad = [v for v in PAPER_VARIANTS if v not in ('FIRST_TOUCH', 'CONFIRMED_CLOSE', 'FILTERED', 'FRESH_LEVEL', 'FRESH_EXIT')]
+    bad = [v for v in PAPER_VARIANTS if v not in ('FIRST_TOUCH', 'CONFIRMED_CLOSE', 'FILTERED', 'FRESH_LEVEL', 'FRESH_EXIT', 'FRESH_SL8')]
     if bad:
         errs.append('Unknown PAPER_VARIANTS %s' % bad)
     if INTERVAL_S < 10:
@@ -2837,7 +2860,7 @@ def live(log, redactor, loop: bool) -> int:
     cfg = ScannerConfig(strikes=[float(s) for s in STRIKES], interval_s=float(INTERVAL_S), stop_time=dtime(hh, mm), holidays=_holidays(), futures_security_id=str(FUTURES_SECURITY_ID), futures_expiry=FUTURES_EXPIRY, instrument_contracts=contracts, auto_strikes=int(AUTO_STRIKES), max_scans=None if loop else 1, observe_leg_band=int(LEG_BAND), extra_series=bool(EXTRA_SERIES), poll_s=float(POLL_S))
     scanner = Scanner(client, cfg, log)
     if PAPER_ENABLED and loop:
-        trackers = [PaperTracker(PaperConfig(take_profit_pts=float(PAPER_TAKE_PROFIT_PTS), stop_loss_pts=float(PAPER_STOP_LOSS_PTS), time_stop_s=float(PAPER_TIME_STOP_MIN) * 60, lot_size=LOT_SIZE, cost_per_trade_rs=COST_PER_TRADE_RS, variant=v), log, in_no_trade_window) for v in PAPER_VARIANTS]
+        trackers = [PaperTracker(PaperConfig(take_profit_pts=float(PAPER_TAKE_PROFIT_PTS), stop_loss_pts=float(PAPER_STOP_LOSS_PTS), time_stop_s=float(PAPER_TIME_STOP_MIN) * 60, lot_size=LOT_SIZE, cost_per_trade_rs=COST_PER_TRADE_RS, variant=v, post_exit_track_s=PAPER_AFTER_EXIT_S if v == 'FRESH_LEVEL' else 0.0), log, in_no_trade_window) for v in PAPER_VARIANTS]
         scanner.poller = FastPoller(client, trackers, log, cfg.strikes)
 
     def line(text):

@@ -34,6 +34,11 @@ FRESH_EXIT variant (user, 23 Oct 2026, from the offline what-if of 12-23 Oct; ob
   FRESH_LEVEL entries; in addition to +6 / -11 / time stop, a trade exits (outcome INDEX_BACK, at the bid of
   that poll) when a 1-min SENSEX close is back through the trigger (CE: below it, PE: above it). The close is
   the last polled index LTP of the minute, as for CONFIRMED_CLOSE; checked from the entry minute onwards.
+FRESH_SL8 variant (user, 23 Oct 2026, from the offline stop test of 12-23 Oct; observation only, not a rule):
+  FRESH_LEVEL entries with the stop at -8 premium points instead of -11 (target and time stop unchanged).
+Post-exit tracking `post_exit_track_s` (default 0 = off): after a trade closes, its option bid keeps being
+  recorded for that many seconds and logged once as `paper_after_exit`, so larger targets can be studied later.
+  It never changes a trade or its result.
 CONFIRMED_CLOSE option `confirm_max_overshoot_pts` (default None = off, behaviour unchanged): skip the
   confirmed entry when the index at the entry poll is that many points or more beyond the trigger.
 Fill model: entry at the option's ASK at the first poll after the crossing;
@@ -46,7 +51,7 @@ Fill model: entry at the option's ASK at the first poll after the crossing;
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 
 
@@ -68,9 +73,12 @@ class PaperConfig:
     filter_max_itm_pts: float = 150.0          # reject a strike more than this far in the money
     filter_max_futures_age_s: float = 120.0    # futures last trade older than this at the crossing: STALE
     filter_clock_tolerance_s: float = 5.0      # last-trade time this far ahead of the poll clock: INVALID
+    post_exit_track_s: float = 0.0             # keep recording the bid this long after an exit (0 = off)
 
 
-VARIANT_PREFIX = {"FIRST_TOUCH": "P", "CONFIRMED_CLOSE": "C", "FILTERED": "F", "FRESH_LEVEL": "L", "FRESH_EXIT": "X"}
+VARIANT_PREFIX = {"FIRST_TOUCH": "P", "CONFIRMED_CLOSE": "C", "FILTERED": "F", "FRESH_LEVEL": "L", "FRESH_EXIT": "X", "FRESH_SL8": "S"}
+FRESH_VARIANTS = ("FRESH_LEVEL", "FRESH_EXIT", "FRESH_SL8")
+FRESH_SL8_STOP_PTS = 8.0
 _IST_S = 19800
 _OPEN_0915_S = 9 * 3600 + 15 * 60
 _FIRST_BAR_S = (_OPEN_0915_S, _OPEN_0915_S + 60)   # Dhan's 1-min index series starts with a bar stamped 09:16 (seen 13-19 Oct)
@@ -130,7 +138,10 @@ class _Trade:
 
 class PaperTracker:
     def __init__(self, cfg: PaperConfig, log, in_skip_window):
+        if cfg.variant == "FRESH_SL8":
+            cfg = replace(cfg, stop_loss_pts=FRESH_SL8_STOP_PTS)
         self.cfg, self.log, self.in_skip_window = cfg, log, in_skip_window
+        self.after: list = []            # closed trades still recorded after the exit (post_exit_track_s)
         self.arms: dict = {}             # (side, trigger) -> _Arm
         self.fired: set = set()          # (side, trigger) fired this session
         self.open: list = []
@@ -169,6 +180,7 @@ class PaperTracker:
     def watch_ids(self) -> list:
         ids = {self.legs[k] for k in self.legs if self.legs[k]}
         ids |= {t.security_id for t in self.open}
+        ids |= {a["sid"] for a in self.after}
         ids |= {sid for arm, _ in self.pending.values() for sid in arm.sids.values() if sid}
         return sorted(ids)
 
@@ -177,6 +189,7 @@ class PaperTracker:
         """quotes: security_id -> (bid, ask). Returns nothing; logs events."""
         for t in list(self.open):
             self._update(t, now_ms, quotes.get(t.security_id))
+        self._track_after(now_ms, quotes)
         closed = self._roll_minute(now_ms, index_ltp)
         if closed is not None and self.cfg.variant == "FRESH_EXIT":
             self._exit_on_close_back(closed, now_ms, quotes)
@@ -196,7 +209,7 @@ class PaperTracker:
             if self.cfg.variant == "CONFIRMED_CLOSE":
                 self.pending[key] = (arm, now_ms // 60000)
                 continue
-            if self.cfg.variant in ("FILTERED", "FRESH_LEVEL", "FRESH_EXIT"):
+            if self.cfg.variant == "FILTERED" or self.cfg.variant in FRESH_VARIANTS:
                 self._enter_filtered(arm, now_ms, index_ltp, quotes)
                 continue
             for strike in arm.strikes:
@@ -205,7 +218,7 @@ class PaperTracker:
     def _enter_filtered(self, arm, now_ms, index_ltp, quotes):
         """One filter_check per crossing; every filter is evaluated even when another already failed."""
         cfg, c, sgn = self.cfg, self.ctx, (1 if arm.side == "CE" else -1)
-        fresh = cfg.variant in ("FRESH_LEVEL", "FRESH_EXIT")   # level touches only; no trend, range or ITM filter
+        fresh = cfg.variant in FRESH_VARIANTS        # level touches only; no trend, range or ITM filter
         self.checks += 1
         filters = {"levelTouches": self._touches(arm)} if fresh else \
             {"dayTrend": self._trend(c, sgn, now_ms), "levelTouches": self._touches(arm), "sessionRange": self._range(c)}
@@ -393,10 +406,30 @@ class PaperTracker:
                 rec["pnlRsNet"] = round(pnl * self.cfg.lot_size - self.cfg.cost_per_trade_rs, 2)
         self.closed.append(rec)
         self.log("info", "paper_exit", note="PAPER (no order)", **rec)
+        if self.cfg.post_exit_track_s > 0 and t.security_id:
+            self.after.append({"tid": t.tid, "sid": t.security_id, "entry_ms": t.entry_ms, "exit_ms": now_ms,
+                               "entry_ask": t.entry_ask, "outcome": outcome, "path": []})
+
+    def _track_after(self, now_ms, quotes, flush_reason=None):
+        """Post-exit recording only: bids after the exit, logged once per trade; results are never changed."""
+        for a in list(self.after):
+            q = quotes.get(a["sid"])
+            if flush_reason is None and q and q[0] and q[0] > 0 and now_ms > a["exit_ms"]:
+                a["path"].append([round((now_ms - a["entry_ms"]) / 1000, 1), q[0]])
+            done = (now_ms - a["exit_ms"]) / 1000 >= self.cfg.post_exit_track_s
+            if done or flush_reason:
+                self.after.remove(a)
+                pnl = [round(b - a["entry_ask"], 2) for _, b in a["path"]]
+                self.log("info", "paper_after_exit", note="PAPER (no order); recording only", paperId=a["tid"],
+                         variant=self.cfg.variant, outcome=a["outcome"], entryAsk=a["entry_ask"],
+                         trackS=self.cfg.post_exit_track_s, endReason=flush_reason or "TRACK_TIME_DONE",
+                         bestPnlAfterPts=max(pnl) if pnl else None, worstPnlAfterPts=min(pnl) if pnl else None,
+                         path=a["path"])
 
     def close_all(self, now_ms: int, reason: str = "SESSION_END"):
         for t in list(self.open):
             self._close(t, now_ms, reason, t.last_bid)
+        self._track_after(now_ms, {}, flush_reason=reason)
 
     def summary(self) -> dict:
         out = {}

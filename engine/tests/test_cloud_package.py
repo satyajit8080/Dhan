@@ -399,7 +399,7 @@ class EndToEnd(unittest.TestCase):
     def test_everyday_file_waits_for_open_checks_plan_and_runs_both_variants(self):
         m = load_everyday()
         self.assertEqual((m.MODE, m.AUTO_STRIKES, m.PAPER_VARIANTS, m.DAILY_PROFILE_CHECK),
-                         ("OBSERVE", 2, ["FIRST_TOUCH", "CONFIRMED_CLOSE", "FILTERED", "FRESH_LEVEL", "FRESH_EXIT"], True))
+                         ("OBSERVE", 2, ["FIRST_TOUCH", "CONFIRMED_CLOSE", "FILTERED", "FRESH_LEVEL", "FRESH_EXIT", "FRESH_SL8"], True))
         self.assertEqual(m.FUTURES_CONTRACTS[0], ("864571", "2026-10-29"))
 
         def poll(n, req):
@@ -430,12 +430,12 @@ class EndToEnd(unittest.TestCase):
         self.assertEqual((meta["strikes"], meta["futuresSecurityId"], meta["futuresExpiry"]),
                          (scans[0]["strikesUsed"], "844615", "2026-09-24"))
         variants = {e["variant"] for e in ev if e["event"] == "paper_summary"}
-        self.assertEqual(variants, {"FIRST_TOUCH", "CONFIRMED_CLOSE", "FILTERED", "FRESH_LEVEL", "FRESH_EXIT"})
+        self.assertEqual(variants, {"FIRST_TOUCH", "CONFIRMED_CLOSE", "FILTERED", "FRESH_LEVEL", "FRESH_EXIT", "FRESH_SL8"})
         entries = [e for e in ev if e["event"] == "paper_entry"]
         self.assertTrue({"FIRST_TOUCH", "CONFIRMED_CLOSE"} <= {e["variant"] for e in entries})
         checks = [e for e in ev if e["event"] == "filter_check"]
-        self.assertEqual([e["variant"] for e in checks], ["FILTERED", "FRESH_LEVEL", "FRESH_EXIT"])   # one per variant per crossing
-        c, fresh, fresh_exit = checks
+        self.assertEqual([e["variant"] for e in checks], ["FILTERED", "FRESH_LEVEL", "FRESH_EXIT", "FRESH_SL8"])   # one per variant per crossing
+        c, fresh, fresh_exit, fresh_sl8 = checks
         self.assertEqual((fresh_exit["eventId"], fresh_exit["decision"]), ("X-E001", fresh["decision"]))
         self.assertEqual((c["variant"], c["eventId"], c["side"]), ("FILTERED", "F-E001", "CE"))
         # the bundle's own refresh table selected the level behind this exact trigger
@@ -453,11 +453,11 @@ class EndToEnd(unittest.TestCase):
         self.assertEqual(bool([e for e in entries if e["variant"] == "FRESH_LEVEL"]), fresh_in)
         report = summarize_observation.summarize(ev, None)
         self.assertIn("### FRESH_LEVEL diagnostics", report)
-        for v in ("FIRST_TOUCH", "CONFIRMED_CLOSE", "FILTERED", "FRESH_LEVEL", "FRESH_EXIT"):
+        for v in ("FIRST_TOUCH", "CONFIRMED_CLOSE", "FILTERED", "FRESH_LEVEL", "FRESH_EXIT", "FRESH_SL8"):
             self.assertIn("### PAPER trades [%s]" % v, report)
         self.assertIn("### FILTERED diagnostics", report)
         self.assertIn("| dayTrend | 0 | 0 | 0 | 0 | 1 |", report)
-        self.assertEqual([e for e in ev if e["event"] == "runtime"][0]["version"], "7.5")
+        self.assertEqual([e for e in ev if e["event"] == "runtime"][0]["version"], "7.6")
         self.assertNotIn(self.token, text)
 
     def test_everyday_file_self_test_checks_filtered_level_identity(self):

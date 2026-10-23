@@ -550,6 +550,50 @@ class FreshExit(unittest.TestCase):
         self.assertEqual(len(t.open), 2)
 
 
+class FreshSl8AndAfterExit(unittest.TestCase):
+    def test_fresh_sl8_stops_at_minus_8_and_reports_its_break_even(self):
+        t, log, (c,) = run_filtered(ctx_of(), variant="FRESH_SL8")
+        self.assertEqual((c["eventId"], list(c["filters"])), ("S-E001", ["levelTouches"]))
+        entries = [f for e, f in log.events if e == "paper_entry"]
+        self.assertEqual([f["stopLossAt"] for f in entries], [103.0, 13.0])          # asks 111 / 21, stop -8
+        t.on_tick(CROSS + 5000, 1001.0, dict(FQ, **{"9": (103.5, 104.0), "11": (13.0, 14.0)}))
+        exits = [f for e, f in log.events if e == "paper_exit"]
+        self.assertEqual([(f["paperId"], f["outcome"]) for f in exits], [("S002", "STOP_LOSS")])   # -7.5 holds, -8 stops
+        self.assertEqual(t.summary()["breakEvenWinRate"], round(8 / 14, 3))
+        self.assertEqual(PaperConfig().stop_loss_pts, 11.0)                          # default unchanged
+
+    def test_after_exit_recording_never_changes_the_trade(self):
+        t, log = tracker(post_exit_track_s=20)
+        t.arm([Row(900.0, "CE", 1000.0)], FLEGS, True)
+        t.on_tick(T10, 995.0, FQ)
+        t.on_tick(CROSS, 1001.0, FQ)                                   # entry at ask 111
+        t.on_tick(CROSS + 5000, 1001.0, {"9": (117.5, 118.0)})         # take profit
+        self.assertEqual([a["sid"] for a in t.after], ["9"])          # still watched after the exit
+        for i, bid in enumerate((120.0, 125.0, 109.0, 130.0), start=2):
+            t.on_tick(CROSS + 5000 * i, 1001.0, {"9": (bid, bid + 1)})
+        ex = [f for e, f in log.events if e == "paper_exit"]
+        after = [f for e, f in log.events if e == "paper_after_exit"]
+        self.assertEqual((len(ex), ex[0]["pnlPts"], ex[0]["outcome"]), (1, 6.5, "TAKE_PROFIT"))
+        self.assertEqual(len(after), 1)
+        a = after[0]
+        self.assertEqual((a["paperId"], a["endReason"], a["bestPnlAfterPts"], a["worstPnlAfterPts"]),
+                         ("P001", "TRACK_TIME_DONE", 19.0, -2.0))              # 130 - 111 / 109 - 111
+        self.assertEqual([b for _, b in a["path"]], [120.0, 125.0, 109.0, 130.0])
+        self.assertEqual(t.after, [])
+
+    def test_after_exit_off_by_default_and_flushed_at_session_end(self):
+        t, log = tracker()
+        t.arm([Row(900.0, "CE", 1000.0)], FLEGS, True)
+        t.on_tick(T10, 995.0, FQ); t.on_tick(CROSS, 1001.0, FQ); t.on_tick(CROSS + 5000, 1001.0, {"9": (118.0, 119.0)})
+        self.assertNotIn("paper_after_exit", log.names())
+        t2, log2 = tracker(post_exit_track_s=600)
+        t2.arm([Row(900.0, "CE", 1000.0)], FLEGS, True)
+        t2.on_tick(T10, 995.0, FQ); t2.on_tick(CROSS, 1001.0, FQ); t2.on_tick(CROSS + 5000, 1001.0, {"9": (118.0, 119.0)})
+        t2.close_all(CROSS + 10000)
+        (a,) = [f for e, f in log2.events if e == "paper_after_exit"]
+        self.assertEqual((a["endReason"], a["path"]), ("SESSION_END", []))
+
+
 class ConfirmedOvershootOption(unittest.TestCase):
     def confirm(self, index, **cfg):
         t, log = tracker(variant="CONFIRMED_CLOSE", **cfg)
