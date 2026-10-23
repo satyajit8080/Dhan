@@ -594,6 +594,34 @@ class FreshSl8AndAfterExit(unittest.TestCase):
         self.assertEqual((a["endReason"], a["path"]), ("SESSION_END", []))
 
 
+class FreshDayStop(unittest.TestCase):
+    def cross(self, t, trig, at, down_quotes):
+        """One CE breakout at `trig`; its single strike is stopped out (down_quotes) or hits the target."""
+        legs = {(900.0, "CE"): "9"}
+        sel = {"CE": dict(SEL["CE"], trigger=trig)}
+        t.arm([Row(900.0, "CE", float(trig))], legs, True, ctx_of(sel=sel))
+        t.on_tick(at, trig - 5.0, {"9": (110.0, 111.0)})
+        t.on_tick(at + 5000, trig + 1.0, {"9": (110.0, 111.0)})
+        t.on_tick(at + 10000, trig + 1.0, {"9": (95.0, 96.0)} if down_quotes else {"9": (120.0, 121.0)})
+
+    def test_stops_new_entries_after_two_losing_breakouts(self):
+        t, log = tracker(variant="FRESH_DAYSTOP")
+        for i, (trig, loss) in enumerate(((1000, True), (1010, False), (1020, True), (1030, True))):
+            self.cross(t, trig, T10 + i * 60_000, loss)
+        entries = [f["trigger"] for e, f in log.events if e == "paper_entry"]
+        self.assertEqual(entries, [1000.0, 1010.0, 1020.0])                  # the 4th breakout is skipped
+        (skip,) = [f for e, f in log.events if e == "paper_skip"]
+        self.assertEqual((skip["trigger"], skip["losingBreakouts"]), (1030.0, 2))
+        self.assertEqual(t.losing_events, 2)
+
+    def test_fresh_level_has_no_daily_limit(self):
+        t, log = tracker(variant="FRESH_LEVEL")
+        for i in range(4):
+            self.cross(t, 1000 + 10 * i, T10 + i * 60_000, True)
+        self.assertEqual(sum(1 for e, _ in log.events if e == "paper_entry"), 4)
+        self.assertNotIn("paper_skip", log.names())
+
+
 class ConfirmedOvershootOption(unittest.TestCase):
     def confirm(self, index, **cfg):
         t, log = tracker(variant="CONFIRMED_CLOSE", **cfg)

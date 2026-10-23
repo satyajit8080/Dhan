@@ -55,3 +55,9 @@ session range is likewise computed from 09:16 onward (Dhan supplies no 09:15 1-m
 - FRESH_LEVEL now records each exited trade's option bid for 10 more minutes (`paper_after_exit`, recording only;
   results unchanged) so larger targets (+8, +10) can be evaluated later.
 - Everyday file runs FIRST_TOUCH, CONFIRMED_CLOSE, FILTERED, FRESH_LEVEL, FRESH_EXIT, FRESH_SL8. Paper only; RULES.md unchanged.
+
+## v7.7 — FRESH_DAYSTOP variant (user, 23 Oct 2026)
+- `FRESH_DAYSTOP` (ids `D…`, events `D-E###`): FRESH_LEVEL, but no new entry after 2 breakouts of the session
+  closed with a net loss (all strikes closed, summed P&L < 0); later crossings log `paper_skip`.
+- Offline check on 12–23 Oct fresh breakouts (FIRST_TOUCH legs): no limit 30 breakouts +361.5; stop after 1 loss
+  +217.8; after 2 +481.1; after 3 +419.6. In-sample; forward test only. RULES.md unchanged.
