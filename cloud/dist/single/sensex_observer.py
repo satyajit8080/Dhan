@@ -1918,10 +1918,9 @@ class PaperConfig:
     filter_max_itm_pts: float = 150.0
     filter_max_futures_age_s: float = 120.0
     filter_clock_tolerance_s: float = 5.0
-    daily_max_losing_events: int = 2
     post_exit_track_s: float = 0.0
-VARIANT_PREFIX = {'FIRST_TOUCH': 'P', 'CONFIRMED_CLOSE': 'C', 'FILTERED': 'F', 'FRESH_LEVEL': 'L', 'FRESH_EXIT': 'X', 'FRESH_SL8': 'S', 'FRESH_DAYSTOP': 'D'}
-FRESH_VARIANTS = ('FRESH_LEVEL', 'FRESH_EXIT', 'FRESH_SL8', 'FRESH_DAYSTOP')
+VARIANT_PREFIX = {'FIRST_TOUCH': 'P', 'CONFIRMED_CLOSE': 'C', 'FILTERED': 'F', 'FRESH_LEVEL': 'L', 'FRESH_EXIT': 'X', 'FRESH_SL8': 'S'}
+FRESH_VARIANTS = ('FRESH_LEVEL', 'FRESH_EXIT', 'FRESH_SL8')
 FRESH_SL8_STOP_PTS = 8.0
 _IST_S = 19800
 _OPEN_0915_S = 9 * 3600 + 15 * 60
@@ -1966,7 +1965,6 @@ class _Trade:
     gaps: int = 0
     last_bid: float | None = None
     path: list = field(default_factory=list)
-    event: str | None = None
 
 class PaperTracker:
 
@@ -1975,8 +1973,6 @@ class PaperTracker:
             cfg = replace(cfg, stop_loss_pts=FRESH_SL8_STOP_PTS)
         self.cfg, self.log, self.in_skip_window = (cfg, log, in_skip_window)
         self.after: list = []
-        self.event_open: dict = {}
-        self.losing_events = 0
         self.arms: dict = {}
         self.fired: set = set()
         self.open: list = []
@@ -2048,9 +2044,6 @@ class PaperTracker:
 
     def _enter_filtered(self, arm, now_ms, index_ltp, quotes):
         cfg, c, sgn = (self.cfg, self.ctx, 1 if arm.side == 'CE' else -1)
-        if cfg.variant == 'FRESH_DAYSTOP' and self.losing_events >= cfg.daily_max_losing_events:
-            self.log('info', 'paper_skip', variant=cfg.variant, side=arm.side, trigger=arm.trigger, losingBreakouts=self.losing_events, reason='daily limit: %d losing breakout(s) closed today' % self.losing_events)
-            return
         fresh = cfg.variant in FRESH_VARIANTS
         self.checks += 1
         filters = {'levelTouches': self._touches(arm)} if fresh else {'dayTrend': self._trend(c, sgn, now_ms), 'levelTouches': self._touches(arm), 'sessionRange': self._range(c)}
@@ -2177,10 +2170,8 @@ class PaperTracker:
             return
         self.seq += 1
         bid, ask = q
-        t = _Trade('%s%03d' % (self.prefix, self.seq), arm.side, strike, sid, arm.trigger, now_ms, ask, bid, index_ltp, event=event_id)
+        t = _Trade('%s%03d' % (self.prefix, self.seq), arm.side, strike, sid, arm.trigger, now_ms, ask, bid, index_ltp)
         self.open.append(t)
-        if event_id is not None:
-            self.event_open.setdefault(event_id, [0, 0.0])[0] += 1
         self.log('info', 'paper_entry', paperId=t.tid, entryAsk=ask, entryBid=bid, spreadPts=round(ask - bid, 2) if bid else None, spreadPct=round((ask - bid) / ((ask + bid) / 2) * 100, 3) if bid else None, takeProfitAt=round(ask + self.cfg.take_profit_pts, 2), stopLossAt=round(ask - self.cfg.stop_loss_pts, 2), note='PAPER (no order); exploratory trigger crossing, not a signal', **base)
 
     def _update(self, t, now_ms, q):
@@ -2211,13 +2202,6 @@ class PaperTracker:
                 rec['pnlRsNet'] = round(pnl * self.cfg.lot_size - self.cfg.cost_per_trade_rs, 2)
         self.closed.append(rec)
         self.log('info', 'paper_exit', note='PAPER (no order)', **rec)
-        ev = self.event_open.get(t.event)
-        if ev is not None:
-            ev[0] -= 1
-            ev[1] += pnl or 0.0
-            if ev[0] == 0:
-                del self.event_open[t.event]
-                self.losing_events += ev[1] < 0
         if self.cfg.post_exit_track_s > 0 and t.security_id:
             self.after.append({'tid': t.tid, 'sid': t.security_id, 'entry_ms': t.entry_ms, 'exit_ms': now_ms, 'entry_ask': t.entry_ask, 'outcome': outcome, 'path': []})
 
@@ -2650,7 +2634,7 @@ PAPER_TAKE_PROFIT_PTS = 6         # your rule (9 Oct 2026), option premium point
 PAPER_STOP_LOSS_PTS = 11          # your rule (9 Oct 2026), option premium points
 PAPER_TIME_STOP_MIN = 10          # RULES.md §6 time stop
 POLL_S = 5                        # seconds between fast read-only price polls (min 2)
-PAPER_VARIANTS = ["FIRST_TOUCH"]  # also: "CONFIRMED_CLOSE" (1-min close beyond), "FILTERED" (filter experiment), "FRESH_LEVEL" (touches < 3 only), "FRESH_EXIT" (FRESH_LEVEL + exit on a 1-min close back), "FRESH_SL8" (FRESH_LEVEL, stop -8), "FRESH_DAYSTOP" (FRESH_LEVEL, stop for the day after 2 losing breakouts)
+PAPER_VARIANTS = ["FIRST_TOUCH"]  # also: "CONFIRMED_CLOSE" (1-min close beyond), "FILTERED" (filter experiment), "FRESH_LEVEL" (touches < 3 only), "FRESH_EXIT" (FRESH_LEVEL + exit on a 1-min close back), "FRESH_SL8" (FRESH_LEVEL, stop -8)
 PAPER_AFTER_EXIT_S = 600         # FRESH_LEVEL: keep recording the option bid 10 min after each exit (recording only)
 LOT_SIZE = None                   # e.g. the SENSEX lot size, to report rupees (verify; never guessed)
 COST_PER_TRADE_RS = None          # brokerage + taxes per round trip, if you want net rupees
@@ -2670,7 +2654,7 @@ import urllib.request
 import time as _bx_main__time
 from datetime import date, datetime, time as dtime, timezone
 PROGRAM = 'sensex-readonly-observer'
-VERSION = '7.7'
+VERSION = '7.8'
 EXIT_OK, EXIT_CONFIG, EXIT_AUTH, EXIT_SELFTEST = (0, 2, 3, 4)
 
 def _stdout_logger(redactor):
@@ -2756,7 +2740,7 @@ def _config_errors():
         errs.append('STRIKES is empty and AUTO_STRIKES is 0')
     if not FUTURES_CONTRACTS and (not FUTURES_SECURITY_ID or not FUTURES_EXPIRY):
         errs.append('No futures contract: set FUTURES_CONTRACTS or FUTURES_SECURITY_ID / FUTURES_EXPIRY')
-    bad = [v for v in PAPER_VARIANTS if v not in ('FIRST_TOUCH', 'CONFIRMED_CLOSE', 'FILTERED', 'FRESH_LEVEL', 'FRESH_EXIT', 'FRESH_SL8', 'FRESH_DAYSTOP')]
+    bad = [v for v in PAPER_VARIANTS if v not in ('FIRST_TOUCH', 'CONFIRMED_CLOSE', 'FILTERED', 'FRESH_LEVEL', 'FRESH_EXIT', 'FRESH_SL8')]
     if bad:
         errs.append('Unknown PAPER_VARIANTS %s' % bad)
     if INTERVAL_S < 10:

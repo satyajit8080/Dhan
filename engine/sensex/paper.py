@@ -36,9 +36,6 @@ FRESH_EXIT variant (user, 23 Oct 2026, from the offline what-if of 12-23 Oct; ob
   the last polled index LTP of the minute, as for CONFIRMED_CLOSE; checked from the entry minute onwards.
 FRESH_SL8 variant (user, 23 Oct 2026, from the offline stop test of 12-23 Oct; observation only, not a rule):
   FRESH_LEVEL entries with the stop at -8 premium points instead of -11 (target and time stop unchanged).
-FRESH_DAYSTOP variant (user, 23 Oct 2026; observation only, not a rule): FRESH_LEVEL, but no new entry once
-  `daily_max_losing_events` breakouts of the session have closed with a net loss (all their strikes closed,
-  summed P&L < 0). A crossing after that logs `paper_skip`. Open trades are not affected.
 Post-exit tracking `post_exit_track_s` (default 0 = off): after a trade closes, its option bid keeps being
   recorded for that many seconds and logged once as `paper_after_exit`, so larger targets can be studied later.
   It never changes a trade or its result.
@@ -76,12 +73,11 @@ class PaperConfig:
     filter_max_itm_pts: float = 150.0          # reject a strike more than this far in the money
     filter_max_futures_age_s: float = 120.0    # futures last trade older than this at the crossing: STALE
     filter_clock_tolerance_s: float = 5.0      # last-trade time this far ahead of the poll clock: INVALID
-    daily_max_losing_events: int = 2           # FRESH_DAYSTOP: losing breakouts before entries stop for the day
     post_exit_track_s: float = 0.0             # keep recording the bid this long after an exit (0 = off)
 
 
-VARIANT_PREFIX = {"FIRST_TOUCH": "P", "CONFIRMED_CLOSE": "C", "FILTERED": "F", "FRESH_LEVEL": "L", "FRESH_EXIT": "X", "FRESH_SL8": "S", "FRESH_DAYSTOP": "D"}
-FRESH_VARIANTS = ("FRESH_LEVEL", "FRESH_EXIT", "FRESH_SL8", "FRESH_DAYSTOP")
+VARIANT_PREFIX = {"FIRST_TOUCH": "P", "CONFIRMED_CLOSE": "C", "FILTERED": "F", "FRESH_LEVEL": "L", "FRESH_EXIT": "X", "FRESH_SL8": "S"}
+FRESH_VARIANTS = ("FRESH_LEVEL", "FRESH_EXIT", "FRESH_SL8")
 FRESH_SL8_STOP_PTS = 8.0
 _IST_S = 19800
 _OPEN_0915_S = 9 * 3600 + 15 * 60
@@ -138,7 +134,6 @@ class _Trade:
     gaps: int = 0
     last_bid: float | None = None
     path: list = field(default_factory=list)
-    event: str | None = None
 
 
 class PaperTracker:
@@ -146,9 +141,7 @@ class PaperTracker:
         if cfg.variant == "FRESH_SL8":
             cfg = replace(cfg, stop_loss_pts=FRESH_SL8_STOP_PTS)
         self.cfg, self.log, self.in_skip_window = cfg, log, in_skip_window
-        self.after: list = []
-        self.event_open: dict = {}       # event id -> [open trades, summed P&L]
-        self.losing_events = 0           # breakouts closed with a net loss this session            # closed trades still recorded after the exit (post_exit_track_s)
+        self.after: list = []            # closed trades still recorded after the exit (post_exit_track_s)
         self.arms: dict = {}             # (side, trigger) -> _Arm
         self.fired: set = set()          # (side, trigger) fired this session
         self.open: list = []
@@ -225,11 +218,6 @@ class PaperTracker:
     def _enter_filtered(self, arm, now_ms, index_ltp, quotes):
         """One filter_check per crossing; every filter is evaluated even when another already failed."""
         cfg, c, sgn = self.cfg, self.ctx, (1 if arm.side == "CE" else -1)
-        if cfg.variant == "FRESH_DAYSTOP" and self.losing_events >= cfg.daily_max_losing_events:
-            self.log("info", "paper_skip", variant=cfg.variant, side=arm.side, trigger=arm.trigger,
-                     losingBreakouts=self.losing_events, reason="daily limit: %d losing breakout(s) closed today"
-                     % self.losing_events)
-            return
         fresh = cfg.variant in FRESH_VARIANTS        # level touches only; no trend, range or ITM filter
         self.checks += 1
         filters = {"levelTouches": self._touches(arm)} if fresh else \
@@ -379,11 +367,8 @@ class PaperTracker:
             return
         self.seq += 1
         bid, ask = q
-        t = _Trade("%s%03d" % (self.prefix, self.seq), arm.side, strike, sid, arm.trigger, now_ms, ask, bid, index_ltp,
-                   event=event_id)
+        t = _Trade("%s%03d" % (self.prefix, self.seq), arm.side, strike, sid, arm.trigger, now_ms, ask, bid, index_ltp)
         self.open.append(t)
-        if event_id is not None:
-            self.event_open.setdefault(event_id, [0, 0.0])[0] += 1
         self.log("info", "paper_entry", paperId=t.tid, entryAsk=ask, entryBid=bid,
                  spreadPts=round(ask - bid, 2) if bid else None,
                  spreadPct=round((ask - bid) / ((ask + bid) / 2) * 100, 3) if bid else None,
@@ -421,13 +406,6 @@ class PaperTracker:
                 rec["pnlRsNet"] = round(pnl * self.cfg.lot_size - self.cfg.cost_per_trade_rs, 2)
         self.closed.append(rec)
         self.log("info", "paper_exit", note="PAPER (no order)", **rec)
-        ev = self.event_open.get(t.event)
-        if ev is not None:
-            ev[0] -= 1
-            ev[1] += pnl or 0.0
-            if ev[0] == 0:
-                del self.event_open[t.event]
-                self.losing_events += ev[1] < 0
         if self.cfg.post_exit_track_s > 0 and t.security_id:
             self.after.append({"tid": t.tid, "sid": t.security_id, "entry_ms": t.entry_ms, "exit_ms": now_ms,
                                "entry_ask": t.entry_ask, "outcome": outcome, "path": []})
