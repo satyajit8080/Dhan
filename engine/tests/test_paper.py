@@ -512,6 +512,44 @@ class FreshLevel(unittest.TestCase):
         self.assertEqual(strip(ft_log), strip(fl_log))
 
 
+class FreshExit(unittest.TestCase):
+    def run_day(self, variant, back_close):
+        t, log, (c,) = run_filtered(ctx_of(), variant=variant)       # enters at CROSS (10:00:05), index 1001
+        q = dict(FQ, **{"9": (112.0, 113.0), "11": (19.0, 20.0)})
+        t.on_tick(T10 + 50_000, back_close, q)                      # last poll of the 10:00 minute = its close
+        t.on_tick(T10 + 60_000, 1001.0, q)                          # first poll of 10:01: the 10:00 minute closed
+        return t, log, c
+
+    def test_close_back_through_the_trigger_exits_at_this_polls_bid(self):
+        t, log, c = self.run_day("FRESH_EXIT", 999.0)
+        self.assertEqual((c["eventId"], list(c["filters"]), c["decision"]), ("X-E001", ["levelTouches"], "ENTER"))
+        exits = [f for e, f in log.events if e == "paper_exit"]
+        self.assertEqual([(f["paperId"], f["outcome"], f["exitBid"], f["pnlPts"], f["indexClose"]) for f in exits],
+                         [("X001", "INDEX_BACK", 112.0, 1.0, 999.0), ("X002", "INDEX_BACK", 19.0, -2.0, 999.0)])
+        self.assertEqual(t.open, [])
+
+    def test_close_at_or_beyond_the_trigger_keeps_the_trade(self):
+        for close in (1000.0, 1003.0):
+            t, log, _ = self.run_day("FRESH_EXIT", close)
+            self.assertNotIn("paper_exit", log.names(), close)
+            self.assertEqual(len(t.open), 2)
+
+    def test_pe_direction(self):
+        sel = {"PE": dict(SEL["PE"], trigger=1000)}
+        t, log = tracker(variant="FRESH_EXIT")
+        t.arm([Row(1100.0, "PE", 1000.0)], FLEGS, True, ctx_of(sel=sel))
+        t.on_tick(T10, 1005.0, FQ)
+        t.on_tick(CROSS, 999.0, FQ)
+        t.on_tick(T10 + 50_000, 1001.0, FQ)                         # PE: a close above the trigger is back through
+        t.on_tick(T10 + 60_000, 999.0, FQ)
+        self.assertEqual([f["outcome"] for e, f in log.events if e == "paper_exit"], ["INDEX_BACK"])
+
+    def test_fresh_level_never_exits_on_close_back(self):
+        t, log, _ = self.run_day("FRESH_LEVEL", 999.0)
+        self.assertNotIn("paper_exit", log.names())
+        self.assertEqual(len(t.open), 2)
+
+
 class ConfirmedOvershootOption(unittest.TestCase):
     def confirm(self, index, **cfg):
         t, log = tracker(variant="CONFIRMED_CLOSE", **cfg)

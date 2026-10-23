@@ -32,6 +32,10 @@ FRESH_LEVEL variant (user, 23 Oct 2026, from the 13-22 Oct paper analysis; obser
   enters like FIRST_TOUCH (same crossing poll, same fills, every strike) but only when the level the
   refresh table selected for the trigger has fewer than `filter_min_touches` touches (the FILTERED
   levelTouches check alone). Logs one `filter_check` per crossing with that single filter.
+FRESH_EXIT variant (user, 23 Oct 2026, from the offline what-if of 12-23 Oct; observation only, not a rule):
+  FRESH_LEVEL entries; in addition to +6 / -11 / time stop, a trade exits (outcome INDEX_BACK, at the bid of
+  that poll) when a 1-min SENSEX close is back through the trigger (CE: below it, PE: above it). The close is
+  the last polled index LTP of the minute, as for CONFIRMED_CLOSE; checked from the entry minute onwards.
 CONFIRMED_CLOSE option `confirm_max_overshoot_pts` (default None = off, behaviour unchanged): skip the
   confirmed entry when the index at the entry poll is that many points or more beyond the trigger.
 Fill model: entry at the option's ASK at the first poll after the crossing;
@@ -68,7 +72,7 @@ class PaperConfig:
     filter_clock_tolerance_s: float = 5.0      # last-trade time this far ahead of the poll clock: INVALID
 
 
-VARIANT_PREFIX = {"FIRST_TOUCH": "P", "CONFIRMED_CLOSE": "C", "FILTERED": "F", "FRESH_LEVEL": "L"}
+VARIANT_PREFIX = {"FIRST_TOUCH": "P", "CONFIRMED_CLOSE": "C", "FILTERED": "F", "FRESH_LEVEL": "L", "FRESH_EXIT": "X"}
 _IST_S = 19800
 _OPEN_0915_S = 9 * 3600 + 15 * 60
 _FIRST_BAR_S = (_OPEN_0915_S, _OPEN_0915_S + 60)   # Dhan's 1-min index series starts with a bar stamped 09:16 (seen 13-19 Oct)
@@ -176,6 +180,8 @@ class PaperTracker:
         for t in list(self.open):
             self._update(t, now_ms, quotes.get(t.security_id))
         closed = self._roll_minute(now_ms, index_ltp)
+        if closed is not None and self.cfg.variant == "FRESH_EXIT":
+            self._exit_on_close_back(closed, now_ms, quotes)
         prev, self.last_index = self.last_index, index_ltp
         now = datetime.fromtimestamp(now_ms / 1000, timezone.utc)
         in_window = self.in_skip_window(now)
@@ -192,7 +198,7 @@ class PaperTracker:
             if self.cfg.variant == "CONFIRMED_CLOSE":
                 self.pending[key] = (arm, now_ms // 60000)
                 continue
-            if self.cfg.variant in ("FILTERED", "FRESH_LEVEL"):
+            if self.cfg.variant in ("FILTERED", "FRESH_LEVEL", "FRESH_EXIT"):
                 self._enter_filtered(arm, now_ms, index_ltp, quotes)
                 continue
             for strike in arm.strikes:
@@ -201,7 +207,7 @@ class PaperTracker:
     def _enter_filtered(self, arm, now_ms, index_ltp, quotes):
         """One filter_check per crossing; every filter is evaluated even when another already failed."""
         cfg, c, sgn = self.cfg, self.ctx, (1 if arm.side == "CE" else -1)
-        fresh = cfg.variant == "FRESH_LEVEL"         # level touches only; no trend, range or ITM filter
+        fresh = cfg.variant in ("FRESH_LEVEL", "FRESH_EXIT")   # level touches only; no trend, range or ITM filter
         self.checks += 1
         filters = {"levelTouches": self._touches(arm)} if fresh else \
             {"dayTrend": self._trend(c, sgn, now_ms), "levelTouches": self._touches(arm), "sessionRange": self._range(c)}
@@ -297,6 +303,17 @@ class PaperTracker:
             self.minute_last = index_ltp
         return out
 
+    def _exit_on_close_back(self, closed, now_ms, quotes):
+        """FRESH_EXIT: a 1-min close back through the trigger ends the trade at this poll's bid."""
+        minute, close = closed
+        for t in list(self.open):
+            if minute < t.entry_ms // 60000:
+                continue
+            if (close < t.trigger) if t.side == "CE" else (close > t.trigger):
+                q = quotes.get(t.security_id)
+                bid = q[0] if q and q[0] and q[0] > 0 else t.last_bid
+                self._close(t, now_ms, "INDEX_BACK", bid, indexClose=close)
+
     def _confirm(self, closed, now_ms, index_ltp, quotes, in_window):
         minute, close = closed
         for key, (arm, since) in list(self.pending.items()):
@@ -365,13 +382,13 @@ class PaperTracker:
         if held >= self.cfg.time_stop_s:
             self._close(t, now_ms, "TIME_STOP", t.last_bid)
 
-    def _close(self, t, now_ms, outcome, exit_bid):
+    def _close(self, t, now_ms, outcome, exit_bid, **extra):
         self.open.remove(t)
         pnl = None if exit_bid is None else round(exit_bid - t.entry_ask, 2)
         rec = {"paperId": t.tid, "variant": self.cfg.variant, "outcome": outcome, "side": t.side, "strike": t.strike, "trigger": t.trigger,
                "entryAsk": t.entry_ask, "exitBid": exit_bid, "pnlPts": pnl,
                "heldS": round((now_ms - t.entry_ms) / 1000, 1), "maxFavourablePts": round(t.best, 2),
-               "maxAdversePts": round(t.worst, 2), "ticks": t.ticks, "quoteGaps": t.gaps, "path": t.path}
+               "maxAdversePts": round(t.worst, 2), "ticks": t.ticks, "quoteGaps": t.gaps, "path": t.path, **extra}
         if pnl is not None and self.cfg.lot_size:
             rec["pnlRsGross"] = round(pnl * self.cfg.lot_size, 2)
             if self.cfg.cost_per_trade_rs is not None:

@@ -41,3 +41,10 @@ session range is likewise computed from 09:16 onward (Dhan supplies no 09:15 1-m
 - Motivation (in-sample, 13–22 Oct): FIRST_TOUCH on levels touched ≥ 3 times was negative or flat every day; on
   fresher levels positive on every day they occurred. This is a forward test, not a rule; RULES.md unchanged.
 - Everyday file now runs FIRST_TOUCH, CONFIRMED_CLOSE, FILTERED and FRESH_LEVEL; the first three are unchanged.
+
+## v7.5 — FRESH_EXIT paper variant (user, 23 Oct 2026)
+- `FRESH_EXIT` (ids `X…`, events `X-E###`): FRESH_LEVEL entries, plus an exit (outcome `INDEX_BACK`, at that
+  poll's bid, `indexClose` logged) when a 1-min SENSEX close (last polled LTP of the minute) is back through the
+  trigger. +6 / −11 / 10-min time stop unchanged. Source: offline what-if `docs/sessions/2026-10-23_WHATIF_EXIT_STRIKE.md`.
+- Everyday file runs FIRST_TOUCH, CONFIRMED_CLOSE, FILTERED, FRESH_LEVEL, FRESH_EXIT; existing ones unchanged.
+  Compare FRESH_LEVEL vs FRESH_EXIT live for 10+ days. Paper only; RULES.md unchanged.
