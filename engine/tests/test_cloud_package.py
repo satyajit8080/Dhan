@@ -399,7 +399,7 @@ class EndToEnd(unittest.TestCase):
     def test_everyday_file_waits_for_open_checks_plan_and_runs_both_variants(self):
         m = load_everyday()
         self.assertEqual((m.MODE, m.AUTO_STRIKES, m.PAPER_VARIANTS, m.DAILY_PROFILE_CHECK),
-                         ("OBSERVE", 2, ["FIRST_TOUCH", "CONFIRMED_CLOSE", "FILTERED"], True))
+                         ("OBSERVE", 2, ["FIRST_TOUCH", "CONFIRMED_CLOSE", "FILTERED", "FRESH_LEVEL"], True))
         self.assertEqual(m.FUTURES_CONTRACTS[0], ("864571", "2026-10-29"))
 
         def poll(n, req):
@@ -430,12 +430,12 @@ class EndToEnd(unittest.TestCase):
         self.assertEqual((meta["strikes"], meta["futuresSecurityId"], meta["futuresExpiry"]),
                          (scans[0]["strikesUsed"], "844615", "2026-09-24"))
         variants = {e["variant"] for e in ev if e["event"] == "paper_summary"}
-        self.assertEqual(variants, {"FIRST_TOUCH", "CONFIRMED_CLOSE", "FILTERED"})
+        self.assertEqual(variants, {"FIRST_TOUCH", "CONFIRMED_CLOSE", "FILTERED", "FRESH_LEVEL"})
         entries = [e for e in ev if e["event"] == "paper_entry"]
         self.assertTrue({"FIRST_TOUCH", "CONFIRMED_CLOSE"} <= {e["variant"] for e in entries})
         checks = [e for e in ev if e["event"] == "filter_check"]
-        self.assertEqual(len(checks), 1)                # one diagnostics event for the one crossing
-        c = checks[0]
+        self.assertEqual([e["variant"] for e in checks], ["FILTERED", "FRESH_LEVEL"])   # one per variant per crossing
+        c, fresh = checks
         self.assertEqual((c["variant"], c["eventId"], c["side"]), ("FILTERED", "F-E001", "CE"))
         # the bundle's own refresh table selected the level behind this exact trigger
         self.assertEqual((c["selectedLevel"]["touchSource"], float(c["selectedLevel"]["trigger"])),
@@ -444,12 +444,19 @@ class EndToEnd(unittest.TestCase):
         self.assertEqual(c["filters"]["dayTrend"]["result"], "STALE")   # fixture's futures last trade is 656.6 s old
         self.assertEqual(c["decision"], "REJECT")
         self.assertFalse([e for e in ev if e["event"] == "paper_entry" and e["variant"] == "FILTERED"])
+        # FRESH_LEVEL: the same selected level, the touch check alone decides
+        self.assertEqual((fresh["eventId"], list(fresh["filters"]), fresh["selectedLevel"]),
+                         ("L-E001", ["levelTouches"], c["selectedLevel"]))
+        fresh_in = fresh["selectedLevel"]["touches"] < 3
+        self.assertEqual(fresh["decision"], "ENTER" if fresh_in else "REJECT")
+        self.assertEqual(bool([e for e in entries if e["variant"] == "FRESH_LEVEL"]), fresh_in)
         report = summarize_observation.summarize(ev, None)
-        for v in ("FIRST_TOUCH", "CONFIRMED_CLOSE", "FILTERED"):
+        self.assertIn("### FRESH_LEVEL diagnostics", report)
+        for v in ("FIRST_TOUCH", "CONFIRMED_CLOSE", "FILTERED", "FRESH_LEVEL"):
             self.assertIn("### PAPER trades [%s]" % v, report)
         self.assertIn("### FILTERED diagnostics", report)
         self.assertIn("| dayTrend | 0 | 0 | 0 | 0 | 1 |", report)
-        self.assertEqual([e for e in ev if e["event"] == "runtime"][0]["version"], "7.3")
+        self.assertEqual([e for e in ev if e["event"] == "runtime"][0]["version"], "7.4")
         self.assertNotIn(self.token, text)
 
     def test_everyday_file_self_test_checks_filtered_level_identity(self):

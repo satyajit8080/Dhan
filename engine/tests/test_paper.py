@@ -479,6 +479,39 @@ class Filtered(unittest.TestCase):
         self.assertEqual(scan_context({})["sessionHigh"], None)
 
 
+class FreshLevel(unittest.TestCase):
+    def test_touches_alone_decide_and_every_strike_enters(self):
+        for n, want in ((0, "ENTER"), (2, "ENTER"), (3, "REJECT"), (4, "REJECT")):
+            # trend against, narrow range, deep ITM strike: none of these matter for FRESH_LEVEL
+            t, log, (c,) = run_filtered(ctx_of(fut_ltp=980.0, hi=1000.0, lo=990.0,
+                                               sel={"CE": dict(SEL["CE"], touches=n)}),
+                                        rows=[Row(800.0, "CE", 1000.0), Row(1100.0, "CE", 1000.0)], variant="FRESH_LEVEL")
+            self.assertEqual((list(c["filters"]), c["filters"]["levelTouches"]["result"], c["decision"]),
+                             (["levelTouches"], "PASS" if want == "ENTER" else "FAIL", want), n)
+            self.assertEqual([x["result"] for x in c["strikes"]], ["NOT_APPLIED"] * 2)
+            entries = [f for e, f in log.events if e == "paper_entry"]
+            self.assertEqual([(f["strike"], f["eventId"], f["variant"]) for f in entries],
+                             [(800.0, "L-E001", "FRESH_LEVEL"), (1100.0, "L-E001", "FRESH_LEVEL")] if want == "ENTER" else [])
+            self.assertTrue(all(o.tid.startswith("L") for o in t.open))
+
+    def test_missing_or_other_triggers_level_never_enters(self):
+        for sel in ({}, {"CE": dict(SEL["CE"], touches=None)}, {"CE": dict(SEL["CE"], trigger=1005)}):
+            t, _, (c,) = run_filtered(ctx_of(sel=sel), variant="FRESH_LEVEL")
+            self.assertEqual((c["filters"]["levelTouches"]["result"], c["decision"], t.open), ("MISSING", "REJECT", []))
+
+    def test_fills_are_the_first_touch_fills(self):
+        ft, ft_log = tracker()
+        fl, fl_log = tracker(variant="FRESH_LEVEL")
+        rows = [Row(900.0, "CE", 1000.0), Row(1100.0, "CE", 1000.0)]
+        ft.arm(rows, FLEGS, True)
+        fl.arm(rows, FLEGS, True, ctx_of())
+        for tr in (ft, fl):
+            tr.on_tick(T10, 995.0, FQ)
+            tr.on_tick(CROSS, 1001.0, FQ)
+        strip = lambda log: [(f["strike"], f["entryAsk"], f["entryBid"]) for e, f in log.events if e == "paper_entry"]
+        self.assertEqual(strip(ft_log), strip(fl_log))
+
+
 class ConfirmedOvershootOption(unittest.TestCase):
     def confirm(self, index, **cfg):
         t, log = tracker(variant="CONFIRMED_CLOSE", **cfg)

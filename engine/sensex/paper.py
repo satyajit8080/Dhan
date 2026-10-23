@@ -26,6 +26,10 @@ FILTERED variant (user, 16 Oct 2026, from the 12-16 Oct paper analysis; observat
   Diagnostics only (never part of the decision): overshoot of the index beyond the trigger (always
   small here, because the entry is the crossing poll) and SENSEX vs its 09:15 open (a candidate
   alternative trend definition, logged so it can be evaluated separately).
+FRESH_LEVEL variant (user, 23 Oct 2026, from the 13-22 Oct paper analysis; observation only, not a rule):
+  enters like FIRST_TOUCH (same crossing poll, same fills, every strike) but only when the level the
+  refresh table selected for the trigger has fewer than `filter_min_touches` touches (the FILTERED
+  levelTouches check alone). Logs one `filter_check` per crossing with that single filter.
 CONFIRMED_CLOSE option `confirm_max_overshoot_pts` (default None = off, behaviour unchanged): skip the
   confirmed entry when the index at the entry poll is that many points or more beyond the trigger.
 Fill model: entry at the option's ASK at the first poll after the crossing;
@@ -62,7 +66,7 @@ class PaperConfig:
     filter_clock_tolerance_s: float = 5.0      # last-trade time this far ahead of the poll clock: INVALID
 
 
-VARIANT_PREFIX = {"FIRST_TOUCH": "P", "CONFIRMED_CLOSE": "C", "FILTERED": "F"}
+VARIANT_PREFIX = {"FIRST_TOUCH": "P", "CONFIRMED_CLOSE": "C", "FILTERED": "F", "FRESH_LEVEL": "L"}
 _IST_S = 19800
 _OPEN_0915_S = 9 * 3600 + 15 * 60
 _FIRST_BAR_S = (_OPEN_0915_S, _OPEN_0915_S + 60)   # Dhan's 1-min index series starts with a bar stamped 09:16 (seen 13-19 Oct)
@@ -186,7 +190,7 @@ class PaperTracker:
             if self.cfg.variant == "CONFIRMED_CLOSE":
                 self.pending[key] = (arm, now_ms // 60000)
                 continue
-            if self.cfg.variant == "FILTERED":
+            if self.cfg.variant in ("FILTERED", "FRESH_LEVEL"):
                 self._enter_filtered(arm, now_ms, index_ltp, quotes)
                 continue
             for strike in arm.strikes:
@@ -195,16 +199,18 @@ class PaperTracker:
     def _enter_filtered(self, arm, now_ms, index_ltp, quotes):
         """One filter_check per crossing; every filter is evaluated even when another already failed."""
         cfg, c, sgn = self.cfg, self.ctx, (1 if arm.side == "CE" else -1)
+        fresh = cfg.variant == "FRESH_LEVEL"         # level touches only; no trend, range or ITM filter
         self.checks += 1
-        filters = {"dayTrend": self._trend(c, sgn, now_ms), "levelTouches": self._touches(arm),
-                   "sessionRange": self._range(c)}
+        filters = {"levelTouches": self._touches(arm)} if fresh else \
+            {"dayTrend": self._trend(c, sgn, now_ms), "levelTouches": self._touches(arm), "sessionRange": self._range(c)}
         strikes = []
         for strike in arm.strikes:
             itm = round((index_ltp - strike) * sgn, 2)
-            strikes.append({"strike": strike, "itmPts": itm, "maxItmPts": cfg.filter_max_itm_pts,
-                            "result": "PASS" if itm <= cfg.filter_max_itm_pts else "FAIL"})
+            strikes.append({"strike": strike, "itmPts": itm, "maxItmPts": None if fresh else cfg.filter_max_itm_pts,
+                            "result": "NOT_APPLIED" if fresh else
+                            ("PASS" if itm <= cfg.filter_max_itm_pts else "FAIL")})
         reasons = ["%s %s: %s" % (k, v["result"], v["reason"]) for k, v in filters.items() if v["result"] != "PASS"]
-        enter = [x["strike"] for x in strikes if x["result"] == "PASS"] if not reasons else []
+        enter = [x["strike"] for x in strikes if x["result"] in ("PASS", "NOT_APPLIED")] if not reasons else []
         if not reasons and not enter:
             reasons.append("every strike more than %s pts in the money" % cfg.filter_max_itm_pts)
         io = c.get("indexOpen0915")

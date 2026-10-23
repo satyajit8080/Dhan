@@ -33,3 +33,11 @@ Dhan's 1-min SENSEX series starts with a bar stamped **09:16** (bar-start stamps
 records). v7.2 looked for a 09:15 bar, so `diagnostics.spotVsOpen0915` was always MISSING. v7.3 uses the day's first
 bar when it is stamped 09:15 or 09:16 and logs it as `openBarIst`. Diagnostic only: no decision changed. The
 session range is likewise computed from 09:16 onward (Dhan supplies no 09:15 1-min bar).
+
+## v7.4 — FRESH_LEVEL paper variant (user, 23 Oct 2026)
+- New paper-only variant `FRESH_LEVEL` (ids `L…`, events `L-E###`): enters like FIRST_TOUCH (same crossing poll,
+  same fills, every strike) only when the refresh table's selected level for the trigger has < 3 touches
+  (`filter_min_touches`, unchanged). No trend, range or ITM filter. Missing/other-trigger level: never enters.
+- Motivation (in-sample, 13–22 Oct): FIRST_TOUCH on levels touched ≥ 3 times was negative or flat every day; on
+  fresher levels positive on every day they occurred. This is a forward test, not a rule; RULES.md unchanged.
+- Everyday file now runs FIRST_TOUCH, CONFIRMED_CLOSE, FILTERED and FRESH_LEVEL; the first three are unchanged.

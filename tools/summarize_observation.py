@@ -269,10 +269,11 @@ def summarize(events, replay_text=None) -> str:
                 w("| %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s |" % (
                     e["paperId"], e["side"], e["strike"], e["trigger"], e["entryAsk"], e.get("exitBid"), e.get("pnlPts"),
                     e["outcome"], e["heldS"], e["maxFavourablePts"], e["maxAdversePts"]))
-    checks = [e for e in events if e.get("event") == "filter_check"]
-    if checks:
+    all_checks = [e for e in events if e.get("event") == "filter_check"]
+    for variant in sorted({e.get("variant") or "FILTERED" for e in all_checks}):
+        checks = [e for e in all_checks if (e.get("variant") or "FILTERED") == variant]
         w("")
-        w("### FILTERED diagnostics — one `filter_check` per crossing (experiment; not a rule)")
+        w("### %s diagnostics — one `filter_check` per crossing (experiment; not a rule)" % variant)
         w("")
         dec = Counter(e.get("decision") for e in checks)
         w("Crossings checked %d: ENTER %d, REJECT %d. Results per filter (MISSING / INVALID / STALE = input data "

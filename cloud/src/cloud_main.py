@@ -59,7 +59,7 @@ PAPER_TAKE_PROFIT_PTS = 6         # your rule (9 Oct 2026), option premium point
 PAPER_STOP_LOSS_PTS = 11          # your rule (9 Oct 2026), option premium points
 PAPER_TIME_STOP_MIN = 10          # RULES.md §6 time stop
 POLL_S = 5                        # seconds between fast read-only price polls (min 2)
-PAPER_VARIANTS = ["FIRST_TOUCH"]  # also: "CONFIRMED_CLOSE" (1-min close beyond), "FILTERED" (filter experiment)
+PAPER_VARIANTS = ["FIRST_TOUCH"]  # also: "CONFIRMED_CLOSE" (1-min close beyond), "FILTERED" (filter experiment), "FRESH_LEVEL" (touches < 3 only)
 LOT_SIZE = None                   # e.g. the SENSEX lot size, to report rupees (verify; never guessed)
 COST_PER_TRADE_RS = None          # brokerage + taxes per round trip, if you want net rupees
 
@@ -90,7 +90,7 @@ from sensex.session import IST, session_state
 from bx_selftest_data import SELFTEST
 
 PROGRAM = "sensex-readonly-observer"
-VERSION = "7.3"
+VERSION = "7.4"
 EXIT_OK, EXIT_CONFIG, EXIT_AUTH, EXIT_SELFTEST = 0, 2, 3, 4
 
 
@@ -205,7 +205,7 @@ def _config_errors():
         errs.append("STRIKES is empty and AUTO_STRIKES is 0")
     if not FUTURES_CONTRACTS and (not FUTURES_SECURITY_ID or not FUTURES_EXPIRY):
         errs.append("No futures contract: set FUTURES_CONTRACTS or FUTURES_SECURITY_ID / FUTURES_EXPIRY")
-    bad = [v for v in PAPER_VARIANTS if v not in ("FIRST_TOUCH", "CONFIRMED_CLOSE", "FILTERED")]
+    bad = [v for v in PAPER_VARIANTS if v not in ("FIRST_TOUCH", "CONFIRMED_CLOSE", "FILTERED", "FRESH_LEVEL")]
     if bad:
         errs.append("Unknown PAPER_VARIANTS %s" % bad)
     if INTERVAL_S < 10:

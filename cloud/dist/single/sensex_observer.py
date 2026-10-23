@@ -1918,7 +1918,7 @@ class PaperConfig:
     filter_max_itm_pts: float = 150.0
     filter_max_futures_age_s: float = 120.0
     filter_clock_tolerance_s: float = 5.0
-VARIANT_PREFIX = {'FIRST_TOUCH': 'P', 'CONFIRMED_CLOSE': 'C', 'FILTERED': 'F'}
+VARIANT_PREFIX = {'FIRST_TOUCH': 'P', 'CONFIRMED_CLOSE': 'C', 'FILTERED': 'F', 'FRESH_LEVEL': 'L'}
 _IST_S = 19800
 _OPEN_0915_S = 9 * 3600 + 15 * 60
 _FIRST_BAR_S = (_OPEN_0915_S, _OPEN_0915_S + 60)
@@ -2026,7 +2026,7 @@ class PaperTracker:
             if self.cfg.variant == 'CONFIRMED_CLOSE':
                 self.pending[key] = (arm, now_ms // 60000)
                 continue
-            if self.cfg.variant == 'FILTERED':
+            if self.cfg.variant in ('FILTERED', 'FRESH_LEVEL'):
                 self._enter_filtered(arm, now_ms, index_ltp, quotes)
                 continue
             for strike in arm.strikes:
@@ -2034,14 +2034,15 @@ class PaperTracker:
 
     def _enter_filtered(self, arm, now_ms, index_ltp, quotes):
         cfg, c, sgn = (self.cfg, self.ctx, 1 if arm.side == 'CE' else -1)
+        fresh = cfg.variant == 'FRESH_LEVEL'
         self.checks += 1
-        filters = {'dayTrend': self._trend(c, sgn, now_ms), 'levelTouches': self._touches(arm), 'sessionRange': self._range(c)}
+        filters = {'levelTouches': self._touches(arm)} if fresh else {'dayTrend': self._trend(c, sgn, now_ms), 'levelTouches': self._touches(arm), 'sessionRange': self._range(c)}
         strikes = []
         for strike in arm.strikes:
             itm = round((index_ltp - strike) * sgn, 2)
-            strikes.append({'strike': strike, 'itmPts': itm, 'maxItmPts': cfg.filter_max_itm_pts, 'result': 'PASS' if itm <= cfg.filter_max_itm_pts else 'FAIL'})
+            strikes.append({'strike': strike, 'itmPts': itm, 'maxItmPts': None if fresh else cfg.filter_max_itm_pts, 'result': 'NOT_APPLIED' if fresh else 'PASS' if itm <= cfg.filter_max_itm_pts else 'FAIL'})
         reasons = ['%s %s: %s' % (k, v['result'], v['reason']) for k, v in filters.items() if v['result'] != 'PASS']
-        enter = [x['strike'] for x in strikes if x['result'] == 'PASS'] if not reasons else []
+        enter = [x['strike'] for x in strikes if x['result'] in ('PASS', 'NOT_APPLIED')] if not reasons else []
         if not reasons and (not enter):
             reasons.append('every strike more than %s pts in the money' % cfg.filter_max_itm_pts)
         io = c.get('indexOpen0915')
@@ -2599,7 +2600,7 @@ PAPER_TAKE_PROFIT_PTS = 6         # your rule (9 Oct 2026), option premium point
 PAPER_STOP_LOSS_PTS = 11          # your rule (9 Oct 2026), option premium points
 PAPER_TIME_STOP_MIN = 10          # RULES.md §6 time stop
 POLL_S = 5                        # seconds between fast read-only price polls (min 2)
-PAPER_VARIANTS = ["FIRST_TOUCH"]  # also: "CONFIRMED_CLOSE" (1-min close beyond), "FILTERED" (filter experiment)
+PAPER_VARIANTS = ["FIRST_TOUCH"]  # also: "CONFIRMED_CLOSE" (1-min close beyond), "FILTERED" (filter experiment), "FRESH_LEVEL" (touches < 3 only)
 LOT_SIZE = None                   # e.g. the SENSEX lot size, to report rupees (verify; never guessed)
 COST_PER_TRADE_RS = None          # brokerage + taxes per round trip, if you want net rupees
 
@@ -2618,7 +2619,7 @@ import urllib.request
 import time as _bx_main__time
 from datetime import date, datetime, time as dtime, timezone
 PROGRAM = 'sensex-readonly-observer'
-VERSION = '7.3'
+VERSION = '7.4'
 EXIT_OK, EXIT_CONFIG, EXIT_AUTH, EXIT_SELFTEST = (0, 2, 3, 4)
 
 def _stdout_logger(redactor):
@@ -2704,7 +2705,7 @@ def _config_errors():
         errs.append('STRIKES is empty and AUTO_STRIKES is 0')
     if not FUTURES_CONTRACTS and (not FUTURES_SECURITY_ID or not FUTURES_EXPIRY):
         errs.append('No futures contract: set FUTURES_CONTRACTS or FUTURES_SECURITY_ID / FUTURES_EXPIRY')
-    bad = [v for v in PAPER_VARIANTS if v not in ('FIRST_TOUCH', 'CONFIRMED_CLOSE', 'FILTERED')]
+    bad = [v for v in PAPER_VARIANTS if v not in ('FIRST_TOUCH', 'CONFIRMED_CLOSE', 'FILTERED', 'FRESH_LEVEL')]
     if bad:
         errs.append('Unknown PAPER_VARIANTS %s' % bad)
     if INTERVAL_S < 10:
