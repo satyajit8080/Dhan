@@ -66,3 +66,9 @@ session range is likewise computed from 09:16 onward (Dhan supplies no 09:15 1-m
   `paper_poll_failed` and polling continues. No trading, gate or paper logic changed.
 - Review points checked and not changed: parity band ValueError is unreachable (the hint is always a chain strike);
   09:25 / 13:00 window ends are half-open per RULES.md; first-scan centring only affects the 09:15 scan.
+
+## v8.0 — FRESH_EXTREME paper variant (user, 26 Oct 2026)
+- `FRESH_EXTREME` (ids `E…`, events `E-E###`): FRESH_LEVEL, and the trigger must be a new session extreme
+  (CE trigger ≥ session high, PE trigger ≤ session low of the latest scan's 1-min SENSEX bars; filter `newExtreme`).
+- Source: corrected breakout export 12–23 Oct, FIRST_TOUCH fresh breakouts: at a new extreme 18, +334.9, positive
+  on all 5 days with fresh breakouts; others 12, +26.6. In-sample; forward test only. RULES.md unchanged.

@@ -594,6 +594,33 @@ class FreshSl8AndAfterExit(unittest.TestCase):
         self.assertEqual((a["endReason"], a["path"]), ("SESSION_END", []))
 
 
+class FreshExtreme(unittest.TestCase):
+    def test_trigger_must_be_a_new_session_extreme(self):
+        for hi, want in ((999.0, "ENTER"), (1000.0, "ENTER"), (1000.5, "REJECT")):   # CE trigger 1000
+            t, log, (c,) = run_filtered(ctx_of(hi=hi, lo=900.0), variant="FRESH_EXTREME")
+            self.assertEqual((c["eventId"], list(c["filters"]), c["decision"]),
+                             ("E-E001", ["levelTouches", "newExtreme"], want), hi)
+            self.assertEqual(bool([e for e, _ in log.events if e == "paper_entry"]), want == "ENTER")
+
+    def test_old_level_rejected_even_at_a_new_extreme(self):
+        _, _, (c,) = run_filtered(ctx_of(hi=990.0, sel={"CE": dict(SEL["CE"], touches=3)}), variant="FRESH_EXTREME")
+        self.assertEqual((c["filters"]["newExtreme"]["result"], c["decision"]), ("PASS", "REJECT"))
+
+    def test_pe_and_missing_or_bad_bars(self):
+        sel = {"PE": dict(SEL["PE"], trigger=1000)}
+        for lo, want in ((1001.0, "PASS"), (999.0, "FAIL")):
+            t, log = tracker(variant="FRESH_EXTREME")
+            bars = [{"timestampMs": T0915, "open": 1100.0, "high": 1300.0, "low": lo, "close": 1100.0}]
+            t.arm([Row(1100.0, "PE", 1000.0)], FLEGS, True, ctx_of(sel=sel, bars=bars))
+            t.on_tick(T10, 1005.0, FQ); t.on_tick(CROSS, 999.0, FQ)
+            (c,) = [f for e, f in log.events if e == "filter_check"]
+            self.assertEqual(c["filters"]["newExtreme"]["result"], want, lo)
+        self.assertEqual(run_filtered(ctx_of(bars=[]), variant="FRESH_EXTREME")[2][0]["filters"]["newExtreme"]["result"],
+                         "MISSING")
+        bad = [{"timestampMs": T0915, "open": 1.0, "high": 900.0, "low": 1300.0, "close": 1.0}]
+        self.assertEqual(run_filtered(ctx_of(bars=bad), variant="FRESH_EXTREME")[2][0]["decision"], "REJECT")
+
+
 class ConfirmedOvershootOption(unittest.TestCase):
     def confirm(self, index, **cfg):
         t, log = tracker(variant="CONFIRMED_CLOSE", **cfg)

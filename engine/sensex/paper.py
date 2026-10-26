@@ -36,6 +36,9 @@ FRESH_EXIT variant (user, 23 Oct 2026, from the offline what-if of 12-23 Oct; ob
   the last polled index LTP of the minute, as for CONFIRMED_CLOSE; checked from the entry minute onwards.
 FRESH_SL8 variant (user, 23 Oct 2026, from the offline stop test of 12-23 Oct; observation only, not a rule):
   FRESH_LEVEL entries with the stop at -8 premium points instead of -11 (target and time stop unchanged).
+FRESH_EXTREME variant (user, 26 Oct 2026, from the 12-23 Oct breakout export; observation only, not a rule):
+  FRESH_LEVEL, and the trigger must be a new session extreme: CE trigger >= the session high, PE trigger <=
+  the session low, from the latest scan's 1-min SENSEX bars. Logged as filter `newExtreme`.
 Post-exit tracking `post_exit_track_s` (default 0 = off): after a trade closes, its option bid keeps being
   recorded for that many seconds and logged once as `paper_after_exit`, so larger targets can be studied later.
   It never changes a trade or its result.
@@ -76,8 +79,8 @@ class PaperConfig:
     post_exit_track_s: float = 0.0             # keep recording the bid this long after an exit (0 = off)
 
 
-VARIANT_PREFIX = {"FIRST_TOUCH": "P", "CONFIRMED_CLOSE": "C", "FILTERED": "F", "FRESH_LEVEL": "L", "FRESH_EXIT": "X", "FRESH_SL8": "S"}
-FRESH_VARIANTS = ("FRESH_LEVEL", "FRESH_EXIT", "FRESH_SL8")
+VARIANT_PREFIX = {"FIRST_TOUCH": "P", "CONFIRMED_CLOSE": "C", "FILTERED": "F", "FRESH_LEVEL": "L", "FRESH_EXIT": "X", "FRESH_SL8": "S", "FRESH_EXTREME": "E"}
+FRESH_VARIANTS = ("FRESH_LEVEL", "FRESH_EXIT", "FRESH_SL8", "FRESH_EXTREME")
 FRESH_SL8_STOP_PTS = 8.0
 _IST_S = 19800
 _OPEN_0915_S = 9 * 3600 + 15 * 60
@@ -222,6 +225,8 @@ class PaperTracker:
         self.checks += 1
         filters = {"levelTouches": self._touches(arm)} if fresh else \
             {"dayTrend": self._trend(c, sgn, now_ms), "levelTouches": self._touches(arm), "sessionRange": self._range(c)}
+        if cfg.variant == "FRESH_EXTREME":
+            filters["newExtreme"] = self._extreme(c, arm)
         strikes = []
         for strike in arm.strikes:
             itm = round((index_ltp - strike) * sgn, 2)
@@ -288,6 +293,19 @@ class PaperTracker:
         if t >= lim:
             return dict(out, result="FAIL", reason="level touched %d time(s), limit < %d" % (t, lim))
         return dict(out, result="PASS", reason="")
+
+    def _extreme(self, c, arm) -> dict:
+        hi, lo = c.get("sessionHigh"), c.get("sessionLow")
+        ref = hi if arm.side == "CE" else lo
+        out = {"sessionHigh": hi, "sessionLow": lo, "trigger": arm.trigger}
+        if c.get("sessionBarsValid") is False:
+            return dict(out, result="INVALID", reason="1-min index bars with missing or inverted high/low")
+        if ref is None:
+            return dict(out, result="MISSING", reason="no 1-min index bars")
+        if (arm.trigger >= ref) if arm.side == "CE" else (arm.trigger <= ref):
+            return dict(out, result="PASS", reason="")
+        return dict(out, result="FAIL", reason="trigger %s inside the session range (%s %s)" %
+                    (arm.trigger, "high" if arm.side == "CE" else "low", ref))
 
     def _range(self, c) -> dict:
         hi, lo, lim = c.get("sessionHigh"), c.get("sessionLow"), self.cfg.filter_min_range_pts
