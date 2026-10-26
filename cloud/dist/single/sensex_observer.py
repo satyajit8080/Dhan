@@ -2397,6 +2397,9 @@ class Scanner:
             rec.update(status='INVALID_DATA', reason=str(e))
         except DhanClientError as e:
             rec.update(status='ERROR', reason='%s: %s' % (type(e).__name__, e))
+        except Exception as e:
+            rows = None
+            rec.update(status='ERROR', reason='unexpected %s: %s' % (type(e).__name__, str(e)[:300]))
         finally:
             if hasattr(self.client, 'on_call'):
                 self.client.on_call = None
@@ -2549,7 +2552,12 @@ class Scanner:
                 remaining -= step
                 if self.poller is not None and remaining > 1.0 and ((self.clock() - last_poll).total_seconds() >= self.cfg.poll_s):
                     t0 = self.clock()
-                    if not self.poller.tick():
+                    try:
+                        ok = self.poller.tick()
+                    except Exception as e:
+                        ok = True
+                        self.log('warn', 'paper_poll_failed', error='unexpected %s' % type(e).__name__, detail=str(e)[:300])
+                    if not ok:
                         self.state.stop_reason = 'AUTH_FAILED'
                         self.stop_event.set()
                     last_poll = self.clock()
@@ -2654,7 +2662,7 @@ import urllib.request
 import time as _bx_main__time
 from datetime import date, datetime, time as dtime, timezone
 PROGRAM = 'sensex-readonly-observer'
-VERSION = '7.8'
+VERSION = '7.9'
 EXIT_OK, EXIT_CONFIG, EXIT_AUTH, EXIT_SELFTEST = (0, 2, 3, 4)
 
 def _stdout_logger(redactor):

@@ -59,3 +59,10 @@ session range is likewise computed from 09:16 onward (Dhan supplies no 09:15 1-m
 ## v7.8 — FRESH_DAYSTOP removed (user, 23 Oct 2026)
 - The v7.7 `FRESH_DAYSTOP` variant was removed at the user's request. Everyday file runs FIRST_TOUCH, CONFIRMED_CLOSE,
   FILTERED, FRESH_LEVEL, FRESH_EXIT, FRESH_SL8 (as in v7.6). Paper only; RULES.md unchanged.
+
+## v7.9 — scan / poll resilience (23 Oct external review, verified 26 Oct)
+- An unexpected exception inside a scan is now recorded as that scan's `ERROR` (reason `unexpected <Type>: …`)
+  and the loop continues; previously it would end the run for the day. An unexpected fault in a paper poll logs
+  `paper_poll_failed` and polling continues. No trading, gate or paper logic changed.
+- Review points checked and not changed: parity band ValueError is unreachable (the hint is always a chain strike);
+  09:25 / 13:00 window ends are half-open per RULES.md; first-scan centring only affects the 09:15 scan.

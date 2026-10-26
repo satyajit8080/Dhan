@@ -237,6 +237,39 @@ class LoopControl(unittest.TestCase):
         self.assertEqual(sc.state.scans, 1)
 
 
+    def test_unexpected_scan_fault_is_recorded_and_the_loop_continues(self):
+        sc, t, ft = self._loop(datetime(2026, 9, 21, 10, 0, tzinfo=IST), max_scans=3)
+        real, n = sc._scan, [0]
+
+        def flaky(*a, **k):
+            n[0] += 1
+            if n[0] == 2:
+                raise ZeroDivisionError("boom")
+            return real(*a, **k)
+        sc._scan = flaky
+        recs = []
+        self.assertEqual(sc.run_loop(on_record=recs.append), "MAX_SCANS")
+        self.assertEqual([r["status"] for r in recs], ["OK", "ERROR", "OK"])
+        self.assertEqual(recs[1]["reason"], "unexpected ZeroDivisionError: boom")
+
+    def test_unexpected_paper_poll_fault_never_stops_the_scanner(self):
+        sc, t, ft = self._loop(datetime(2026, 9, 21, 10, 0, tzinfo=IST), max_scans=2)
+
+        class Boom:
+            trackers, calls = [], 0
+
+            def after_scan(self, *a):
+                pass
+
+            def tick(self):
+                Boom.calls += 1
+                raise KeyError("x")
+        sc.poller = Boom()
+        sc.cfg.poll_s = 5
+        self.assertEqual(sc.run_loop(), "MAX_SCANS")
+        self.assertEqual(sc.state.scans, 2)
+        self.assertGreater(Boom.calls, 1)
+
 class Cli(unittest.TestCase):
     def run_cli(self, argv, env):
         out, err = io.StringIO(), io.StringIO()
