@@ -31,7 +31,7 @@ one row per breakout event per version. No account details are included.
 | idxExitVsTrigger, idxBestBeyond | index vs trigger at exit; best index move beyond trigger in the exit minute |
 
 ## Totals (FIRST_TOUCH, all breakouts)
-- 102 breakouts, 51 won, −397 pts. Fresh levels (touches < 3): 30 breakouts, ~67 % of trades won, +361 pts.
+- 102 breakouts, 51 won, −397 pts. Fresh levels (touches < 3): 30 breakouts, 67.3 % of trades won, +361 pts.
   Old levels (≥ 3 touches): −759 pts.
 - Most losses are false breakouts: index goes ~7 pts past the trigger, then reverses.
 
