@@ -41,6 +41,10 @@ FRESH_SL8 variant (user, 23 Oct 2026, from the offline stop test of 12-23 Oct; o
 FRESH_EXTREME variant (user, 26 Oct 2026, from the 12-23 Oct breakout export; observation only, not a rule):
   FRESH_LEVEL, and the trigger must be a new session extreme: CE trigger >= the session high, PE trigger <=
   the session low, from the latest scan's 1-min SENSEX bars. Logged as filter `newExtreme`.
+FRESH_CALM variant (user, 27 Oct 2026, from the 1-year back-test; observation only, not a rule): FRESH_EXTREME,
+  and (a) not on a Thursday IST (weekly expiry day in the back-test year), and (b) a calm approach: the index
+  moved at most `calm_max_move_pts` in the trade direction over the 3 minutes before the crossing minute
+  (1-min close of minute m-1 minus close of minute m-4, from this tracker's own polls). Missing closes: reject.
 Post-exit tracking `post_exit_track_s` (default 0 = off): after a trade closes, its option bid keeps being
   recorded for that many seconds and logged once as `paper_after_exit`, so larger targets can be studied later.
   It never changes a trade or its result.
@@ -78,11 +82,12 @@ class PaperConfig:
     filter_max_itm_pts: float = 150.0          # reject a strike more than this far in the money
     filter_max_futures_age_s: float = 120.0    # futures last trade older than this at the crossing: STALE
     filter_clock_tolerance_s: float = 5.0      # last-trade time this far ahead of the poll clock: INVALID
+    calm_max_move_pts: float = 15.0            # FRESH_CALM: max 3-min index move into the break
     post_exit_track_s: float = 0.0             # keep recording the bid this long after an exit (0 = off)
 
 
-VARIANT_PREFIX = {"FIRST_TOUCH": "P", "CONFIRMED_CLOSE": "C", "FILTERED": "F", "FRESH_LEVEL": "L", "FRESH_EXIT": "X", "FRESH_SL8": "S", "FRESH_EXTREME": "E"}
-FRESH_VARIANTS = ("FRESH_LEVEL", "FRESH_EXIT", "FRESH_SL8", "FRESH_EXTREME")
+VARIANT_PREFIX = {"FIRST_TOUCH": "P", "CONFIRMED_CLOSE": "C", "FILTERED": "F", "FRESH_LEVEL": "L", "FRESH_EXIT": "X", "FRESH_SL8": "S", "FRESH_EXTREME": "E", "FRESH_CALM": "K"}
+FRESH_VARIANTS = ("FRESH_LEVEL", "FRESH_EXIT", "FRESH_SL8", "FRESH_EXTREME", "FRESH_CALM")
 FRESH_SL8_STOP_PTS = 8.0
 _IST_S = 19800
 _OPEN_0915_S = 9 * 3600 + 15 * 60
@@ -157,6 +162,7 @@ class PaperTracker:
         self.pending: dict = {}          # CONFIRMED_CLOSE: key -> (arm, minute of the crossing)
         self.minute = None               # current minute (epoch ms // 60000) seen by the polls
         self.minute_last = None          # last index LTP polled inside that minute (~ its 1-min close)
+        self.closes: dict = {}           # minute -> its polled close (FRESH_CALM)
         self.prefix = VARIANT_PREFIX[cfg.variant]
         self.ctx: dict = {}              # latest scan_context (FILTERED)
         self.checks = 0                  # FILTERED: filter_check events (one per crossing)
@@ -227,8 +233,11 @@ class PaperTracker:
         self.checks += 1
         filters = {"levelTouches": self._touches(arm)} if fresh else \
             {"dayTrend": self._trend(c, sgn, now_ms), "levelTouches": self._touches(arm), "sessionRange": self._range(c)}
-        if cfg.variant == "FRESH_EXTREME":
+        if cfg.variant in ("FRESH_EXTREME", "FRESH_CALM"):
             filters["newExtreme"] = self._extreme(c, arm)
+        if cfg.variant == "FRESH_CALM":
+            filters["notThursday"] = self._not_thursday(now_ms)
+            filters["calmApproach"] = self._calm(now_ms, sgn)
         strikes = []
         for strike in arm.strikes:
             itm = round((index_ltp - strike) * sgn, 2)
@@ -296,6 +305,24 @@ class PaperTracker:
             return dict(out, result="FAIL", reason="level touched %d time(s), limit < %d" % (t, lim))
         return dict(out, result="PASS", reason="")
 
+    def _not_thursday(self, now_ms) -> dict:
+        wd = datetime.fromtimestamp(now_ms / 1000 + _IST_S, timezone.utc).weekday()
+        return {"weekdayIst": wd, "result": "FAIL" if wd == 3 else "PASS",
+                "reason": "Thursday (weekly expiry day in the back-test year)" if wd == 3 else ""}
+
+    def _calm(self, now_ms, sgn) -> dict:
+        m = now_ms // 60000
+        a, b = self.closes.get(m - 1), self.closes.get(m - 4)
+        out = {"closeMinus1": a, "closeMinus4": b, "maxMovePts": self.cfg.calm_max_move_pts, "movePts": None}
+        if a is None or b is None:
+            return dict(out, result="MISSING", reason="1-min closes of the previous 4 minutes not all polled")
+        mv = round((a - b) * sgn, 2)
+        out["movePts"] = mv
+        if mv <= self.cfg.calm_max_move_pts:
+            return dict(out, result="PASS", reason="")
+        return dict(out, result="FAIL", reason="index moved %.2f pts into the break in 3 min (limit %s)" %
+                    (mv, self.cfg.calm_max_move_pts))
+
     def _extreme(self, c, arm) -> dict:
         hi, lo = c.get("sessionHigh"), c.get("sessionLow")
         ref = hi if arm.side == "CE" else lo
@@ -328,6 +355,7 @@ class PaperTracker:
         out = None
         if self.minute is not None and m > self.minute and self.minute_last is not None:
             out = (self.minute, self.minute_last)
+            self.closes[self.minute] = self.minute_last
         if self.minute is None or m > self.minute:
             self.minute, self.minute_last = m, None
         if index_ltp is not None:

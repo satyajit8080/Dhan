@@ -621,6 +621,49 @@ class FreshExtreme(unittest.TestCase):
         self.assertEqual(run_filtered(ctx_of(bars=bad), variant="FRESH_EXTREME")[2][0]["decision"], "REJECT")
 
 
+class FreshCalm(unittest.TestCase):
+    BARS = [{"timestampMs": T0915, "open": 950.0, "high": 999.0, "low": 900.0, "close": 990.0}]
+
+    def run_calm(self, closes, base=T10, side="CE"):
+        """Polls one close per minute for the minutes before `base`, then crosses trigger 1000 in minute `base`."""
+        t, log = tracker(variant="FRESH_CALM")
+        up = side == "CE"
+        sel = {"CE": SEL["CE"]} if up else {"PE": dict(SEL["PE"], trigger=1000)}
+        bars = self.BARS if up else [{"timestampMs": T0915, "open": 1050.0, "high": 1100.0, "low": 1001.0, "close": 1010.0}]
+        t.arm([Row(900.0 if up else 1100.0, side, 1000.0)], FLEGS, True, ctx_of(sel=sel, bars=bars))
+        for k, c in enumerate(closes):
+            t.on_tick(base - (len(closes) - k) * 60_000 + 30_000, c, FQ)
+        t.on_tick(base + 5000, 1001.0 if up else 999.0, FQ)
+        return t, log, [f for e, f in log.events if e == "filter_check"]
+
+    def test_calm_approach_enters_and_steep_approach_is_rejected(self):
+        t, log, (c,) = self.run_calm([990.0, 992.0, 995.0, 998.0])             # +8 pts over 3 minutes
+        self.assertEqual((c["eventId"], list(c["filters"]), c["decision"]),
+                         ("K-E001", ["levelTouches", "newExtreme", "notThursday", "calmApproach"], "ENTER"))
+        self.assertEqual((c["filters"]["calmApproach"]["movePts"], c["filters"]["notThursday"]["weekdayIst"]), (8.0, 0))
+        self.assertTrue(all(o.tid.startswith("K") for o in t.open))
+        for closes, want in (([983.0, 990.0, 995.0, 998.0], "PASS"), ([982.9, 990.0, 995.0, 998.0], "FAIL")):
+            _, _, (c,) = self.run_calm(closes)                                # boundary: 15.0 passes, 15.1 fails
+            self.assertEqual(c["filters"]["calmApproach"]["result"], want, closes)
+
+    def test_pe_direction_and_missing_closes(self):
+        _, _, (c,) = self.run_calm([1010.0, 1008.0, 1005.0, 1002.0], side="PE")  # falling 8 pts into a PE break
+        self.assertEqual((c["filters"]["calmApproach"]["movePts"], c["decision"]), (8.0, "ENTER"))
+        t, _, (c,) = self.run_calm([995.0, 998.0])
+        self.assertEqual((c["filters"]["calmApproach"]["result"], c["decision"], t.open), ("MISSING", "REJECT", []))
+
+    def test_thursday_and_old_or_inside_range_levels_are_rejected(self):
+        _, _, (c,) = self.run_calm([990.0, 992.0, 995.0, 998.0], base=T10 + 3 * 86_400_000)   # Thursday IST
+        self.assertEqual((c["filters"]["notThursday"]["result"], c["decision"]), ("FAIL", "REJECT"))
+        t, log = tracker(variant="FRESH_CALM")
+        t.arm([Row(900.0, "CE", 1000.0)], FLEGS, True, ctx_of(sel={"CE": dict(SEL["CE"], touches=3)}, bars=self.BARS))
+        for k, cl in enumerate([990.0, 992.0, 995.0, 998.0]):
+            t.on_tick(T10 - (4 - k) * 60_000 + 30_000, cl, FQ)
+        t.on_tick(T10 + 5000, 1001.0, FQ)
+        (c,) = [f for e, f in log.events if e == "filter_check"]
+        self.assertEqual((c["filters"]["levelTouches"]["result"], c["decision"]), ("FAIL", "REJECT"))
+
+
 class ConfirmedOvershootOption(unittest.TestCase):
     def confirm(self, index, **cfg):
         t, log = tracker(variant="CONFIRMED_CLOSE", **cfg)

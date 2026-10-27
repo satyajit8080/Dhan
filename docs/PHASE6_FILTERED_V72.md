@@ -80,3 +80,10 @@ session range is likewise computed from 09:16 onward (Dhan supplies no 09:15 1-m
   writes them to `<out>/history/*.json`. No other endpoint is used; no orders. Purpose: back-test FRESH_EXTREME on
   index data (option prices are not included).
 - The everyday file is unchanged in behaviour (version label 8.1).
+
+## v8.2 — FRESH_CALM paper variant (user, 27 Oct 2026)
+- `FRESH_CALM` (ids `K…`, events `K-E###`): FRESH_EXTREME, plus `notThursday` (IST weekday ≠ Thursday, the weekly
+  expiry day in the back-test year) and `calmApproach` (index move into the break over the 3 minutes before the
+  crossing minute, from the tracker's own 1-min polled closes, ≤ 15 pts in the trade direction; missing closes reject).
+- Source: `docs/sessions/2026-10-27_WIN_RATE_70_RESEARCH.md` (≈ 70 % in both halves of the 1-year index back-test,
+  slightly negative with 4-pt stop slippage). Paper only; existing variants unchanged; RULES.md unchanged.
