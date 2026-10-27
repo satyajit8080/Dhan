@@ -13,3 +13,8 @@ Index-only; option P&L = 0.5 × index move; NO theta, IV or charges. Split: firs
 Only wide-target versions are positive in both halves, and only with ≤ 1 pt stop slippage. A 30-minute hold also
 loses theta (live ATM theta ≈ −95 pts/day, roughly −7 pts per 30 min), which the test ignores, and the target/stop
 pairs were chosen from 4 tried. Conclusion: no robust edge; nothing to take live.
+
+## Grok's failed-breakout fade (27 Oct): non-extreme levels with ≥ 3 touches, no Thursday, 1-min close back through
+the trigger within 5 min while the break extended < 10 pts; fade it; stop 5 pts beyond the failed extreme; 10-min hold.
+790 signals. Negative even before slippage/charges in both halves (best TP +8: −145 / −136 pts; after 4-pt slippage and
+₹70/trade: −₹43,878 / −₹48,965 for 1 lot). Rejected.
