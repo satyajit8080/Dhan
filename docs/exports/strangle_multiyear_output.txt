@@ -1,0 +1,59 @@
+days 823 (2023-05-26 .. 2026-10-26), expiry weeks 168; lot 20; strangle Rs 150 + 4 pts, condor Rs 250 + 6 pts
+-- every week
+strangle +-1000, 2 days before expiry        n 165 win  83.6% net   +217703 worst   -40258 maxDD   -60232 t  2.35 | 2023:+13487 2024:+37497 2025:+70612 2026:+96106
+strangle +-1500, 2 days before expiry        n 165 win  88.5% net   +115517 worst   -35721 maxDD   -42833 t  1.77 | 2023:+4243 2024:-17 2025:+39475 2026:+71817
+strangle delta 0.20, 2 days before expiry    n 165 win  77.0% net   +187898 worst   -30876 maxDD   -77114 t  2.15 | 2023:+4977 2024:+18784 2025:+73123 2026:+91014
+strangle delta 0.15, 2 days before expiry    n 165 win  83.0% net   +158187 worst   -28054 maxDD   -60250 t  2.26 | 2023:+8282 2024:+4611 2025:+67243 2026:+78051
+strangle delta 0.10, 2 days before expiry    n 165 win  89.7% net   +124915 worst   -24575 maxDD   -43058 t  2.37 | 2023:+13503 2024:-1664 2025:+45377 2026:+67700
+condor +-1000 / +-2000, 2 days before expiry n 165 win  81.2% net   +118722 worst   -17821 maxDD   -42300 t  1.92 | 2023:+7811 2024:+38673 2025:+43790 2026:+28449
+condor delta 0.10 + 1000 wings, 2 days before expiry n 165 win  89.7% net    +55971 worst   -18625 maxDD   -51342 t  1.27 | 2023:+8403 2024:-11870 2025:+22476 2026:+36962
+strangle +-1000, 1 day before expiry         n 167 win  90.4% net   +163140 worst   -21612 maxDD   -38181 t  3.55 | 2023:+13753 2024:+50882 2025:+66806 2026:+31699
+strangle +-1500, 1 day before expiry         n 167 win  75.4% net    +72050 worst   -13791 maxDD   -22916 t  2.82 | 2023:+630 2024:+19120 2025:+41411 2026:+10889
+strangle delta 0.20, 1 day before expiry     n 167 win  79.6% net   +202456 worst   -20895 maxDD   -35784 t  3.64 | 2023:+20786 2024:+65742 2025:+84301 2026:+31626
+strangle delta 0.15, 1 day before expiry     n 167 win  83.2% net   +172655 worst   -16417 maxDD   -28472 t  4.33 | 2023:+17719 2024:+57717 2025:+65955 2026:+31263
+strangle delta 0.10, 1 day before expiry     n 167 win  91.0% net   +139043 worst   -11477 maxDD   -16751 t  6.04 | 2023:+13107 2024:+46860 2025:+49702 2026:+29375
+condor +-1000 / +-2000, 1 day before expiry  n 167 win  86.8% net    +83138 worst   -17191 maxDD   -37377 t  1.92 | 2023:+9075 2024:+24191 2025:+35457 2026:+14415
+condor delta 0.10 + 1000 wings, 1 day before expiry n 167 win  90.4% net    +88419 worst   -11901 maxDD   -17661 t  3.94 | 2023:+8622 2024:+31770 2025:+31114 2026:+16913
+-- skip election/budget weeks
+strangle +-1000, 2 days before expiry        n 162 win  83.3% net   +178457 worst   -40258 maxDD   -69255 t  1.97 | 2023:+13487 2024:+10908 2025:+57955 2026:+96106
+strangle +-1500, 2 days before expiry        n 162 win  88.3% net    +90424 worst   -35721 maxDD   -61388 t  1.42 | 2023:+4243 2024:-16945 2025:+31309 2026:+71817
+strangle delta 0.20, 2 days before expiry    n 162 win  76.5% net   +165182 worst   -30876 maxDD   -84562 t  1.90 | 2023:+4977 2024:+3516 2025:+65675 2026:+91014
+strangle delta 0.15, 2 days before expiry    n 162 win  82.7% net   +142441 worst   -28054 maxDD   -65599 t  2.05 | 2023:+8282 2024:-5787 2025:+61894 2026:+78051
+strangle delta 0.10, 2 days before expiry    n 162 win  89.5% net   +114012 worst   -24575 maxDD   -51042 t  2.18 | 2023:+13503 2024:-9180 2025:+41990 2026:+67700
+condor +-1000 / +-2000, 2 days before expiry n 162 win  80.9% net    +95775 worst   -17821 maxDD   -49565 t  1.58 | 2023:+7811 2024:+22990 2025:+36525 2026:+28449
+condor delta 0.10 + 1000 wings, 2 days before expiry n 162 win  89.5% net    +49243 worst   -18625 maxDD   -55949 t  1.12 | 2023:+8403 2024:-16611 2025:+20490 2026:+36962
+strangle +-1000, 1 day before expiry         n 166 win  90.4% net   +155273 worst   -21612 maxDD   -38181 t  3.41 | 2023:+13753 2024:+43015 2025:+66806 2026:+31699
+strangle +-1500, 1 day before expiry         n 166 win  75.3% net    +67696 worst   -13791 maxDD   -22916 t  2.69 | 2023:+630 2024:+14766 2025:+41411 2026:+10889
+strangle delta 0.20, 1 day before expiry     n 166 win  79.5% net   +196561 worst   -20895 maxDD   -35784 t  3.55 | 2023:+20786 2024:+59847 2025:+84301 2026:+31626
+strangle delta 0.15, 1 day before expiry     n 166 win  83.1% net   +168569 worst   -16417 maxDD   -28472 t  4.24 | 2023:+17719 2024:+53632 2025:+65955 2026:+31263
+strangle delta 0.10, 1 day before expiry     n 166 win  91.0% net   +136632 worst   -11477 maxDD   -16751 t  5.95 | 2023:+13107 2024:+44449 2025:+49702 2026:+29375
+condor +-1000 / +-2000, 1 day before expiry  n 166 win  86.7% net    +77835 worst   -17191 maxDD   -37377 t  1.81 | 2023:+9075 2024:+18888 2025:+35457 2026:+14415
+condor delta 0.10 + 1000 wings, 1 day before expiry n 166 win  90.4% net    +86796 worst   -11901 maxDD   -17661 t  3.87 | 2023:+8622 2024:+30147 2025:+31114 2026:+16913
+-- worst 8 weeks, strangle +-1000, 2 days before
+  2024-06-05 -> 2024-06-07 net   -40258 credit  1082
+  2025-04-17 -> 2025-04-22 net   -31086 credit   339
+  2024-10-01 -> 2024-10-04 net   -28747 credit   242
+  2024-12-18 -> 2024-12-20 net   -23157 credit   391
+  2025-04-09 -> 2025-04-15 net   -21150 credit   887
+  2026-04-07 -> 2026-04-09 net   -17580 credit   881
+  2024-11-12 -> 2024-11-14 net   -17458 credit   143
+  2026-10-13 -> 2026-10-15 net   -12027 credit   186
+-- trades around the election result (4 Jun 2024, a Tuesday; expiry then on Friday)
+  strangle +-1000          2 days before  2024-05-29 -> 2024-05-31 net    +3950
+  strangle +-1000          2 days before  2024-06-05 -> 2024-06-07 net   -40258
+  strangle +-1000          2 days before  2024-06-12 -> 2024-06-14 net    +4006
+  strangle +-1000          1 day before   2024-05-30 -> 2024-05-31 net    +3556
+  strangle +-1000          1 day before   2024-06-06 -> 2024-06-07 net   -12116
+  strangle +-1000          1 day before   2024-06-13 -> 2024-06-14 net    +2156
+  strangle delta 0.10      2 days before  2024-05-29 -> 2024-05-31 net    +1680
+  strangle delta 0.10      2 days before  2024-06-05 -> 2024-06-07 net   -24575
+  strangle delta 0.10      2 days before  2024-06-12 -> 2024-06-14 net    +1710
+  strangle delta 0.10      1 day before   2024-05-30 -> 2024-05-31 net    +1593
+  strangle delta 0.10      1 day before   2024-06-06 -> 2024-06-07 net    +2410
+  strangle delta 0.10      1 day before   2024-06-13 -> 2024-06-14 net    +1343
+  condor +-1000 / +-2000   2 days before  2024-05-29 -> 2024-05-31 net    +3175
+  condor +-1000 / +-2000   2 days before  2024-06-05 -> 2024-06-07 net   -10621
+  condor +-1000 / +-2000   2 days before  2024-06-12 -> 2024-06-14 net    +3254
+  condor +-1000 / +-2000   1 day before   2024-05-30 -> 2024-05-31 net    +2936
+  condor +-1000 / +-2000   1 day before   2024-06-06 -> 2024-06-07 net   -14338
+  condor +-1000 / +-2000   1 day before   2024-06-13 -> 2024-06-14 net    +1797

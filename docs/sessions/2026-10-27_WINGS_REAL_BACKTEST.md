@@ -81,3 +81,31 @@ which matches the Thursday rule week for week on Oct 2025 - Oct 2026.
 only ~55 pts of credit. Strangle +-1,000 sold 2 days before expiry: 86.7% win, Rs -431. Delta 0.10: 86.7%,
 Rs +6,909, worst -4,574. Sold 1 day before: 100%, Rs +5,595. A fixed 1,000-pt distance depends on the volatility
 regime; delta-based strikes adapt. The 2023-2025 file (A) holds the June 2024 election week.
+
+## All downloaded years: 26 May 2023 - 26 Oct 2026 (tools/backtest_strangle_multiyear.py)
+
+File A (Oct 2023 - Oct 2025) arrived in three pieces (over the 30 MB upload limit), joined before decoding: 4,356
+windows, 1,054,083 bars, 24 days refused by the rate limit (about 12 trading days lost), orders NONE, secret check PASS.
+823 trading days, 168 expiry weeks found from the data (Friday, Tuesday and Thursday eras). Lot 20 used for all years.
+Output: `docs/exports/strangle_multiyear_output.txt`.
+
+| Strategy (held to expiry) | Weeks | Win | Net 1 lot | Worst week | Max drawdown | t | By year (2023 / 2024 / 2025 / 2026) |
+|---|---|---|---|---|---|---|---|
+| Strangle +-1,000, 2 days before | 165 | 83.6% | Rs +2,17,703 | -40,258 | -60,232 | 2.35 | +13,487 / +37,497 / +70,612 / +96,106 |
+| Strangle delta 0.10, 2 days before | 165 | 89.7% | Rs +1,24,915 | -24,575 | -43,058 | 2.37 | +13,503 / -1,664 / +45,377 / +67,700 |
+| Condor +-1,000 / +-2,000, 2 days before | 165 | 81.2% | Rs +1,18,722 | -17,821 | -42,300 | 1.92 | +7,811 / +38,673 / +43,790 / +28,449 |
+| Strangle +-1,000, 1 day before | 167 | 90.4% | Rs +1,63,140 | -21,612 | -38,181 | 3.55 | +13,753 / +50,882 / +66,806 / +31,699 |
+| Strangle delta 0.20, 1 day before | 167 | 79.6% | Rs +2,02,456 | -20,895 | -35,784 | 3.64 | +20,786 / +65,742 / +84,301 / +31,626 |
+| Strangle delta 0.10, 1 day before | 167 | 91.0% | Rs +1,39,043 | -11,477 | -16,751 | 6.04 | +13,107 / +46,860 / +49,702 / +29,375 |
+| Condor delta 0.10 + 1,000 wings, 1 day before | 167 | 90.4% | Rs +88,419 | -11,901 | -17,661 | 3.94 | +8,622 / +31,770 / +31,114 / +16,913 |
+
+- Every strangle/condor variant held to expiry is positive over the full period; most are positive every year.
+- Selling 1 day before expiry at delta 0.10 is the steadiest: 91% win, worst week Rs -11,477, positive every year.
+- Skipping election/budget weeks made results slightly worse (those weeks paid rich premiums).
+- Worst week overall: sold Wed 5 Jun 2024 (day after the election crash, credit 1,082 pts), SENSEX rallied
+  ~4,000 pts by Friday: Rs -40,258 (strangle +-1,000).
+- Holding THROUGH the election day (sold Mon 3 Jun 2024, expiry Fri 7 Jun): the +-1,000 strangle was down about
+  Rs 81,000 per lot at the low on 4 Jun, then finished +Rs 32,013 as the index recovered. Without wings that
+  drawdown would likely have meant a margin call or a forced exit. The +-1,000 / +-2,000 condor was down at most about
+  Rs 6,800 and finished +Rs 12,864.
+- Prices beyond +-1,000 (delta 0.10 strikes in calm weeks, all +-2,000 wings) are extrapolated.
