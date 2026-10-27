@@ -96,3 +96,4 @@ session range is likewise computed from 09:16 onward (Dhan supplies no 09:15 1-m
   SENSEX options (BSE_FNO, OPTIDX, underlying 51), rolling ATM CALL and PUT, expiry numbers 0 and 1 (both logged; which
   one is the nearest weekly is checked from the data), 1-min open/high/low/close/OI/spot/strike, 5 days per request
   with 1-day retry. Records `BX|HIST|OPT_<n>_<strike>_<CALL|PUT>_<from>_<to>`.
+- 27 Oct live run: Dhan refused expiryCode 0 ("expiryCode is required", DH-905). Default changed to expiry numbers [1, 2].

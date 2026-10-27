@@ -513,7 +513,7 @@ class EndToEnd(unittest.TestCase):
         spec.loader.exec_module(m)
         _loaded["history"] = m
         self.assertEqual((m.MODE, m.HISTORY_KIND, m.HISTORY_OPTION_STRIKES, m.HISTORY_OPTION_EXPIRY_CODES),
-                         ("HISTORY", "OPTIONS", ["ATM"], [0, 1]))
+                         ("HISTORY", "OPTIONS", ["ATM"], [1, 2]))
         leg = {"timestamp": [1792986360, 1792986420], "open": [100.0, 101.0], "close": [101.0, 102.0],
                "spot": [73000.0, 73010.0], "strike": [73000.0, 73000.0]}
         body = json.dumps({"data": {"ce": leg, "pe": leg}}).encode()
@@ -526,13 +526,13 @@ class EndToEnd(unittest.TestCase):
         ev = [json.loads(l[3:]) for l in text.splitlines() if l.startswith("BX|{")]
         wins = [(tuple(e["series"]), e["fromDate"], e["bars"]) for e in ev if e["event"] == "history_window"]
         self.assertEqual(len(wins), 8)                                   # 2 codes x ATM x CALL/PUT x 2 windows
-        self.assertEqual(wins[0], ((0, "ATM", "CALL"), "2026-10-21", 2))
+        self.assertEqual(wins[0], ((1, "ATM", "CALL"), "2026-10-21", 2))
         done = [e for e in ev if e["event"] == "history_done"][0]
         self.assertEqual((done["kind"], done["windows"], done["bars"], done["orders"]), ("OPTIONS", 8, 16, "NONE"))
         _, records, bad, incomplete, secrets, hist = decode_cloud_log.decode_all(text.splitlines())
         self.assertEqual((bad, incomplete, secrets, records), ([], [], [], {}))
-        self.assertIn("OPT_1_ATM_PUT_2026-10-26_2026-10-26", hist)
-        self.assertEqual(hist["OPT_0_ATM_CALL_2026-10-21_2026-10-25"]["payload"]["ce"]["spot"], [73000.0, 73010.0])
+        self.assertIn("OPT_2_ATM_PUT_2026-10-26_2026-10-26", hist)
+        self.assertEqual(hist["OPT_1_ATM_CALL_2026-10-21_2026-10-25"]["payload"]["ce"]["spot"], [73000.0, 73010.0])
         self.assertNotIn(self.token, text)
 
     def test_everyday_file_exits_quietly_on_a_weekend(self):
