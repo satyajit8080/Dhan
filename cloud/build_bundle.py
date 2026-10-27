@@ -328,7 +328,11 @@ HISTORY_WINGS = {"MODE": '"HISTORY"', "HISTORY_KIND": '"OPTIONS"', "HISTORY_DAYS
 # 2-year files so each log stays a manageable size. A: 2 years ending one year before yesterday; B: the 2 years before.
 _OLDER = {"MODE": '"HISTORY"', "HISTORY_KIND": '"OPTIONS"', "HISTORY_DAYS": "730", "HISTORY_WINDOW_DAYS": "1",
           "HISTORY_OPTION_STRIKES": '["ATM", "ATM-10", "ATM+10"]', "HISTORY_OPTION_EXPIRY_CODES": "[1]"}
-HISTORY_OLDER_A = dict(_OLDER, HISTORY_SKIP_DAYS="365")
+# File A's log was over the 30 MB upload limit (user, 27 Oct 2026): split into two 1-year files with only the fields
+# the strangle test reads (close, spot, strike). A1: Oct 2024 - Oct 2025; A2: Oct 2023 - Oct 2024.
+_SLIM = dict(_OLDER, HISTORY_DAYS="365", HISTORY_OPTION_FIELDS='["close", "spot", "strike"]')
+HISTORY_OLDER_A1 = dict(_SLIM, HISTORY_SKIP_DAYS="365")
+HISTORY_OLDER_A2 = dict(_SLIM, HISTORY_SKIP_DAYS="730")
 HISTORY_OLDER_B = dict(_OLDER, HISTORY_SKIP_DAYS="1095")
 
 
@@ -352,7 +356,8 @@ def build() -> dict:
     files["history/main.py"] = with_config(files["single/sensex_observer.py"], HISTORY)
     files["history_options/main.py"] = with_config(files["single/sensex_observer.py"], HISTORY_OPTIONS)
     files["history_wings/main.py"] = with_config(files["single/sensex_observer.py"], HISTORY_WINGS)
-    files["history_older_a/main.py"] = with_config(files["single/sensex_observer.py"], HISTORY_OLDER_A)
+    files["history_older_a1/main.py"] = with_config(files["single/sensex_observer.py"], HISTORY_OLDER_A1)
+    files["history_older_a2/main.py"] = with_config(files["single/sensex_observer.py"], HISTORY_OLDER_A2)
     files["history_older_b/main.py"] = with_config(files["single/sensex_observer.py"], HISTORY_OLDER_B)
     return files
 

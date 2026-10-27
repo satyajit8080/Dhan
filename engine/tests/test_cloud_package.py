@@ -563,14 +563,17 @@ class EndToEnd(unittest.TestCase):
         self.assertNotIn(self.token, text)
 
     def test_history_older_files_cover_earlier_years_read_only(self):
-        for name, skip in (("history_older_a", 365), ("history_older_b", 1095)):
+        for name, skip, days, fields in (("history_older_a1", 365, 365, ["close", "spot", "strike"]),
+                                         ("history_older_a2", 730, 365, ["close", "spot", "strike"]),
+                                         ("history_older_b", 1095, 730, ["open", "high", "low", "close", "oi", "spot", "strike"])):
             spec = importlib.util.spec_from_file_location("bx_%s_under_test" % name, DIST / name / "main.py")
             m = importlib.util.module_from_spec(spec)
             sys.modules[spec.name] = m
             spec.loader.exec_module(m)
             _loaded["history"] = m
             self.assertEqual((m.HISTORY_KIND, m.HISTORY_OPTION_STRIKES, m.HISTORY_OPTION_EXPIRY_CODES, m.HISTORY_DAYS,
-                              m.HISTORY_SKIP_DAYS), ("OPTIONS", ["ATM", "ATM-10", "ATM+10"], [1], 730, skip))
+                              m.HISTORY_SKIP_DAYS, m.HISTORY_OPTION_FIELDS),
+                             ("OPTIONS", ["ATM", "ATM-10", "ATM+10"], [1], days, skip, fields))
             leg = {"timestamp": [1792986360], "open": [20.0], "close": [21.0], "spot": [73000.0], "strike": [74000.0]}
             body = json.dumps({"data": {"ce": leg, "pe": leg}}).encode()
             start = datetime(2026, 10, 27, 3, 30, tzinfo=timezone.utc)

@@ -2690,13 +2690,13 @@ PAPER_TIME_STOP_MIN = 10          # RULES.md §6 time stop
 POLL_S = 5                        # seconds between fast read-only price polls (min 2)
 PAPER_VARIANTS = ["FIRST_TOUCH"]  # also: "CONFIRMED_CLOSE" (1-min close beyond), "FILTERED" (filter experiment), "FRESH_LEVEL" (touches < 3 only), "FRESH_EXIT" (FRESH_LEVEL + exit on a 1-min close back), "FRESH_SL8" (FRESH_LEVEL, stop -8), "FRESH_EXTREME" (FRESH_LEVEL at a new day high/low), "FRESH_CALM" (FRESH_EXTREME, no Thursday, calm 3-min approach)
 PAPER_AFTER_EXIT_S = 600         # FRESH_LEVEL: keep recording the option bid 10 min after each exit (recording only)
-HISTORY_DAYS = 730                # HISTORY: calendar days back from yesterday
+HISTORY_DAYS = 365                # HISTORY: calendar days back from yesterday
 HISTORY_SKIP_DAYS = 365           # HISTORY: end the range this many calendar days before yesterday (older years)
 HISTORY_WINDOW_DAYS = 1           # HISTORY: calendar days per candles request (1-day retry on a refused window)
 HISTORY_KIND = "OPTIONS"          # HISTORY: "INDEX" (SENSEX 1-min index) | "OPTIONS" (expired SENSEX options, 1-min)
 HISTORY_OPTION_STRIKES = ["ATM", "ATM-10", "ATM+10"]  # OPTIONS: strikes relative to spot, e.g. ["ATM-1", "ATM", "ATM+1"]
 HISTORY_OPTION_EXPIRY_CODES = [1]  # OPTIONS: Dhan expiry numbers (0 is refused: "expiryCode is required"); checked from the data
-HISTORY_OPTION_FIELDS = ["open", "high", "low", "close", "oi", "spot", "strike"]
+HISTORY_OPTION_FIELDS = ["close", "spot", "strike"]  
 LOT_SIZE = None                   # e.g. the SENSEX lot size, to report rupees (verify; never guessed)
 COST_PER_TRADE_RS = None          # brokerage + taxes per round trip, if you want net rupees
 
