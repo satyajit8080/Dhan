@@ -72,3 +72,11 @@ session range is likewise computed from 09:16 onward (Dhan supplies no 09:15 1-m
   (CE trigger ≥ session high, PE trigger ≤ session low of the latest scan's 1-min SENSEX bars; filter `newExtreme`).
 - Source: corrected breakout export 12–23 Oct, FIRST_TOUCH fresh breakouts: at a new extreme 18, +334.9, positive
   on all 5 days with fresh breakouts; others 12, +26.6. In-sample; forward test only. RULES.md unchanged.
+
+## v8.1 — HISTORY mode (user, 27 Oct 2026)
+- New one-time file `cloud/dist/history/main.py` (MODE "HISTORY"): read-only download of SENSEX 1-min index candles
+  (IDX_I:51) for the last 365 calendar days, 5 days per `/charts/intraday` request (a refused window is retried one
+  day at a time). Each response is logged as a gzip+hex `BX|HIST|<from>_<to>|i/n|…` record; `tools/decode_cloud_log.py`
+  writes them to `<out>/history/*.json`. No other endpoint is used; no orders. Purpose: back-test FRESH_EXTREME on
+  index data (option prices are not included).
+- The everyday file is unchanged in behaviour (version label 8.1).

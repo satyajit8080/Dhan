@@ -82,7 +82,7 @@ def load_everyday():
 
 def ns(bundle):
     """Namespace exposing the engine classes for either build."""
-    if bundle is load_single() or bundle is _loaded.get("everyday"):
+    if bundle is load_single() or bundle in (_loaded.get("everyday"), _loaded.get("history")):
         return bundle
     import bx_dhan_client, bx_scanner  # noqa: E401  (multi build on sys.path)
     return type("N", (), {**vars(bx_dhan_client), **vars(bx_scanner)})
@@ -457,7 +457,7 @@ class EndToEnd(unittest.TestCase):
             self.assertIn("### PAPER trades [%s]" % v, report)
         self.assertIn("### FILTERED diagnostics", report)
         self.assertIn("| dayTrend | 0 | 0 | 0 | 0 | 1 |", report)
-        self.assertEqual([e for e in ev if e["event"] == "runtime"][0]["version"], "8.0")
+        self.assertEqual([e for e in ev if e["event"] == "runtime"][0]["version"], "8.1")
         self.assertNotIn(self.token, text)
 
     def test_everyday_file_self_test_checks_filtered_level_identity(self):
@@ -471,6 +471,40 @@ class EndToEnd(unittest.TestCase):
         finally:
             m.selected_levels = real
         self.assertTrue(m._filtered_selftest(base))
+
+    def test_history_file_downloads_index_candles_read_only(self):
+        spec = importlib.util.spec_from_file_location("bx_history_under_test", DIST / "history" / "main.py")
+        m = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = m
+        spec.loader.exec_module(m)
+        _loaded["history"] = m
+        self.assertEqual((m.MODE, m.HISTORY_DAYS, m.HISTORY_WINDOW_DAYS), ("HISTORY", 365, 5))
+        start = datetime(2026, 10, 27, 3, 30, tzinfo=timezone.utc)
+        refused = json.dumps({"errorCode": "DH-905", "errorMessage": "range"}).encode()
+        code, text, t = run_main(m, mode="HISTORY", env=self.env, clock_start=start,
+                                 cfg={"HISTORY_DAYS": 12, "RECORD_CHUNK": 400},
+                                 script={"/charts/intraday": [(200, json.dumps(load_scenario("s21Sep")[0]["/charts/intraday"]).encode()),
+                                                              (400, refused)]})
+        self.assertEqual(code, 0, text[-1500:])
+        self.assertEqual({p for _, p in t.calls}, {"/charts/intraday"})            # one endpoint only
+        ev = [json.loads(l[3:]) for l in text.splitlines() if l.startswith("BX|{")]
+        names = [e["event"] for e in ev]
+        start_ev = ev[names.index("history_start")]
+        self.assertEqual((start_ev["fromDate"], start_ev["toDate"]), ("2026-10-15", "2026-10-26"))
+        refused_ev = [e for e in ev if e["event"] == "history_window_refused"]
+        self.assertEqual([(e["fromDate"], e["toDate"]) for e in refused_ev], [("2026-10-20", "2026-10-24")])
+        windows = [(e["fromDate"], e["toDate"]) for e in ev if e["event"] == "history_window"]
+        self.assertEqual(windows, [("2026-10-15", "2026-10-19"), ("2026-10-20", "2026-10-20"), ("2026-10-21", "2026-10-21"),
+                                   ("2026-10-22", "2026-10-22"), ("2026-10-23", "2026-10-23"), ("2026-10-24", "2026-10-24"),
+                                   ("2026-10-25", "2026-10-26")])
+        done = ev[names.index("history_done")]
+        self.assertEqual((done["windows"], done["refusedDays"], done["orders"]), (7, 0, "NONE"))
+        events, records, bad, incomplete, secrets, hist = decode_cloud_log.decode_all(text.splitlines())
+        self.assertEqual((bad, incomplete, secrets, records), ([], [], [], {}))
+        self.assertEqual(sorted(hist)[0], "2026-10-15_2026-10-19")
+        self.assertEqual(len(hist), 7)
+        self.assertIn("timestamp", hist["2026-10-15_2026-10-19"]["payload"])
+        self.assertNotIn(self.token, text)
 
     def test_everyday_file_exits_quietly_on_a_weekend(self):
         sat = datetime(2026, 10, 17, 3, 30, tzinfo=timezone.utc)

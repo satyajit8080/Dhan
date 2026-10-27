@@ -316,6 +316,10 @@ EVERYDAY = {
 }
 
 
+# One-time, read-only download of past SENSEX 1-min index candles (user, 27 Oct 2026: back-test FRESH_EXTREME).
+HISTORY = {"MODE": '"HISTORY"', "HISTORY_DAYS": "365", "HISTORY_WINDOW_DAYS": "5"}
+
+
 def with_config(text: str, values: dict) -> str:
     lines = text.split("\n")
     for name, value in values.items():
@@ -333,6 +337,7 @@ def build() -> dict:
     files = {"multi/" + k: v for k, v in build_multi().items()}
     files["single/sensex_observer.py"] = build_single()
     files["everyday/main.py"] = with_config(files["single/sensex_observer.py"], EVERYDAY)
+    files["history/main.py"] = with_config(files["single/sensex_observer.py"], HISTORY)
     return files
 
 

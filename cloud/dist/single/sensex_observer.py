@@ -2622,7 +2622,7 @@ SELFTEST = {'note': 'MOCK DATA (Stage A s21Sep) - not market data', 'bodies': {'
 # ----------------------------------------------------------------------
 # ======================================================================
 # ============================== CONFIG ======================================
-MODE = "VALIDATE"                 # "VALIDATE" | "CHECKS" | "PROFILE_CHECK" | "INSTRUMENTS" | "LIVE_CHECK" | "OBSERVE"
+MODE = "VALIDATE"                 # "VALIDATE" | "CHECKS" | "PROFILE_CHECK" | "INSTRUMENTS" | "LIVE_CHECK" | "OBSERVE" | "HISTORY"
 
 # Strikes shown in the refresh table. Explicit, because the ATM±2 rule is not
 # defined yet (PHASE4_PORT_PLAN P1). Each scan logs atmStrike to help you pick.
@@ -2658,6 +2658,8 @@ PAPER_TIME_STOP_MIN = 10          # RULES.md §6 time stop
 POLL_S = 5                        # seconds between fast read-only price polls (min 2)
 PAPER_VARIANTS = ["FIRST_TOUCH"]  # also: "CONFIRMED_CLOSE" (1-min close beyond), "FILTERED" (filter experiment), "FRESH_LEVEL" (touches < 3 only), "FRESH_EXIT" (FRESH_LEVEL + exit on a 1-min close back), "FRESH_SL8" (FRESH_LEVEL, stop -8), "FRESH_EXTREME" (FRESH_LEVEL at a new day high/low)
 PAPER_AFTER_EXIT_S = 600         # FRESH_LEVEL: keep recording the option bid 10 min after each exit (recording only)
+HISTORY_DAYS = 365                # HISTORY: calendar days back from yesterday
+HISTORY_WINDOW_DAYS = 5           # HISTORY: calendar days per candles request (1-day retry on a refused window)
 LOT_SIZE = None                   # e.g. the SENSEX lot size, to report rupees (verify; never guessed)
 COST_PER_TRADE_RS = None          # brokerage + taxes per round trip, if you want net rupees
 
@@ -2674,9 +2676,9 @@ import json
 import sys
 import urllib.request
 import time as _bx_main__time
-from datetime import date, datetime, time as dtime, timezone
+from datetime import date, datetime, time as dtime, timedelta, timezone
 PROGRAM = 'sensex-readonly-observer'
-VERSION = '8.0'
+VERSION = '8.1'
 EXIT_OK, EXIT_CONFIG, EXIT_AUTH, EXIT_SELFTEST = (0, 2, 3, 4)
 
 def _stdout_logger(redactor):
@@ -2828,6 +2830,58 @@ def _profile(log, client) -> int:
     log('info', 'profile_check', ok=True, envelope=r.envelope, fieldsPresent=sorted(body.keys()), dataPlan=body.get('dataPlan'), dataValidity=body.get('dataValidity'), tokenValidity=body.get('tokenValidity'))
     return EXIT_OK
 
+def _emit_history(window_id, payload, log_line):
+    blob = gzip.compress(json.dumps(payload).encode('utf-8')).hex()
+    parts = [blob[i:i + RECORD_CHUNK] for i in range(0, len(blob), RECORD_CHUNK)] or ['']
+    for i, part in enumerate(parts, 1):
+        log_line('BX|HIST|%s|%d/%d|%s' % (window_id, i, len(parts), part))
+
+def history(log, redactor, log_line) -> int:
+    creds = _managed_credentials(log, redactor)
+    if creds is None:
+        return EXIT_AUTH
+    client = DhanClient(creds, transport=UrllibTransport(), redactor=redactor, logger=log)
+    end = _now().astimezone(IST).date() - timedelta(days=1)
+    start = end - timedelta(days=int(HISTORY_DAYS) - 1)
+    step = max(1, int(HISTORY_WINDOW_DAYS))
+    log('info', 'history_start', fromDate=start.isoformat(), toDate=end.isoformat(), windowDays=step, instrument='SENSEX index 1-min (IDX_I:51)')
+    windows = bars = failed = 0
+
+    def fetch(a, b):
+        r = client.intraday_candles(str(SENSEX_SCRIP), SENSEX_SEG, 'INDEX', 1, a.isoformat() + ' 09:15:00', b.isoformat() + ' 15:30:00')
+        p = r.payload if isinstance(r.payload, dict) else {}
+        n = len(p.get('timestamp') or [])
+        _emit_history('%s_%s' % (a.isoformat(), b.isoformat()), {'from': a.isoformat(), 'to': b.isoformat(), 'envelope': r.envelope, 'payload': p}, log_line)
+        return n
+    day = start
+    while day <= end:
+        last = min(end, day + timedelta(days=step - 1))
+        try:
+            n = fetch(day, last)
+            windows, bars = (windows + 1, bars + n)
+            log('info', 'history_window', fromDate=day.isoformat(), toDate=last.isoformat(), bars=n)
+        except (AuthError, PlanError) as e:
+            log('error', 'history_stopped', error=type(e).__name__, errorCode=e.error_code)
+            return EXIT_AUTH
+        except DhanClientError as e:
+            log('warn', 'history_window_refused', fromDate=day.isoformat(), toDate=last.isoformat(), error=type(e).__name__, errorCode=e.error_code, httpStatus=e.http_status)
+            d = day
+            while d <= last:
+                try:
+                    n = fetch(d, d)
+                    windows, bars = (windows + 1, bars + n)
+                    log('info', 'history_window', fromDate=d.isoformat(), toDate=d.isoformat(), bars=n)
+                except (AuthError, PlanError) as e2:
+                    log('error', 'history_stopped', error=type(e2).__name__, errorCode=e2.error_code)
+                    return EXIT_AUTH
+                except DhanClientError as e2:
+                    failed += 1
+                    log('warn', 'history_day_refused', date=d.isoformat(), error=type(e2).__name__, errorCode=e2.error_code, httpStatus=e2.http_status)
+                d += timedelta(days=1)
+        day = last + timedelta(days=1)
+    log('info', 'history_done', windows=windows, bars=bars, refusedDays=failed, orders='NONE')
+    return EXIT_OK
+
 def _now():
     return datetime.now(timezone.utc)
 
@@ -2916,7 +2970,9 @@ def main() -> int:
         return instruments(log)
     if MODE in ('LIVE_CHECK', 'OBSERVE'):
         return live(log, redactor, loop=MODE == 'OBSERVE')
-    log('error', 'config_blocked', errors=['MODE must be VALIDATE, CHECKS, PROFILE_CHECK, INSTRUMENTS, LIVE_CHECK or OBSERVE'])
+    if MODE == 'HISTORY':
+        return history(log, redactor, lambda text: (sys.stdout.write(redactor(text) + '\n'), sys.stdout.flush()))
+    log('error', 'config_blocked', errors=['MODE must be VALIDATE, CHECKS, PROFILE_CHECK, INSTRUMENTS, LIVE_CHECK, OBSERVE or HISTORY'])
     return EXIT_CONFIG
 if __name__ == '__main__':
     main()
