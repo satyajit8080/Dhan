@@ -55,3 +55,17 @@ on the put side). Costs Rs 250 + 6 pts per trade. Sold 2 days before expiry, hel
 - This year no move went past +-2,000 by expiry, so the hedge never paid; it only caps a future gap (max loss about
   1,000 pts minus the credit per lot).
 - A tighter condor inside real data (sell +-500, buy +-1,000) is flat: Rs -998 for the year.
+
+## Robustness of the short strangle (tools/backtest_strangle_robustness.py)
+
+Output: `docs/exports/strangle_robustness_output.txt`. 1 lot, Rs 150 + 4 pts per trade, held to expiry.
+
+- Every variant tried (strike distance 600-1,500, delta 0.05-0.20, entry 09:30-15:00, entry 1-3 days before expiry)
+  is positive in both halves of the year.
+- Further strikes: higher win, lower profit, smaller worst trade. +-1,000: 82.7%, Rs +1,15,423, worst -17,580.
+  Delta 0.10 (adaptive): 92.3%, Rs +81,265, worst -7,921, max drawdown -7,921.
+- Entry at 09:30 was best; later entries roughly halve the result.
+- Entering 3 trading days before expiry: Rs +2,01,485 (H1 +1,00,387 / H2 +1,01,098) but worst trade -32,708.
+- Walk-forward: the best variant on H1 (delta 0.20) made Rs +36,989 on H2 (positive, smaller).
+- Strikes beyond +-1,000 (delta 0.10 / 0.05, +-1,200, +-1,500) use extrapolated prices.
+- The year contained no gap large enough to test the tail risk of a naked strangle.

@@ -1,0 +1,22 @@
+-- strike distance (Tue 09:30, hold to expiry; beyond 1,000 = extrapolated)
+strangle +-600                 n 52 win  73.1% net  +131015 (H1  +76400 / H2  +54614) worst  -20072 maxDD  -29080 t 2.18 credit 434
+strangle +-800                 n 52 win  75.0% net  +125757 (H1  +73693 / H2  +52064) worst  -18965 maxDD  -26718 t 2.48 credit 338
+strangle +-1000                n 52 win  82.7% net  +115423 (H1  +66672 / H2  +48752) worst  -17580 maxDD  -23765 t 2.74 credit 263
+strangle +-1200                n 52 win  88.5% net  +100323 (H1  +61862 / H2  +38461) worst  -15930 maxDD  -20252 t 2.87 credit 204
+strangle +-1500                n 52 win  92.3% net   +78649 (H1  +51994 / H2  +26655) worst  -12987 maxDD  -14003 t 3.02 credit 141
+-- adaptive: strike by delta (Ajit-style)
+strangle delta 0.20            n 52 win  80.8% net  +119523 (H1  +82535 / H2  +36989) worst  -13906 maxDD  -14990 t 3.39 credit 238
+strangle delta 0.15            n 52 win  86.5% net   +99398 (H1  +73842 / H2  +25556) worst  -11110 maxDD  -11110 t 3.78 credit 169
+strangle delta 0.10            n 52 win  92.3% net   +81265 (H1  +59524 / H2  +21740) worst   -7921 maxDD   -7921 t 4.77 credit 113
+strangle delta 0.05            n 52 win  94.2% net   +54142 (H1  +41419 / H2  +12722) worst   -1295 maxDD   -1295 t 4.30 credit 71
+-- entry time (+-1000)
+strangle +-1000 entry 09:30    n 52 win  82.7% net  +115423 (H1  +66672 / H2  +48752) worst  -17580 maxDD  -23765 t 2.74 credit 263
+strangle +-1000 entry 11:00    n 52 win  78.8% net   +56915 (H1  +23794 / H2  +33121) worst  -24510 maxDD  -27189 t 1.27 credit 235
+strangle +-1000 entry 13:00    n 52 win  84.6% net   +67185 (H1  +29252 / H2  +37933) worst  -18271 maxDD  -27936 t 1.64 credit 220
+strangle +-1000 entry 15:00    n 52 win  78.8% net   +45360 (H1  +14235 / H2  +31124) worst  -13322 maxDD  -34941 t 1.33 credit 193
+-- entry day (+-1000)
+strangle +-1000 3 days before  n 52 win  82.7% net  +201485 (H1 +100387 / H2 +101098) worst  -32708 maxDD  -32708 t 3.00 credit 364
+strangle +-1000 2 days before  n 52 win  82.7% net  +115423 (H1  +66672 / H2  +48752) worst  -17580 maxDD  -23765 t 2.74 credit 263
+strangle +-1000 1 days before  n 52 win  92.3% net   +38760 (H1   +2612 / H2  +36148) worst  -21612 maxDD  -38181 t 1.25 credit 116
+-- walk-forward: pick best of the variants on H1, see its H2
+best on H1: d0.20 H1 +82535 -> H2 +36989
