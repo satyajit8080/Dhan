@@ -82,7 +82,7 @@ def load_everyday():
 
 def ns(bundle):
     """Namespace exposing the engine classes for either build."""
-    if bundle is load_single() or bundle in (_loaded.get("everyday"), _loaded.get("history")):
+    if bundle is load_single() or bundle in (_loaded.get("everyday"), _loaded.get("history"), _loaded.get("condor")):
         return bundle
     import bx_dhan_client, bx_scanner  # noqa: E401  (multi build on sys.path)
     return type("N", (), {**vars(bx_dhan_client), **vars(bx_scanner)})
@@ -589,6 +589,35 @@ class EndToEnd(unittest.TestCase):
             done = [e for e in ev if e["event"] == "history_done"][0]
             self.assertEqual((done["windows"], done["orders"]), (6, "NONE"))
             self.assertNotIn(self.token, text)
+
+    def test_condor_paper_file_is_read_only_and_waits_for_0930(self):
+        spec = importlib.util.spec_from_file_location("bx_condor_under_test", DIST / "condor_paper" / "main.py")
+        m = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = m
+        spec.loader.exec_module(m)
+        _loaded["condor"] = m
+        self.assertEqual((m.MODE, m.CONDOR_LOTS, m.CONDOR_LOT_SIZE, m.CONDOR_DELTA, m.CONDOR_WING_PTS),
+                         ("CONDOR_PAPER", 13, 20, 0.10, 1000))
+        start = datetime(2026, 10, 28, 3, 50, tzinfo=timezone.utc)              # Wed 09:20 IST, expiry Thu
+        exp = json.dumps({"data": ["2026-10-29", "2026-11-05"]}).encode()
+        chain = json.dumps({"data": {"last_price": 73600.0, "oc": {
+            "%.6f" % k: {"ce": {"security_id": "C%d" % k}, "pe": {"security_id": "P%d" % k}}
+            for k in range(72000, 75300, 100)}}}).encode()
+        ts = [int(datetime(2026, 10, 28, 4, 0, tzinfo=timezone.utc).timestamp()) + 60 * i for i in range(-5, 5)]
+        bars = json.dumps({"data": {"timestamp": ts, "open": [1.0] * 10, "high": [1.0] * 10, "low": [1.0] * 10,
+                                    "close": [73600.0] * 10, "volume": [0] * 10}}).encode()
+        code, text, t = run_main(m, mode="CONDOR_PAPER", env=self.env, clock_start=start,
+                                 script={"/optionchain/expirylist": [(200, exp)], "/optionchain": [(200, chain)],
+                                         "/charts/intraday": [(200, bars)] * 200})
+        self.assertEqual(code, 0, text[-1500:])
+        self.assertTrue({p for _, p in t.calls} <= {"/optionchain/expirylist", "/optionchain", "/charts/intraday"})
+        ev = [json.loads(l[3:]) for l in text.splitlines() if l.startswith("BX|{")]
+        names = [e["event"] for e in ev]
+        self.assertIn("condor_waiting", names)
+        plan = [e for e in ev if e["event"] == "condor_plan"][0]
+        self.assertEqual((plan["action"], plan["expiry"], plan["orders"]), ("ENTRY", "2026-10-29", "NONE (paper)"))
+        self.assertTrue("condor_entry" in names or "condor_skip" in names)
+        self.assertNotIn(self.token, text)
 
     def test_everyday_file_exits_quietly_on_a_weekend(self):
         sat = datetime(2026, 10, 17, 3, 30, tzinfo=timezone.utc)

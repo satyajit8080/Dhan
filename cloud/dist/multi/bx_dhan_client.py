@@ -195,8 +195,8 @@ class RateLimiter:
             now = self.clock()
             b[0] = min(cap, b[0] + (now - b[1]) * rate)
             b[1] = now
-            if b[0] >= 1:
-                b[0] -= 1
+            if b[0] >= 1 - 1e-9:                # tolerance: a refill can land at 0.999...9 by rounding
+                b[0] = max(0.0, b[0] - 1)
                 break
             need = (1 - b[0]) / rate
             self.sleep(need)

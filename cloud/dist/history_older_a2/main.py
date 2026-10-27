@@ -1368,8 +1368,8 @@ class RateLimiter:
             now = self.clock()
             b[0] = min(cap, b[0] + (now - b[1]) * rate)
             b[1] = now
-            if b[0] >= 1:
-                b[0] -= 1
+            if b[0] >= 1 - 1e-09:
+                b[0] = max(0.0, b[0] - 1)
                 break
             need = (1 - b[0]) / rate
             self.sleep(need)
@@ -2645,6 +2645,182 @@ class MemoryRecorder:
         return out
 
 # ----------------------------------------------------------------------
+# module: engine/sensex/condor.py
+# ----------------------------------------------------------------------
+from datetime import date, datetime, timedelta, timezone
+INDEX_SCRIP, _bx_condor__INDEX_SEG = ('51', 'IDX_I')
+OPT_SEG, OPT_INSTRUMENT = ('BSE_FNO', 'OPTIDX')
+CHARGES_PER_LOT_RS = 250.0
+SLIPPAGE_PTS = 6.0
+
+def prev_trading_day(d: date, holidays=frozenset()) -> date:
+    d -= timedelta(days=1)
+    while d.weekday() >= 5 or d in holidays:
+        d -= timedelta(days=1)
+    return d
+
+def plan(today: date, expiries, holidays=frozenset()) -> dict:
+    future = sorted((e for e in (date.fromisoformat(x) for x in expiries) if e >= today))
+    if not future:
+        return {'action': 'NONE', 'reason': 'no expiry on or after today'}
+    e = future[0]
+    entry = prev_trading_day(e, holidays)
+    if today == e:
+        return {'action': 'SETTLE', 'expiry': e.isoformat(), 'entryDay': entry.isoformat()}
+    if today == entry:
+        return {'action': 'ENTRY', 'expiry': e.isoformat(), 'entryDay': entry.isoformat()}
+    return {'action': 'WAIT', 'expiry': e.isoformat(), 'entryDay': entry.isoformat()}
+
+def chain_ids(chain_payload) -> dict:
+    out = {}
+    oc = (chain_payload or {}).get('oc') or {}
+    for key, v in oc.items():
+        try:
+            k = float(key)
+        except (TypeError, ValueError):
+            continue
+        row = {}
+        for side in ('ce', 'pe'):
+            leg = (v or {}).get(side) or {}
+            sid = leg.get('security_id')
+            if sid not in (None, ''):
+                row[side.upper()] = str(sid)
+        if row:
+            out[k] = row
+    return out
+
+def _bar_close(payload, day: str, hhmm: str):
+    p = payload if isinstance(payload, dict) else {}
+    ts, cl = (p.get('timestamp') or [], p.get('close') or [])
+    want = ist_to_epoch_ms('%sT%s' % (day, hhmm)) // 1000
+    best = None
+    for t, c in zip(ts, cl):
+        if t is not None and c is not None and (int(t) <= want) and (int(t) >= want - 900):
+            best = float(c)
+    return best
+
+def _closes(payload, day: str, start: str, end: str) -> list:
+    p = payload if isinstance(payload, dict) else {}
+    a = ist_to_epoch_ms('%sT%s' % (day, start)) // 1000
+    b = ist_to_epoch_ms('%sT%s' % (day, end)) // 1000
+    return [float(c) for t, c in zip(p.get('timestamp') or [], p.get('close') or []) if t is not None and c is not None and (a <= int(t) <= b)]
+
+class CondorPaper:
+
+    def __init__(self, client, log, lots: int, lot_size: int, delta: float=0.1, wing_pts: float=1000.0, entry_time: str='09:30', max_steps: int=40):
+        self.client, self.log = (client, log)
+        self.lots, self.lot_size = (int(lots), int(lot_size))
+        self.delta, self.wing, self.entry_time, self.max_steps = (float(delta), float(wing_pts), entry_time, max_steps)
+
+    @staticmethod
+    def plan_action(today: date, expiries, holidays=frozenset()) -> str:
+        return plan(today, expiries, holidays)['action']
+
+    def _option_close(self, sid: str, day: str):
+        r = self.client.intraday_candles(sid, OPT_SEG, OPT_INSTRUMENT, 1, day + ' 09:15:00', day + ' 09:45:00')
+        return _bar_close(r.payload, day, self.entry_time)
+
+    def rebuild_entry(self, expiry: str, entry_day: str, chain_payload) -> dict:
+        ids = chain_ids(chain_payload)
+        strikes = sorted(ids)
+        if not strikes:
+            raise ValueError('option chain has no strikes with security ids')
+        r = self.client.intraday_candles(INDEX_SCRIP, _bx_condor__INDEX_SEG, 'INDEX', 1, entry_day + ' 09:15:00', entry_day + ' 09:45:00')
+        spot = _bar_close(r.payload, entry_day, self.entry_time)
+        if spot is None:
+            raise ValueError('no index candle at %s on %s (holiday? add it to HOLIDAYS)' % (self.entry_time, entry_day))
+        atm = min(strikes, key=lambda k: abs(k - spot))
+        if 'CE' not in ids[atm] or 'PE' not in ids[atm]:
+            raise ValueError('ATM strike %s lacks a call or put id' % atm)
+        c0, p0 = (self._option_close(ids[atm]['CE'], entry_day), self._option_close(ids[atm]['PE'], entry_day))
+        if c0 is None or p0 is None:
+            raise ValueError('no 09:30 option candle at the ATM strike on %s' % entry_day)
+        F = atm + c0 - p0
+        now_ms = ist_to_epoch_ms('%sT%s' % (entry_day, self.entry_time)) + 60000
+        T = year_fraction_to_expiry(now_ms, expiry)
+        if not T > 0:
+            raise ValueError('entry is not before expiry')
+        prices = {}
+
+        def pick(side):
+            sign = 1 if side == 'CE' else -1
+            cands = [k for k in strikes if (k > atm if side == 'CE' else k < atm)]
+            cands.sort(key=lambda k: abs(k - atm))
+            for k in cands[:self.max_steps]:
+                if side not in ids[k]:
+                    continue
+                px = self._option_close(ids[k][side], entry_day)
+                if px is None or px <= 0:
+                    continue
+                iv = b76_iv(px, F, k, T, 0.0, side)
+                if iv is None or iv <= 0:
+                    continue
+                d = abs(b76_greeks(F, k, T, iv, 0.0, side)['delta'])
+                if d <= self.delta:
+                    prices[k, side] = px
+                    return (k, d)
+            raise ValueError('no %s strike with delta <= %.2f within %d strikes' % (side, self.delta, self.max_steps))
+        kc, dc = pick('CE')
+        kp, dp = pick('PE')
+        legs = [('SELL', 'CE', kc, dc), ('SELL', 'PE', kp, dp), ('BUY', 'CE', kc + self.wing, None), ('BUY', 'PE', kp - self.wing, None)]
+        out = []
+        for act, side, k, d in legs:
+            if (k, side) not in prices:
+                if k not in ids or side not in ids[k]:
+                    raise ValueError('protection strike %s %s is not in the chain' % (k, side))
+                px = self._option_close(ids[k][side], entry_day)
+                if px is None:
+                    raise ValueError('no 09:30 candle for %s %s' % (k, side))
+                prices[k, side] = px
+            out.append({'action': act, 'type': side, 'strike': k, 'price': round(prices[k, side], 2), 'delta': None if d is None else round(d, 4)})
+        credit = sum((l['price'] * (1 if l['action'] == 'SELL' else -1) for l in out))
+        if credit <= 0:
+            raise ValueError('net credit %.2f is not positive' % credit)
+        q = self.lots * self.lot_size
+        return {'expiry': expiry, 'entryDay': entry_day, 'entryTime': self.entry_time, 'spot': spot, 'forward': round(F, 2), 'legs': out, 'creditPts': round(credit, 2), 'breakEvens': [round(kp - credit, 2), round(kc + credit, 2)], 'lots': self.lots, 'lotSize': self.lot_size, 'quantityPerLeg': q, 'maxProfitRs': round(credit * q), 'maxLossRs': round((self.wing - credit) * q), 'estChargesRs': round(CHARGES_PER_LOT_RS * self.lots)}
+
+    def settle(self, entry: dict, day: str, final: bool) -> dict:
+        r = self.client.intraday_candles(INDEX_SCRIP, _bx_condor__INDEX_SEG, 'INDEX', 1, day + ' 09:15:00', day + ' 15:30:00')
+        xs = _closes(r.payload, day, '15:00', '15:29')
+        if not xs:
+            allc = _closes(r.payload, day, '09:15', '15:29')
+            if not allc:
+                raise ValueError('no index candles on %s' % day)
+            xs, final = (allc[-1:], False)
+        S = sum(xs) / len(xs)
+        value = 0.0
+        for l in entry['legs']:
+            intr = max(0.0, S - l['strike']) if l['type'] == 'CE' else max(0.0, l['strike'] - S)
+            value += intr * (1 if l['action'] == 'SELL' else -1)
+        pts = entry['creditPts'] - value
+        q = entry['quantityPerLeg']
+        net = (pts - SLIPPAGE_PTS) * q - CHARGES_PER_LOT_RS * entry['lots']
+        return {'status': 'FINAL' if final else 'PROVISIONAL', 'settleSpot': round(S, 2), 'spotBars': len(xs), 'expiryValuePts': round(value, 2), 'pnlPts': round(pts, 2), 'grossRs': round(pts * q), 'estNetRs': round(net), 'assumptions': 'settlement = average index close 15:00-15:29; net = gross - %g pts slippage - Rs %g per lot' % (SLIPPAGE_PTS, CHARGES_PER_LOT_RS)}
+
+    def run(self, today: date, now_ist: datetime, expiries, holidays=frozenset()) -> dict:
+        p = plan(today, expiries, holidays)
+        self.log('info', 'condor_plan', orders='NONE (paper)', **p)
+        if p['action'] not in ('ENTRY', 'SETTLE'):
+            return p
+        if p['action'] == 'ENTRY' and now_ist.strftime('%H:%M') <= self.entry_time:
+            self.log('info', 'condor_skip', reason='before the %s candle closed; run again after %s' % (self.entry_time, self.entry_time))
+            return p
+        try:
+            chain = self.client.option_chain(p['expiry'])
+            entry = self.rebuild_entry(p['expiry'], p['entryDay'], chain.payload)
+            self.log('info', 'condor_entry', paper=True, orders='NONE', **entry)
+            if p['action'] == 'SETTLE':
+                res = self.settle(entry, today.isoformat(), final=now_ist.strftime('%H:%M') >= '15:30')
+                self.log('info', 'condor_settle', paper=True, orders='NONE', expiry=p['expiry'], **res)
+                if res['status'] == 'PROVISIONAL':
+                    self.log('info', 'condor_note', note='provisional (market still open): run again after 15:30 IST for the final result')
+                p['result'] = res
+            p['entry'] = entry
+        except Exception as e:
+            self.log('warn', 'condor_skip', reason='%s: %s' % (type(e).__name__, e))
+        return p
+
+# ----------------------------------------------------------------------
 # module: parity/stage_a/s21Sep
 # ----------------------------------------------------------------------
 SELFTEST = {'note': 'MOCK DATA (Stage A s21Sep) - not market data', 'bodies': {'/optionchain/expirylist': {'status': 'success', 'data': ['2026-09-24', '2026-10-01', '2026-10-29']}, '/optionchain': {'status': 'success', 'data': {'last_price': 74667.55, 'oc': {'74500.000000': {'ce': {'security_id': 920745, 'last_price': 445.7, 'top_bid_price': 445, 'top_ask_price': 445.5, 'top_bid_quantity': 20, 'top_ask_quantity': 20, 'oi': 100000, 'previous_oi': 90000, 'volume': 50000}, 'pe': {'security_id': 930745, 'last_price': 287.3, 'top_bid_price': 286.7, 'top_ask_price': 287.35, 'top_bid_quantity': 20, 'top_ask_quantity': 20, 'oi': 100000, 'previous_oi': 110000, 'volume': 50000}}, '74600.000000': {'ce': {'security_id': 920746, 'last_price': 388.35, 'top_bid_price': 387.75, 'top_ask_price': 388.35, 'top_bid_quantity': 20, 'top_ask_quantity': 20, 'oi': 100000, 'previous_oi': 90000, 'volume': 50000}, 'pe': {'security_id': 930746, 'last_price': 329.75, 'top_bid_price': 329.35, 'top_ask_price': 330, 'top_bid_quantity': 20, 'top_ask_quantity': 20, 'oi': 100000, 'previous_oi': 110000, 'volume': 50000}}, '74700.000000': {'ce': {'security_id': 920747, 'last_price': 335, 'top_bid_price': 335, 'top_ask_price': 335.05, 'top_bid_quantity': 20, 'top_ask_quantity': 20, 'oi': 100000, 'previous_oi': 90000, 'volume': 50000}, 'pe': {'security_id': 930747, 'last_price': 376.75, 'top_bid_price': 376.3, 'top_ask_price': 376.9, 'top_bid_quantity': 20, 'top_ask_quantity': 20, 'oi': 100000, 'previous_oi': 110000, 'volume': 50000}}, '74800.000000': {'ce': {'security_id': 920748, 'last_price': 286.75, 'top_bid_price': 286.35, 'top_ask_price': 286.75, 'top_bid_quantity': 20, 'top_ask_quantity': 20, 'oi': 100000, 'previous_oi': 90000, 'volume': 50000}, 'pe': {'security_id': 930748, 'last_price': 428.5, 'top_bid_price': 428, 'top_ask_price': 428.55, 'top_bid_quantity': 20, 'top_ask_quantity': 20, 'oi': 100000, 'previous_oi': 110000, 'volume': 50000}}}}}, '/marketfeed/quote': {'status': 'success', 'data': {'BSE_FNO': {'844615': {'last_price': 74680, 'last_trade_time': '21/09/2026 10:33:50', 'ohlc': {'open': 74530, 'high': 74800, 'low': 74480, 'close': 74650}, 'volume': 50000, 'oi': 120000, 'depth': {'buy': [{'price': 74679.5, 'quantity': 20, 'orders': 1}, {'price': 74679, 'quantity': 40, 'orders': 2}, {'price': 74678.5, 'quantity': 60, 'orders': 3}, {'price': 74678, 'quantity': 80, 'orders': 4}, {'price': 74677.5, 'quantity': 100, 'orders': 5}], 'sell': [{'price': 74680.5, 'quantity': 20, 'orders': 1}, {'price': 74681, 'quantity': 40, 'orders': 2}, {'price': 74681.5, 'quantity': 60, 'orders': 3}, {'price': 74682, 'quantity': 80, 'orders': 4}, {'price': 74682.5, 'quantity': 100, 'orders': 5}]}}}}}, '/charts/intraday': {'status': 'success', 'data': {'timestamp': [1789962300, 1789962600, 1789962900, 1789963200, 1789963500, 1789963800, 1789964100, 1789964400, 1789964700, 1789965000, 1789965300, 1789965600, 1789965900, 1789966200, 1789966500, 1789966800], 'open': [74659.15, 74721.7, 74725, 74750, 74750.3, 74736.9, 74725, 74734.15, 74743.45, 74743.45, 74725.5, 74689.15, 74719.95, 74673.75, 74705, 74680], 'high': [74734.65, 74755, 74750, 74780, 74775, 74736.9, 74739.9, 74754.3, 74743.45, 74743.45, 74725.5, 74725, 74719.95, 74705, 74705, 74680], 'low': [74594.2, 74700, 74699.75, 74750, 74725.3, 74723.5, 74725, 74734.15, 74743.45, 74720, 74683.45, 74689.15, 74666.6, 74673.75, 74655.7, 74662.35], 'close': [74721.7, 74725, 74750, 74750.3, 74736.9, 74725, 74734.15, 74743.45, 74743.45, 74725.5, 74689.15, 74719.95, 74673.75, 74705, 74680, 74667.55], 'volume': [820, 280, 340, 600, 160, 80, 60, 100, 20, 40, 400, 60, 320, 20, 140, 40]}}}, 'receipts': {'/optionchain': 1789967036615, '/marketfeed/quote': 1789967036616, '/optionchain/expirylist': 1789967036615, '/charts/intraday': 1789967036615}, 'strikes': [74500, 74600, 74700, 74800], 'futuresSecurityId': '844615', 'futuresExpiry': '2026-09-24', 'clockUtc': '2026-09-21T05:03:56.615000+00:00', 'expectedTable': '| Strike | Type | LTP | Breakout Above |\n|---|---|---|---|\n| 74500 | CE | 445.50 | 478 |\n| 74500 | PE | 287.35 | WEAK_LEVEL |\n| 74600 | CE | 388.35 | 419 |\n| 74600 | PE | 330.00 | WEAK_LEVEL |\n| 74700 | CE | 335.05 | 363 |\n| 74700 | PE | 376.90 | WEAK_LEVEL |\n| 74800 | CE | 286.75 | 312 |\n| 74800 | PE | 428.55 | WEAK_LEVEL |'}
@@ -2654,7 +2830,7 @@ SELFTEST = {'note': 'MOCK DATA (Stage A s21Sep) - not market data', 'bodies': {'
 # ----------------------------------------------------------------------
 # ======================================================================
 # ============================== CONFIG ======================================
-MODE = "HISTORY"                  # "VALIDATE" | "CHECKS" | "PROFILE_CHECK" | "INSTRUMENTS" | "LIVE_CHECK" | "OBSERVE" | "HISTORY"
+MODE = "HISTORY"                  # "VALIDATE" | "CHECKS" | "PROFILE_CHECK" | "INSTRUMENTS" | "LIVE_CHECK" | "OBSERVE" | "CONDOR_PAPER" | "HISTORY"
 
 # Strikes shown in the refresh table. Explicit, because the ATM±2 rule is not
 # defined yet (PHASE4_PORT_PLAN P1). Each scan logs atmStrike to help you pick.
@@ -2690,6 +2866,13 @@ PAPER_TIME_STOP_MIN = 10          # RULES.md §6 time stop
 POLL_S = 5                        # seconds between fast read-only price polls (min 2)
 PAPER_VARIANTS = ["FIRST_TOUCH"]  # also: "CONFIRMED_CLOSE" (1-min close beyond), "FILTERED" (filter experiment), "FRESH_LEVEL" (touches < 3 only), "FRESH_EXIT" (FRESH_LEVEL + exit on a 1-min close back), "FRESH_SL8" (FRESH_LEVEL, stop -8), "FRESH_EXTREME" (FRESH_LEVEL at a new day high/low), "FRESH_CALM" (FRESH_EXTREME, no Thursday, calm 3-min approach)
 PAPER_AFTER_EXIT_S = 600         # FRESH_LEVEL: keep recording the option bid 10 min after each exit (recording only)
+# PAPER iron condor (NO orders; user, 28 Oct 2026): sell the delta<=CONDOR_DELTA call and put at the 09:30 candle
+# of the day before expiry, buy protection CONDOR_WING_PTS further out, hold to expiry. Logged only.
+CONDOR_PAPER = False
+CONDOR_LOTS = 1                   # paper size, e.g. 13 for the Rs 20 lakh plan
+CONDOR_LOT_SIZE = None            # SENSEX lot size you verified (never guessed); required when CONDOR_PAPER is on
+CONDOR_DELTA = 0.10
+CONDOR_WING_PTS = 1000
 HISTORY_DAYS = 365                # HISTORY: calendar days back from yesterday
 HISTORY_SKIP_DAYS = 730           # HISTORY: end the range this many calendar days before yesterday (older years)
 HISTORY_WINDOW_DAYS = 1           # HISTORY: calendar days per candles request (1-day retry on a refused window)
@@ -2808,7 +2991,52 @@ def _config_errors():
         errs.append('INTERVAL_S must be >= 10')
     if PAPER_ENABLED and POLL_S < 2:
         errs.append('POLL_S must be >= 2 (quote endpoint limit is 1 request per second)')
+    return errs + _condor_errors()
+
+def _condor_errors():
+    if not CONDOR_PAPER and MODE != 'CONDOR_PAPER':
+        return []
+    errs = []
+    if not isinstance(CONDOR_LOT_SIZE, int) or CONDOR_LOT_SIZE <= 0:
+        errs.append('CONDOR_LOT_SIZE must be the verified SENSEX lot size (a positive whole number)')
+    if not isinstance(CONDOR_LOTS, int) or CONDOR_LOTS < 1:
+        errs.append('CONDOR_LOTS must be 1 or more')
+    if not 0 < float(CONDOR_DELTA) < 0.5 or float(CONDOR_WING_PTS) <= 0:
+        errs.append('CONDOR_DELTA must be between 0 and 0.5 and CONDOR_WING_PTS above 0')
     return errs
+
+def _condor(client, log):
+    return CondorPaper(client, log, CONDOR_LOTS, CONDOR_LOT_SIZE, CONDOR_DELTA, CONDOR_WING_PTS)
+
+def _expiries(client, log):
+    try:
+        r = client.expiry_list()
+        return [str(x) for x in r.payload or []]
+    except DhanClientError as e:
+        log('warn', 'condor_skip', reason='expiry list unavailable: %s' % type(e).__name__)
+        return []
+
+def condor_paper(log, redactor) -> int:
+    errs = _condor_errors()
+    if errs:
+        log('error', 'config_blocked', errors=errs)
+        return EXIT_CONFIG
+    creds = _managed_credentials(log, redactor)
+    if creds is None:
+        return EXIT_AUTH
+    client = DhanClient(creds, transport=UrllibTransport(), redactor=redactor, logger=log)
+    tool = _condor(client, log)
+    exp = _expiries(client, log)
+    now = _now().astimezone(IST)
+    waited = 0
+    while tool.plan_action(now.date(), exp, _holidays()) == 'ENTRY' and now.strftime('%H:%M') <= tool.entry_time and (waited < WAIT_FOR_OPEN_MIN * 60):
+        if waited % 600 == 0:
+            log('info', 'condor_waiting', until='after %s IST' % tool.entry_time, istNow=now.isoformat(timespec='seconds'))
+        _sleep(30)
+        waited += 30
+        now = _now().astimezone(IST)
+    tool.run(now.date(), now, exp, _holidays())
+    return EXIT_OK
 
 def _emit_record(scanner_rec, recorder, cfg, clock_utc, log_line):
     fut = scanner_rec.get('futures') or {}
@@ -2994,14 +3222,26 @@ def live(log, redactor, loop: bool) -> int:
     def line(text):
         sys.stdout.write(redactor(text) + '\n')
         sys.stdout.flush()
+    condor = {'tool': _condor(client, log) if CONDOR_PAPER and loop else None, 'entryDone': False}
 
     def on_record(rec):
+        c = condor['tool']
+        if c is not None and (not condor['entryDone']):
+            now = _now().astimezone(IST)
+            if now.strftime('%H:%M') > c.entry_time:
+                condor['entryDone'] = True
+                exp = _expiries(client, log)
+                if exp and c.run(now.date(), now, exp, _holidays()).get('action') == 'SETTLE':
+                    condor['settleExp'] = exp
         n = rec['scan']
         if RECORD_EVERY_N and rec['status'] != 'SKIPPED' and (rec['status'] != 'OK' or n == 1 or n % RECORD_EVERY_N == 0):
             _emit_record(rec, recorder, cfg, rec['clockUtc'], line)
         else:
             recorder.take()
     reason = scanner.run_loop(on_record=on_record)
+    if condor.get('settleExp'):
+        now = _now().astimezone(IST)
+        condor['tool'].run(now.date(), now, condor['settleExp'], _holidays())
     h = scanner.state.history
     log('info', 'session_summary', stopReason=reason, scans=len(h), statusCounts={s: h.count(s) for s in sorted(set(h))}, ordersPlaced=0, strategy='NO_SIGNAL (direction thresholds not configured)')
     return EXIT_AUTH if reason in ('AUTH_FAILED', 'PLAN_MISSING') else EXIT_OK
@@ -3022,9 +3262,11 @@ def main() -> int:
         return instruments(log)
     if MODE in ('LIVE_CHECK', 'OBSERVE'):
         return live(log, redactor, loop=MODE == 'OBSERVE')
+    if MODE == 'CONDOR_PAPER':
+        return condor_paper(log, redactor)
     if MODE == 'HISTORY':
         return history(log, redactor, lambda text: (sys.stdout.write(redactor(text) + '\n'), sys.stdout.flush()))
-    log('error', 'config_blocked', errors=['MODE must be VALIDATE, CHECKS, PROFILE_CHECK, INSTRUMENTS, LIVE_CHECK, OBSERVE or HISTORY'])
+    log('error', 'config_blocked', errors=['MODE must be VALIDATE, CHECKS, PROFILE_CHECK, INSTRUMENTS, LIVE_CHECK, OBSERVE, CONDOR_PAPER or HISTORY'])
     return EXIT_CONFIG
 if __name__ == '__main__':
     main()

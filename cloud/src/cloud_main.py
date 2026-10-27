@@ -18,6 +18,10 @@ Edit ONLY the CONFIG block below, then run in this order:
   1d. MODE = "CHECKS"         PROFILE_CHECK then INSTRUMENTS in one run.
   2. MODE = "LIVE_CHECK"  ONE live read-only scan (4 market-data calls).
   3. MODE = "OBSERVE"     scan every INTERVAL_S seconds until STOP_TIME IST.
+  3b. MODE = "CONDOR_PAPER"  PAPER iron condor only (NO orders): on the day before the
+                          weekly expiry it logs the 4 legs from the 09:30 candles; on expiry
+                          day it rebuilds them and logs the result. OBSERVE does the same when
+                          CONDOR_PAPER = True.
   4. MODE = "HISTORY"     one-time read-only download of past SENSEX 1-min index
                           candles, or (HISTORY_KIND = "OPTIONS") expired weekly SENSEX
                           options on a rolling ATM basis, logged as "BX|HIST|" records.
@@ -28,7 +32,7 @@ tools/decode_cloud_log.py.
 """
 
 # ============================== CONFIG ======================================
-MODE = "VALIDATE"                 # "VALIDATE" | "CHECKS" | "PROFILE_CHECK" | "INSTRUMENTS" | "LIVE_CHECK" | "OBSERVE" | "HISTORY"
+MODE = "VALIDATE"                 # "VALIDATE" | "CHECKS" | "PROFILE_CHECK" | "INSTRUMENTS" | "LIVE_CHECK" | "OBSERVE" | "CONDOR_PAPER" | "HISTORY"
 
 # Strikes shown in the refresh table. Explicit, because the ATM±2 rule is not
 # defined yet (PHASE4_PORT_PLAN P1). Each scan logs atmStrike to help you pick.
@@ -64,6 +68,13 @@ PAPER_TIME_STOP_MIN = 10          # RULES.md §6 time stop
 POLL_S = 5                        # seconds between fast read-only price polls (min 2)
 PAPER_VARIANTS = ["FIRST_TOUCH"]  # also: "CONFIRMED_CLOSE" (1-min close beyond), "FILTERED" (filter experiment), "FRESH_LEVEL" (touches < 3 only), "FRESH_EXIT" (FRESH_LEVEL + exit on a 1-min close back), "FRESH_SL8" (FRESH_LEVEL, stop -8), "FRESH_EXTREME" (FRESH_LEVEL at a new day high/low), "FRESH_CALM" (FRESH_EXTREME, no Thursday, calm 3-min approach)
 PAPER_AFTER_EXIT_S = 600         # FRESH_LEVEL: keep recording the option bid 10 min after each exit (recording only)
+# PAPER iron condor (NO orders; user, 28 Oct 2026): sell the delta<=CONDOR_DELTA call and put at the 09:30 candle
+# of the day before expiry, buy protection CONDOR_WING_PTS further out, hold to expiry. Logged only.
+CONDOR_PAPER = False
+CONDOR_LOTS = 1                   # paper size, e.g. 13 for the Rs 20 lakh plan
+CONDOR_LOT_SIZE = None            # SENSEX lot size you verified (never guessed); required when CONDOR_PAPER is on
+CONDOR_DELTA = 0.10
+CONDOR_WING_PTS = 1000
 HISTORY_DAYS = 365                # HISTORY: calendar days back from yesterday
 HISTORY_SKIP_DAYS = 0             # HISTORY: end the range this many calendar days before yesterday (older years)
 HISTORY_WINDOW_DAYS = 5           # HISTORY: calendar days per candles request (1-day retry on a refused window)
@@ -92,6 +103,7 @@ from datetime import date, datetime, time as dtime, timedelta, timezone
 from sensex.dhan_client import (AuthError, Credentials, DhanClient, DhanClientError, PlanError, Redactor, READ_ONLY_ENDPOINTS,
                                 RawResponse, UrllibTransport)
 from sensex.fastpoll import FastPoller
+from sensex.condor import CondorPaper
 from sensex.paper import PaperConfig, PaperTracker, scan_context
 from sensex.scan import in_no_trade_window, run_refresh, selected_levels
 from sensex.recording import MemoryRecorder
@@ -223,7 +235,59 @@ def _config_errors():
         errs.append("INTERVAL_S must be >= 10")
     if PAPER_ENABLED and POLL_S < 2:
         errs.append("POLL_S must be >= 2 (quote endpoint limit is 1 request per second)")
+    return errs + _condor_errors()
+
+
+def _condor_errors():
+    if not CONDOR_PAPER and MODE != "CONDOR_PAPER":
+        return []
+    errs = []
+    if not isinstance(CONDOR_LOT_SIZE, int) or CONDOR_LOT_SIZE <= 0:
+        errs.append("CONDOR_LOT_SIZE must be the verified SENSEX lot size (a positive whole number)")
+    if not isinstance(CONDOR_LOTS, int) or CONDOR_LOTS < 1:
+        errs.append("CONDOR_LOTS must be 1 or more")
+    if not 0 < float(CONDOR_DELTA) < 0.5 or float(CONDOR_WING_PTS) <= 0:
+        errs.append("CONDOR_DELTA must be between 0 and 0.5 and CONDOR_WING_PTS above 0")
     return errs
+
+
+def _condor(client, log):
+    return CondorPaper(client, log, CONDOR_LOTS, CONDOR_LOT_SIZE, CONDOR_DELTA, CONDOR_WING_PTS)
+
+
+def _expiries(client, log):
+    try:
+        r = client.expiry_list()
+        return [str(x) for x in (r.payload or [])]
+    except DhanClientError as e:
+        log("warn", "condor_skip", reason="expiry list unavailable: %s" % type(e).__name__)
+        return []
+
+
+def condor_paper(log, redactor) -> int:
+    """CONDOR_PAPER: one paper condor step for today (entry, result or nothing). Read-only, NO orders."""
+    errs = _condor_errors()
+    if errs:
+        log("error", "config_blocked", errors=errs)
+        return EXIT_CONFIG
+    creds = _managed_credentials(log, redactor)
+    if creds is None:
+        return EXIT_AUTH
+    client = DhanClient(creds, transport=UrllibTransport(), redactor=redactor, logger=log)
+    tool = _condor(client, log)
+    exp = _expiries(client, log)
+    now = _now().astimezone(IST)
+    waited = 0
+    while tool.plan_action(now.date(), exp, _holidays()) == "ENTRY" and now.strftime("%H:%M") <= tool.entry_time \
+            and waited < WAIT_FOR_OPEN_MIN * 60:
+        if waited % 600 == 0:
+            log("info", "condor_waiting", until="after %s IST" % tool.entry_time,
+                istNow=now.isoformat(timespec="seconds"))
+        _sleep(30)
+        waited += 30
+        now = _now().astimezone(IST)
+    tool.run(now.date(), now, exp, _holidays())
+    return EXIT_OK
 
 
 def _emit_record(scanner_rec, recorder, cfg, clock_utc, log_line):
@@ -467,7 +531,17 @@ def live(log, redactor, loop: bool) -> int:
         sys.stdout.write(redactor(text) + "\n")
         sys.stdout.flush()
 
+    condor = {"tool": _condor(client, log) if CONDOR_PAPER and loop else None, "entryDone": False}
+
     def on_record(rec):
+        c = condor["tool"]
+        if c is not None and not condor["entryDone"]:
+            now = _now().astimezone(IST)
+            if now.strftime("%H:%M") > c.entry_time:
+                condor["entryDone"] = True
+                exp = _expiries(client, log)
+                if exp and c.run(now.date(), now, exp, _holidays()).get("action") == "SETTLE":
+                    condor["settleExp"] = exp           # result logged once more after the loop ends
         n = rec["scan"]
         if RECORD_EVERY_N and rec["status"] != "SKIPPED" and (
                 rec["status"] != "OK" or n == 1 or n % RECORD_EVERY_N == 0):
@@ -476,6 +550,9 @@ def live(log, redactor, loop: bool) -> int:
             recorder.take()
 
     reason = scanner.run_loop(on_record=on_record)
+    if condor.get("settleExp"):
+        now = _now().astimezone(IST)
+        condor["tool"].run(now.date(), now, condor["settleExp"], _holidays())
     h = scanner.state.history
     log("info", "session_summary", stopReason=reason, scans=len(h),
         statusCounts={s: h.count(s) for s in sorted(set(h))}, ordersPlaced=0,
@@ -499,10 +576,12 @@ def main() -> int:
         return instruments(log)
     if MODE in ("LIVE_CHECK", "OBSERVE"):
         return live(log, redactor, loop=MODE == "OBSERVE")
+    if MODE == "CONDOR_PAPER":
+        return condor_paper(log, redactor)
     if MODE == "HISTORY":
         return history(log, redactor, lambda text: (sys.stdout.write(redactor(text) + "\n"), sys.stdout.flush()))
     log("error", "config_blocked", errors=["MODE must be VALIDATE, CHECKS, PROFILE_CHECK, INSTRUMENTS, LIVE_CHECK, "
-                                           "OBSERVE or HISTORY"])
+                                           "OBSERVE, CONDOR_PAPER or HISTORY"])
     return EXIT_CONFIG
 
 
