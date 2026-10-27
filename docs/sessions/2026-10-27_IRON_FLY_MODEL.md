@@ -30,3 +30,19 @@ for the wing strikes is not downloaded yet, so treat these numbers as approximat
 - Next step: download the real wing prices with `cloud/dist/history_wings/main.py` (rolling ATM-10 and ATM+10,
   nearest weekly, 1-day windows, read-only) and re-run on real premiums. Any survivor still needs forward paper
   testing.
+
+## Detail (tools/model_iron_fly_detail.py, wing 1,000, entry 09:30, stop +25%, take profit 30%)
+
+| Day | Trades | Win | Points | Net 1 lot |
+|---|---|---|---|---|
+| Mon | 51 | 45.1% | -377 | Rs -20,285 |
+| Tue | 48 | 68.8% | +611 | Rs +212 |
+| Wed | 51 | 62.7% | +30 | Rs -12,159 |
+| Thu | 48 | 66.7% | +1,183 | Rs +11,665 |
+| Fri | 48 | 43.8% | -256 | Rs -17,124 |
+
+- Thursday at 10 lots (cost assumed Rs 800 per trade): full year Rs +1,98,249; last 6 months (25 trades) Rs +1,02,168.
+  The worst month was Jan 2026 (Rs -71,291) and the best was Jul 2026 (Rs +90,818); Oct 2026 so far is Rs -46,973.
+- Thursday is fragile: entering at 10:00 instead of 09:30 gives Rs -4,907, and 11:00 gives Rs -17,680 (1 lot).
+- On expiry day the far wings are nearly worthless in the flat-vol model, so this is close to a short straddle. Real
+  wing prices (skew) are needed before trusting it.
