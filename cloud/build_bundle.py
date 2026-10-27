@@ -324,6 +324,12 @@ HISTORY_OPTIONS = {"MODE": '"HISTORY"', "HISTORY_KIND": '"OPTIONS"', "HISTORY_DA
 # because 5-day windows were refused (DH-905) in the ATM run (user, 27 Oct 2026: test the hedged iron fly).
 HISTORY_WINGS = {"MODE": '"HISTORY"', "HISTORY_KIND": '"OPTIONS"', "HISTORY_DAYS": "365", "HISTORY_WINDOW_DAYS": "1",
                  "HISTORY_OPTION_STRIKES": '["ATM-10", "ATM+10"]', "HISTORY_OPTION_EXPIRY_CODES": "[1]"}
+# Older years for the strangle test (user, 27 Oct 2026: "test for last 5 years"): ATM and +-10, nearest weekly, in two
+# 2-year files so each log stays a manageable size. A: 2 years ending one year before yesterday; B: the 2 years before.
+_OLDER = {"MODE": '"HISTORY"', "HISTORY_KIND": '"OPTIONS"', "HISTORY_DAYS": "730", "HISTORY_WINDOW_DAYS": "1",
+          "HISTORY_OPTION_STRIKES": '["ATM", "ATM-10", "ATM+10"]', "HISTORY_OPTION_EXPIRY_CODES": "[1]"}
+HISTORY_OLDER_A = dict(_OLDER, HISTORY_SKIP_DAYS="365")
+HISTORY_OLDER_B = dict(_OLDER, HISTORY_SKIP_DAYS="1095")
 
 
 def with_config(text: str, values: dict) -> str:
@@ -346,6 +352,8 @@ def build() -> dict:
     files["history/main.py"] = with_config(files["single/sensex_observer.py"], HISTORY)
     files["history_options/main.py"] = with_config(files["single/sensex_observer.py"], HISTORY_OPTIONS)
     files["history_wings/main.py"] = with_config(files["single/sensex_observer.py"], HISTORY_WINGS)
+    files["history_older_a/main.py"] = with_config(files["single/sensex_observer.py"], HISTORY_OLDER_A)
+    files["history_older_b/main.py"] = with_config(files["single/sensex_observer.py"], HISTORY_OLDER_B)
     return files
 
 

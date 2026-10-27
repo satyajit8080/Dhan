@@ -2691,6 +2691,7 @@ POLL_S = 5                        # seconds between fast read-only price polls (
 PAPER_VARIANTS = ["FIRST_TOUCH"]  # also: "CONFIRMED_CLOSE" (1-min close beyond), "FILTERED" (filter experiment), "FRESH_LEVEL" (touches < 3 only), "FRESH_EXIT" (FRESH_LEVEL + exit on a 1-min close back), "FRESH_SL8" (FRESH_LEVEL, stop -8), "FRESH_EXTREME" (FRESH_LEVEL at a new day high/low), "FRESH_CALM" (FRESH_EXTREME, no Thursday, calm 3-min approach)
 PAPER_AFTER_EXIT_S = 600         # FRESH_LEVEL: keep recording the option bid 10 min after each exit (recording only)
 HISTORY_DAYS = 365                # HISTORY: calendar days back from yesterday
+HISTORY_SKIP_DAYS = 0             # HISTORY: end the range this many calendar days before yesterday (older years)
 HISTORY_WINDOW_DAYS = 1           # HISTORY: calendar days per candles request (1-day retry on a refused window)
 HISTORY_KIND = "OPTIONS"          # HISTORY: "INDEX" (SENSEX 1-min index) | "OPTIONS" (expired SENSEX options, 1-min)
 HISTORY_OPTION_STRIKES = ["ATM-10", "ATM+10"]  # OPTIONS: strikes relative to spot, e.g. ["ATM-1", "ATM", "ATM+1"]
@@ -2877,7 +2878,7 @@ def history(log, redactor, log_line) -> int:
     if creds is None:
         return EXIT_AUTH
     client = DhanClient(creds, transport=UrllibTransport(), redactor=redactor, logger=log)
-    end = _now().astimezone(IST).date() - timedelta(days=1)
+    end = _now().astimezone(IST).date() - timedelta(days=1 + int(HISTORY_SKIP_DAYS))
     start = end - timedelta(days=int(HISTORY_DAYS) - 1)
     step = max(1, int(HISTORY_WINDOW_DAYS))
     if HISTORY_KIND == 'OPTIONS':

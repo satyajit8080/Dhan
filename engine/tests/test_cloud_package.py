@@ -562,6 +562,31 @@ class EndToEnd(unittest.TestCase):
         self.assertIn("OPT_1_ATM+10_CALL_2026-10-26_2026-10-26", hist)
         self.assertNotIn(self.token, text)
 
+    def test_history_older_files_cover_earlier_years_read_only(self):
+        for name, skip in (("history_older_a", 365), ("history_older_b", 1095)):
+            spec = importlib.util.spec_from_file_location("bx_%s_under_test" % name, DIST / name / "main.py")
+            m = importlib.util.module_from_spec(spec)
+            sys.modules[spec.name] = m
+            spec.loader.exec_module(m)
+            _loaded["history"] = m
+            self.assertEqual((m.HISTORY_KIND, m.HISTORY_OPTION_STRIKES, m.HISTORY_OPTION_EXPIRY_CODES, m.HISTORY_DAYS,
+                              m.HISTORY_SKIP_DAYS), ("OPTIONS", ["ATM", "ATM-10", "ATM+10"], [1], 730, skip))
+            leg = {"timestamp": [1792986360], "open": [20.0], "close": [21.0], "spot": [73000.0], "strike": [74000.0]}
+            body = json.dumps({"data": {"ce": leg, "pe": leg}}).encode()
+            start = datetime(2026, 10, 27, 3, 30, tzinfo=timezone.utc)
+            code, text, t = run_main(m, mode="HISTORY", env=self.env, clock_start=start,
+                                     cfg={"HISTORY_DAYS": 1, "RECORD_CHUNK": 400},
+                                     script={"/charts/rollingoption": [(200, body)] * 6})
+            self.assertEqual(code, 0, text[-1500:])
+            self.assertEqual({p for _, p in t.calls}, {"/charts/rollingoption"})
+            ev = [json.loads(l[3:]) for l in text.splitlines() if l.startswith("BX|{")]
+            first = [e for e in ev if e["event"] == "history_start"][0]
+            want = (datetime(2026, 10, 26) - timedelta(days=skip)).date().isoformat()
+            self.assertEqual((first["fromDate"], first["toDate"]), (want, want))
+            done = [e for e in ev if e["event"] == "history_done"][0]
+            self.assertEqual((done["windows"], done["orders"]), (6, "NONE"))
+            self.assertNotIn(self.token, text)
+
     def test_everyday_file_exits_quietly_on_a_weekend(self):
         sat = datetime(2026, 10, 17, 3, 30, tzinfo=timezone.utc)
         code, text, t = run_main(load_everyday(), mode="OBSERVE", env=self.env, clock_start=sat, cfg={"STRIKES": []})
