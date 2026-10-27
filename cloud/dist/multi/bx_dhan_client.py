@@ -48,6 +48,7 @@ READ_ONLY_ENDPOINTS = {
     ("POST", "/marketfeed/ohlc"): "quote",
     ("POST", "/charts/intraday"): "data",
     ("POST", "/charts/historical"): "data",
+    ("POST", "/charts/rollingoption"): "data",       # expired options, 1-min (user, 27 Oct 2026: back-testing)
     ("GET", "/profile"): "nontrading",
 }
 
@@ -402,6 +403,25 @@ class DhanClient:
     def profile(self) -> DhanResponse:
         """Read-only token/plan check (tokenValidity, dataPlan, dataValidity)."""
         return self.request("GET", "/profile", None, accept_bare=lambda p: isinstance(p, dict))
+
+    def rolling_option(self, security_id: str, segment: str, instrument: str, expiry_flag: str, expiry_code: int,
+                       strike: str, option_type: str, required: list, from_date: str, to_date: str,
+                       interval: int = 1) -> DhanResponse:
+        """Expired options on a rolling basis (strike relative to spot, e.g. ATM, ATM+1). Payload keys as in
+        DhanHQ-py v2.3.0 _historical_data.expired_options_data."""
+        if interval not in (1, 5, 15, 25, 60):
+            raise RequestRejectedError("interval must be 1, 5, 15, 25 or 60")
+        if expiry_flag not in ("WEEK", "MONTH") or option_type not in ("CALL", "PUT"):
+            raise RequestRejectedError("expiry_flag must be WEEK/MONTH and option_type CALL/PUT")
+        bad = [f for f in required if f not in ("open", "high", "low", "close", "iv", "volume", "strike", "oi", "spot")]
+        if bad:
+            raise RequestRejectedError("unknown required fields %s" % bad)
+        return self.request("POST", "/charts/rollingoption",
+                            {"securityId": str(security_id), "exchangeSegment": segment, "instrument": instrument,
+                             "expiryFlag": expiry_flag, "expiryCode": int(expiry_code), "strike": strike,
+                             "drvOptionType": option_type, "requiredData": list(required), "fromDate": from_date,
+                             "toDate": to_date, "interval": interval},
+                            accept_bare=lambda p: isinstance(p, dict) and ("ce" in p or "pe" in p))
 
     def daily_candles(self, security_id: str, segment: str, instrument: str, from_date: str, to_date: str,
                       expiry_code: int = 0, oi: bool = False) -> DhanResponse:

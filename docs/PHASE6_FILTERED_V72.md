@@ -87,3 +87,12 @@ session range is likewise computed from 09:16 onward (Dhan supplies no 09:15 1-m
   crossing minute, from the tracker's own 1-min polled closes, ≤ 15 pts in the trade direction; missing closes reject).
 - Source: `docs/sessions/2026-10-27_WIN_RATE_70_RESEARCH.md` (≈ 70 % in both halves of the 1-year index back-test,
   slightly negative with 4-pt stop slippage). Paper only; existing variants unchanged; RULES.md unchanged.
+
+## v8.3 — expired-options history (user, 27 Oct 2026)
+- Allow-list gains ONE read-only data endpoint: `POST /charts/rollingoption` (Dhan "expired options data", payload keys
+  as in DhanHQ-py 2.3.0 `expired_options_data`; confirmed from the SDK source, not guessed). All order/position paths
+  remain refused; `DhanClient.rolling_option` validates interval, expiry flag, CALL/PUT and fields.
+- New one-time file `cloud/dist/history_options/main.py` (MODE HISTORY, HISTORY_KIND "OPTIONS"): 365 days of weekly
+  SENSEX options (BSE_FNO, OPTIDX, underlying 51), rolling ATM CALL and PUT, expiry numbers 0 and 1 (both logged; which
+  one is the nearest weekly is checked from the data), 1-min open/high/low/close/OI/spot/strike, 5 days per request
+  with 1-day retry. Records `BX|HIST|OPT_<n>_<strike>_<CALL|PUT>_<from>_<to>`.

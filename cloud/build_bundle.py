@@ -318,6 +318,8 @@ EVERYDAY = {
 
 # One-time, read-only download of past SENSEX 1-min index candles (user, 27 Oct 2026: back-test FRESH_EXTREME).
 HISTORY = {"MODE": '"HISTORY"', "HISTORY_DAYS": "365", "HISTORY_WINDOW_DAYS": "5"}
+# Expired SENSEX options, rolling ATM, both expiry codes (user, 27 Oct 2026: back-test on real option prices).
+HISTORY_OPTIONS = {"MODE": '"HISTORY"', "HISTORY_KIND": '"OPTIONS"', "HISTORY_DAYS": "365", "HISTORY_WINDOW_DAYS": "5"}
 
 
 def with_config(text: str, values: dict) -> str:
@@ -338,6 +340,7 @@ def build() -> dict:
     files["single/sensex_observer.py"] = build_single()
     files["everyday/main.py"] = with_config(files["single/sensex_observer.py"], EVERYDAY)
     files["history/main.py"] = with_config(files["single/sensex_observer.py"], HISTORY)
+    files["history_options/main.py"] = with_config(files["single/sensex_observer.py"], HISTORY_OPTIONS)
     return files
 
 

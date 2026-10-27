@@ -49,7 +49,7 @@ class AllowList(unittest.TestCase):
                              ("POST", "/pnlExit"), ("POST", "/positions/convert"), ("POST", "/ip/setIP"),
                              ("PUT", "/ip/modifyIP"), ("GET", "/RenewToken"), ("POST", "/edis/form"),
                              ("POST", "/margincalculator"), ("GET", "/fundlimit"), ("GET", "/positions"),
-                             ("POST", "/charts/rollingoption"), ("DELETE", "/optionchain"), ("GET", "/optionchain")]:
+                             ("GET", "/charts/rollingoption"), ("DELETE", "/optionchain"), ("GET", "/optionchain")]:
             with self.assertRaises(ForbiddenEndpointError, msg=path):
                 c.request(method, path, {})
         self.assertEqual(t.calls, [])
@@ -63,7 +63,8 @@ class AllowList(unittest.TestCase):
     def test_only_read_only_methods_exist(self):
         public = {n for n in dir(DhanClient) if not n.startswith("_")}
         self.assertEqual(public - {"assert_read_only", "request"},
-                         {"expiry_list", "option_chain", "quote", "intraday_candles", "daily_candles", "profile"})
+                         {"expiry_list", "option_chain", "quote", "intraday_candles", "daily_candles", "profile",
+                          "rolling_option"})
 
 
 class RequestShapes(unittest.TestCase):
@@ -72,7 +73,8 @@ class RequestShapes(unittest.TestCase):
     def setUp(self):
         ok = {"status": "success", "data": {"oc": {}}}
         self.c, self.t, _, _ = make(bodies={p: ok for p in ["/optionchain", "/optionchain/expirylist", "/charts/intraday",
-                                                            "/charts/historical", "/marketfeed/quote", "/profile"]})
+                                                            "/charts/historical", "/marketfeed/quote", "/profile",
+                                                            "/charts/rollingoption"]})
 
     def test_shapes_and_headers(self):
         self.c.option_chain("2026-09-24")
@@ -95,6 +97,24 @@ class RequestShapes(unittest.TestCase):
             self.assertEqual(call["headers"]["client-id"], CID)
             self.assertEqual(call["method"], "POST")
             self.assertEqual(call["timeout"], 15.0)
+
+    def test_rolling_option_shape_and_guards(self):
+        self.c.rolling_option("51", "BSE_FNO", "OPTIDX", "WEEK", 1, "ATM", "CALL", ["open", "close", "spot"],
+                              "2026-01-01", "2026-01-05")
+        self.assertEqual((self.t.calls[-1]["method"], self.t.calls[-1]["path"].split("/v2")[-1]),
+                         ("POST", "/charts/rollingoption"))
+        self.assertEqual(self.t.calls[-1]["body"], {
+            "securityId": "51", "exchangeSegment": "BSE_FNO", "instrument": "OPTIDX", "expiryFlag": "WEEK",
+            "expiryCode": 1, "strike": "ATM", "drvOptionType": "CALL", "requiredData": ["open", "close", "spot"],
+            "fromDate": "2026-01-01", "toDate": "2026-01-05", "interval": 1})
+        n = len(self.t.calls)
+        for kw in ({"interval": 3}, {"option_type": "CE"}, {"expiry_flag": "DAY"}, {"required": ["greeks"]}):
+            args = dict(security_id="51", segment="BSE_FNO", instrument="OPTIDX", expiry_flag="WEEK", expiry_code=1,
+                        strike="ATM", option_type="CALL", required=["open"], from_date="a", to_date="b")
+            args.update(kw)
+            with self.assertRaises(RequestRejectedError, msg=kw):
+                self.c.rolling_option(**args)
+        self.assertEqual(len(self.t.calls), n)
 
     def test_profile_is_get_with_sdk_header(self):
         self.c.profile()

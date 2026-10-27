@@ -457,7 +457,7 @@ class EndToEnd(unittest.TestCase):
             self.assertIn("### PAPER trades [%s]" % v, report)
         self.assertIn("### FILTERED diagnostics", report)
         self.assertIn("| dayTrend | 0 | 0 | 0 | 0 | 1 |", report)
-        self.assertEqual([e for e in ev if e["event"] == "runtime"][0]["version"], "8.2")
+        self.assertEqual([e for e in ev if e["event"] == "runtime"][0]["version"], "8.3")
         self.assertNotIn(self.token, text)
 
     def test_everyday_file_self_test_checks_filtered_level_identity(self):
@@ -504,6 +504,35 @@ class EndToEnd(unittest.TestCase):
         self.assertEqual(sorted(hist)[0], "2026-10-15_2026-10-19")
         self.assertEqual(len(hist), 7)
         self.assertIn("timestamp", hist["2026-10-15_2026-10-19"]["payload"])
+        self.assertNotIn(self.token, text)
+
+    def test_history_options_file_downloads_rolling_atm_options_read_only(self):
+        spec = importlib.util.spec_from_file_location("bx_history_opt_under_test", DIST / "history_options" / "main.py")
+        m = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = m
+        spec.loader.exec_module(m)
+        _loaded["history"] = m
+        self.assertEqual((m.MODE, m.HISTORY_KIND, m.HISTORY_OPTION_STRIKES, m.HISTORY_OPTION_EXPIRY_CODES),
+                         ("HISTORY", "OPTIONS", ["ATM"], [0, 1]))
+        leg = {"timestamp": [1792986360, 1792986420], "open": [100.0, 101.0], "close": [101.0, 102.0],
+               "spot": [73000.0, 73010.0], "strike": [73000.0, 73000.0]}
+        body = json.dumps({"data": {"ce": leg, "pe": leg}}).encode()
+        start = datetime(2026, 10, 27, 3, 30, tzinfo=timezone.utc)
+        code, text, t = run_main(m, mode="HISTORY", env=self.env, clock_start=start,
+                                 cfg={"HISTORY_DAYS": 6, "RECORD_CHUNK": 400},
+                                 script={"/charts/rollingoption": [(200, body)] * 8})
+        self.assertEqual(code, 0, text[-1500:])
+        self.assertEqual({p for _, p in t.calls}, {"/charts/rollingoption"})
+        ev = [json.loads(l[3:]) for l in text.splitlines() if l.startswith("BX|{")]
+        wins = [(tuple(e["series"]), e["fromDate"], e["bars"]) for e in ev if e["event"] == "history_window"]
+        self.assertEqual(len(wins), 8)                                   # 2 codes x ATM x CALL/PUT x 2 windows
+        self.assertEqual(wins[0], ((0, "ATM", "CALL"), "2026-10-21", 2))
+        done = [e for e in ev if e["event"] == "history_done"][0]
+        self.assertEqual((done["kind"], done["windows"], done["bars"], done["orders"]), ("OPTIONS", 8, 16, "NONE"))
+        _, records, bad, incomplete, secrets, hist = decode_cloud_log.decode_all(text.splitlines())
+        self.assertEqual((bad, incomplete, secrets, records), ([], [], [], {}))
+        self.assertIn("OPT_1_ATM_PUT_2026-10-26_2026-10-26", hist)
+        self.assertEqual(hist["OPT_0_ATM_CALL_2026-10-21_2026-10-25"]["payload"]["ce"]["spot"], [73000.0, 73010.0])
         self.assertNotIn(self.token, text)
 
     def test_everyday_file_exits_quietly_on_a_weekend(self):

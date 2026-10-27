@@ -3,7 +3,7 @@ SENSEX read-only observation scanner for Dhan Cloud (Phase 6).
 
 READ-ONLY. This program contains no order, modify, cancel, exit, position,
 kill-switch, login or token-renewal logic. Every Dhan request goes through an
-allow-list of 8 market-data/profile endpoints and is refused before any
+allow-list of 9 market-data/profile endpoints and is refused before any
 network access otherwise. It never makes a CE/PE decision: the direction
 thresholds are not configured (RULES.md §6).
 
@@ -19,7 +19,8 @@ Edit ONLY the CONFIG block below, then run in this order:
   2. MODE = "LIVE_CHECK"  ONE live read-only scan (4 market-data calls).
   3. MODE = "OBSERVE"     scan every INTERVAL_S seconds until STOP_TIME IST.
   4. MODE = "HISTORY"     one-time read-only download of past SENSEX 1-min index
-                          candles (HISTORY_DAYS back), logged as "BX|HIST|" records.
+                          candles, or (HISTORY_KIND = "OPTIONS") expired weekly SENSEX
+                          options on a rolling ATM basis, logged as "BX|HIST|" records.
 
 Log lines start with "BX|" (one JSON object each). Replay records start with
 "BX|REC|" (gzip, hex-encoded). Download the log and decode it with
@@ -65,6 +66,10 @@ PAPER_VARIANTS = ["FIRST_TOUCH"]  # also: "CONFIRMED_CLOSE" (1-min close beyond)
 PAPER_AFTER_EXIT_S = 600         # FRESH_LEVEL: keep recording the option bid 10 min after each exit (recording only)
 HISTORY_DAYS = 365                # HISTORY: calendar days back from yesterday
 HISTORY_WINDOW_DAYS = 5           # HISTORY: calendar days per candles request (1-day retry on a refused window)
+HISTORY_KIND = "INDEX"            # HISTORY: "INDEX" (SENSEX 1-min index) | "OPTIONS" (expired SENSEX options, 1-min)
+HISTORY_OPTION_STRIKES = ["ATM"]  # OPTIONS: strikes relative to spot, e.g. ["ATM-1", "ATM", "ATM+1"]
+HISTORY_OPTION_EXPIRY_CODES = [0, 1]   # OPTIONS: Dhan expiry codes to fetch (both logged; checked from the data)
+HISTORY_OPTION_FIELDS = ["open", "high", "low", "close", "oi", "spot", "strike"]
 LOT_SIZE = None                   # e.g. the SENSEX lot size, to report rupees (verify; never guessed)
 COST_PER_TRADE_RS = None          # brokerage + taxes per round trip, if you want net rupees
 
@@ -95,7 +100,7 @@ from sensex.session import IST, session_state
 from bx_selftest_data import SELFTEST
 
 PROGRAM = "sensex-readonly-observer"
-VERSION = "8.2"
+VERSION = "8.3"
 EXIT_OK, EXIT_CONFIG, EXIT_AUTH, EXIT_SELFTEST = 0, 2, 3, 4
 
 
@@ -306,8 +311,9 @@ def _emit_history(window_id, payload, log_line):
 
 
 def history(log, redactor, log_line) -> int:
-    """HISTORY: read-only download of SENSEX 1-min index candles, oldest window first. Only the
-    /charts/intraday endpoint is used; a refused window is retried one day at a time."""
+    """HISTORY: read-only download, oldest window first. INDEX: SENSEX 1-min index candles (/charts/intraday).
+    OPTIONS: expired weekly SENSEX options on a rolling strike basis (/charts/rollingoption), one series per
+    (expiry number, strike, CALL/PUT). A refused window is retried one day at a time."""
     creds = _managed_credentials(log, redactor)
     if creds is None:
         return EXIT_AUTH
@@ -315,47 +321,68 @@ def history(log, redactor, log_line) -> int:
     end = _now().astimezone(IST).date() - timedelta(days=1)
     start = end - timedelta(days=int(HISTORY_DAYS) - 1)
     step = max(1, int(HISTORY_WINDOW_DAYS))
-    log("info", "history_start", fromDate=start.isoformat(), toDate=end.isoformat(), windowDays=step,
-        instrument="SENSEX index 1-min (IDX_I:51)")
-    windows = bars = failed = 0
+    if HISTORY_KIND == "OPTIONS":
+        series = [(ec, strike, side) for ec in HISTORY_OPTION_EXPIRY_CODES for strike in HISTORY_OPTION_STRIKES
+                  for side in ("CALL", "PUT")]
+    elif HISTORY_KIND == "INDEX":
+        series = [None]
+    else:
+        log("error", "config_blocked", errors=["HISTORY_KIND must be INDEX or OPTIONS"])
+        return EXIT_CONFIG
+    log("info", "history_start", kind=HISTORY_KIND, fromDate=start.isoformat(), toDate=end.isoformat(),
+        windowDays=step, series=len(series),
+        instrument="SENSEX index 1-min (IDX_I:51)" if HISTORY_KIND == "INDEX" else
+        "expired weekly SENSEX options (BSE_FNO OPTIDX, underlying 51), 1-min")
+    totals = {"windows": 0, "bars": 0, "refused": 0}
 
-    def fetch(a, b):
-        r = client.intraday_candles(str(SENSEX_SCRIP), SENSEX_SEG, "INDEX", 1,
-                                    a.isoformat() + " 09:15:00", b.isoformat() + " 15:30:00")
-        p = r.payload if isinstance(r.payload, dict) else {}
-        n = len(p.get("timestamp") or [])
-        _emit_history("%s_%s" % (a.isoformat(), b.isoformat()), {"from": a.isoformat(), "to": b.isoformat(),
-                      "envelope": r.envelope, "payload": p}, log_line)
-        return n
-    day = start
-    while day <= end:
-        last = min(end, day + timedelta(days=step - 1))
-        try:
-            n = fetch(day, last)
-            windows, bars = windows + 1, bars + n
-            log("info", "history_window", fromDate=day.isoformat(), toDate=last.isoformat(), bars=n)
-        except (AuthError, PlanError) as e:
-            log("error", "history_stopped", error=type(e).__name__, errorCode=e.error_code)
-            return EXIT_AUTH
-        except DhanClientError as e:
-            log("warn", "history_window_refused", fromDate=day.isoformat(), toDate=last.isoformat(),
-                error=type(e).__name__, errorCode=e.error_code, httpStatus=e.http_status)
-            d = day
-            while d <= last:                      # retry the window one day at a time
-                try:
-                    n = fetch(d, d)
-                    windows, bars = windows + 1, bars + n
-                    log("info", "history_window", fromDate=d.isoformat(), toDate=d.isoformat(), bars=n)
-                except (AuthError, PlanError) as e2:
-                    log("error", "history_stopped", error=type(e2).__name__, errorCode=e2.error_code)
-                    return EXIT_AUTH
-                except DhanClientError as e2:
-                    failed += 1
-                    log("warn", "history_day_refused", date=d.isoformat(), error=type(e2).__name__,
-                        errorCode=e2.error_code, httpStatus=e2.http_status)
-                d += timedelta(days=1)
-        day = last + timedelta(days=1)
-    log("info", "history_done", windows=windows, bars=bars, refusedDays=failed, orders="NONE")
+    def fetch(sr, a, b):
+        if sr is None:
+            r = client.intraday_candles(str(SENSEX_SCRIP), SENSEX_SEG, "INDEX", 1,
+                                        a.isoformat() + " 09:15:00", b.isoformat() + " 15:30:00")
+            hid = "%s_%s" % (a.isoformat(), b.isoformat())
+            p = r.payload if isinstance(r.payload, dict) else {}
+            n = len(p.get("timestamp") or [])
+        else:
+            ec, strike, side = sr
+            r = client.rolling_option(str(SENSEX_SCRIP), "BSE_FNO", "OPTIDX", "WEEK", ec, strike, side,
+                                      HISTORY_OPTION_FIELDS, a.isoformat(), b.isoformat(), 1)
+            hid = "OPT_%s_%s_%s_%s_%s" % (ec, strike, side, a.isoformat(), b.isoformat())
+            p = r.payload if isinstance(r.payload, dict) else {}
+            leg = p.get("ce" if side == "CALL" else "pe") or {}
+            n = len(leg.get("timestamp") or []) if isinstance(leg, dict) else 0
+        _emit_history(hid, {"from": a.isoformat(), "to": b.isoformat(), "series": sr, "envelope": r.envelope,
+                            "payload": p}, log_line)
+        totals["windows"] += 1
+        totals["bars"] += n
+        log("info", "history_window", series=sr, fromDate=a.isoformat(), toDate=b.isoformat(), bars=n)
+
+    for sr in series:
+        day = start
+        while day <= end:
+            last = min(end, day + timedelta(days=step - 1))
+            try:
+                fetch(sr, day, last)
+            except (AuthError, PlanError) as e:
+                log("error", "history_stopped", error=type(e).__name__, errorCode=e.error_code)
+                return EXIT_AUTH
+            except DhanClientError as e:
+                log("warn", "history_window_refused", series=sr, fromDate=day.isoformat(), toDate=last.isoformat(),
+                    error=type(e).__name__, errorCode=e.error_code, httpStatus=e.http_status)
+                d = day
+                while d <= last:                  # retry the window one day at a time
+                    try:
+                        fetch(sr, d, d)
+                    except (AuthError, PlanError) as e2:
+                        log("error", "history_stopped", error=type(e2).__name__, errorCode=e2.error_code)
+                        return EXIT_AUTH
+                    except DhanClientError as e2:
+                        totals["refused"] += 1
+                        log("warn", "history_day_refused", series=sr, date=d.isoformat(), error=type(e2).__name__,
+                            errorCode=e2.error_code, httpStatus=e2.http_status)
+                    d += timedelta(days=1)
+            day = last + timedelta(days=1)
+    log("info", "history_done", kind=HISTORY_KIND, windows=totals["windows"], bars=totals["bars"],
+        refusedDays=totals["refused"], orders="NONE")
     return EXIT_OK
 
 
