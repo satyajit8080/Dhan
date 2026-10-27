@@ -24,3 +24,15 @@ the trigger within 5 min while the break extended < 10 pts; fade it; stop 5 pts 
 (+6/−11, +4/−8, close-back, abort if < 8–10 pts in 2–3 min) × slippage 2/4; 1 strike, 1 lot, ₹70/trade.
 0 of 72 combinations positive after costs in both halves. Best: calm ≤10 + close-back exit, slip 4: +67 / +42 pts
 (positive in points) but −₹5,665 / −₹5,245 after charges — about +0.6 pts (₹12) per trade vs ₹70 charges.
+
+## Break–close–retest–resume (user rule, 27 Oct; `tools/backtest_break_retest.py`)
+Fresh level (touches < 3) breakout → a 1-min close beyond the trigger (within 3 bars) → retest of the trigger within
+5 min with no close back through the level → entry when price trades beyond the retest bar's extreme (next 3 bars).
++6 / −11 (+4 slippage), 10-min time stop, ₹70/trade, 1 lot, 1 strike. 274 entries from 1,576 fresh breakouts.
+
+| Subset | win H1 / H2 | pts H1 / H2 (slip 4) | net ₹ H1 / H2 | with 1.45-pt bid-ask (live median) |
+|---|---|---|---|---|
+| Fresh, all days (rule as given) | 64.0 / 70.4 % | −216 / −30 | −14,050 / −10,050 | −18,220 / −14,100 |
+| Fresh + new extreme | 64.1 / 70.1 % | −159 / −27 | −10,390 / −7,330 | −13,480 / −10,240 |
+| Fresh, no Thursday | 68.2 / 72.6 % | −75 / +27 | −9,200 / −7,370 | −12,500 / −10,760 |
+Negative after costs in both halves for every subset. Rejected.
