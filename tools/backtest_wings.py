@@ -80,13 +80,17 @@ def load(adir, wdir):
     return D
 
 
+EXTRAP = {"mode": "flat"}   # beyond the +-1,000 points: "flat" vol, or "linear" (keep the ATM-to-wing slope)
+
+
 def sig(r, K):
     m = K - r["F"]
+    cap = 1e9 if EXTRAP["mode"] == "linear" else 1.0
     if m >= 0:
-        w = min(1.0, m / max(1.0, r["cK"] - r["F"]))
-        return r["sA"] + w * (r["sC"] - r["sA"])
-    w = min(1.0, -m / max(1.0, r["F"] - r["pK"]))
-    return r["sA"] + w * (r["sP"] - r["sA"])
+        w = min(cap, m / max(1.0, r["cK"] - r["F"]))
+        return max(0.5 * r["sC"], r["sA"] + w * (r["sC"] - r["sA"]))
+    w = min(cap, -m / max(1.0, r["F"] - r["pK"]))
+    return max(0.5 * r["sP"], r["sA"] + w * (r["sP"] - r["sA"]))
 
 
 def value(pos, r):
@@ -122,6 +126,12 @@ def settle(pos, R):
 STRUCT = {  # name: (legs at entry from row r, charges Rs, slippage pts)
     "STRANGLE_1000": (lambda r: [("C", r["cK"], 1), ("P", r["pK"], 1)], 150.0, 4.0),
     "IRON_FLY_1000": (lambda r: [("C", r["K"], 1), ("P", r["K"], 1), ("C", r["cK"], -1), ("P", r["pK"], -1)], 250.0, 8.0),
+    # iron condor: sell +-1,000 (real prices), buy +-2,000 (extrapolated smile: no data beyond +-1,000)
+    "CONDOR_1000_2000": (lambda r: [("C", r["cK"], 1), ("P", r["pK"], 1), ("C", r["cK"] + 1000, -1),
+                                    ("P", r["pK"] - 1000, -1)], 250.0, 6.0),
+    # iron condor inside the real data: sell +-500, buy +-1,000
+    "CONDOR_500_1000": (lambda r: [("C", r["K"] + 500, 1), ("P", r["K"] - 500, 1), ("C", r["cK"], -1),
+                                   ("P", r["pK"], -1)], 250.0, 8.0),
 }
 
 

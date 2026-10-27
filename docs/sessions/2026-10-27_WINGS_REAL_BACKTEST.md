@@ -38,3 +38,20 @@ Losing months: Apr 2026 (-12,819), Jul 2026 (-7,505), Oct 2026 so far (-4,169).
 - The research-report intraday iron fly loses on real prices; the earlier model estimate for Thursday (+Rs 11,665)
   does not hold (real: Rs -9,857).
 - Next step is forward paper tracking only. No live trading.
+
+## Iron condor with a 2,000-pt hedge (sell +-1,000, buy +-2,000)
+
+The +-2,000 strikes were not downloaded (the rolling series used reaches ATM+-10), so their prices are
+extrapolated from the real smile: "flat" keeps the +-1,000 vol, "linear" keeps the ATM-to-wing slope (dearer hedges
+on the put side). Costs Rs 250 + 6 pts per trade. Sold 2 days before expiry, held to expiry, 1 lot:
+
+| Version | Win | Net | H1 / H2 | Worst trade | Max drawdown | Hedge cost | t |
+|---|---|---|---|---|---|---|---|
+| Naked strangle (for comparison) | 82.7% | Rs +1,15,423 | +66,672 / +48,752 | -872 pts | Rs -23,765 | 0 | 2.74 |
+| Condor, flat extrapolation | 80.8% | Rs +52,144 | +18,777 / +33,367 | -616 pts | Rs -26,414 | 69 pts | 1.48 |
+| Condor, linear extrapolation | 80.8% | Rs +43,726 | +13,113 / +30,613 | -622 pts | Rs -28,984 | 77 pts | 1.24 |
+
+- The hedges cost about 27-30% of the credit, so profit roughly halves.
+- This year no move went past +-2,000 by expiry, so the hedge never paid; it only caps a future gap (max loss about
+  1,000 pts minus the credit per lot).
+- A tighter condor inside real data (sell +-500, buy +-1,000) is flat: Rs -998 for the year.
