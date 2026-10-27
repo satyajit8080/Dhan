@@ -18,3 +18,9 @@ pairs were chosen from 4 tried. Conclusion: no robust edge; nothing to take live
 the trigger within 5 min while the break extended < 10 pts; fade it; stop 5 pts beyond the failed extreme; 10-min hold.
 790 signals. Negative even before slippage/charges in both halves (best TP +8: −145 / −136 pts; after 4-pt slippage and
 ₹70/trade: −₹43,878 / −₹48,965 for 1 lot). Rejected.
+
+## Grok's combined suggestions (27 Oct; `tools/backtest_combined_rules.py`)
+6 entry sets (calm ≤10/12/15, + index-vs-open trend, + time window, + opening-30-min range < 0.7 %) × 6 exits
+(+6/−11, +4/−8, close-back, abort if < 8–10 pts in 2–3 min) × slippage 2/4; 1 strike, 1 lot, ₹70/trade.
+0 of 72 combinations positive after costs in both halves. Best: calm ≤10 + close-back exit, slip 4: +67 / +42 pts
+(positive in points) but −₹5,665 / −₹5,245 after charges — about +0.6 pts (₹12) per trade vs ₹70 charges.
