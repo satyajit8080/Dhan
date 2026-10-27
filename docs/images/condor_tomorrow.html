@@ -1,0 +1,24 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+body{margin:0;background:#fff;font-family:Arial,Helvetica,sans-serif;color:#111}
+.w{width:720px;padding:28px}
+h1{font-size:30px;margin:0 0 4px} .s{color:#555;font-size:18px;margin-bottom:20px}
+.row{display:flex;align-items:center;border-radius:12px;margin:10px 0;padding:16px 18px;font-size:24px}
+.n{width:40px;font-weight:bold;font-size:26px}
+.k{flex:1;font-weight:bold} .a{width:110px;text-align:center;border-radius:8px;padding:8px 0;color:#fff;font-weight:bold}
+.buy{background:#2e7d32} .sell{background:#c62828}
+.prot{background:#e8f5e9} .main{background:#ffebee}
+.spot{text-align:center;font-size:22px;color:#1565c0;font-weight:bold;margin:6px 0;border-top:2px dashed #1565c0;border-bottom:2px dashed #1565c0;padding:8px}
+.x{background:#f5f5f5;color:#777;text-decoration:line-through}
+.note{font-size:19px;color:#333;margin-top:18px;line-height:1.5}
+.tag{font-size:16px;color:#555;font-weight:normal;display:block}
+</style></head><body><div class="w">
+<h1>SENSEX Iron Condor – 29 Oct expiry</h1>
+<div class="s">Paper trade plan · 1 lot (20 qty) · all legs 29 Oct · final strikes at 09:30 from Delta ≈ 0.10</div>
+<div class="row prot"><span class="n">1</span><span class="k">75,800 CE<span class="tag">Protection call (1,000 above sold call)</span></span><span class="a buy">BUY</span></div>
+<div class="row main"><span class="n">3</span><span class="k">74,800 CE<span class="tag">Main call, delta ≈ 0.10</span></span><span class="a sell">SELL</span></div>
+<div class="spot">SENSEX ≈ 73,600 · profit zone 72,400 – 74,800</div>
+<div class="row main"><span class="n">4</span><span class="k">72,400 PE<span class="tag">Main put, delta ≈ 0.10</span></span><span class="a sell">SELL</span></div>
+<div class="row prot"><span class="n">2</span><span class="k">71,400 PE<span class="tag">Protection put (1,000 below sold put)</span></span><span class="a buy">BUY</span></div>
+<div class="row x"><span class="n">✗</span><span class="k">75,800 PE<span class="tag">WRONG – deep in-the-money put, do not buy</span></span><span class="a" style="background:#9e9e9e">NO</span></div>
+<div class="note">Order: buy 1 → buy 2 → sell 3 → sell 4 (protection first).<br>Hold to Thursday close. Max loss is capped by legs 1 and 2.<br>Strikes assume SENSEX ≈ 73,600 at 09:30 – shift all four if it opens elsewhere.</div>
+</div></body></html>
