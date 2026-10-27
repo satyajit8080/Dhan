@@ -15,3 +15,11 @@ before the breakout (`mom3 = close[j-1] − close[j-4]`, signed):
 ≈ 70 % in both halves and positive before slippage; slightly negative with 4-pt stop slippage (break-even then ≈ 71 %).
 Plausible reason: breakouts after a sudden 3-minute spike are exhaustion moves; a calm approach is more often real.
 Status: candidate only; needs a forward paper test. RULES.md unchanged.
+
+## Final cost check (27 Oct): FRESH_CALM ± close-back exit, both halves, ₹ net (1 lot ₹70/trade; 5 lots ₹155/trade)
+| Version | H1 pts | H2 pts | 1 lot net H1 / H2 | 5 lots net H1 / H2 |
+|---|---|---|---|---|
+| FRESH_CALM, no slippage | +102 | +112 | −₹6,290 / −₹5,810 | −₹8,245 / −₹6,625 |
+| FRESH_CALM, 4-pt slippage | −42 | −24 | −₹9,170 / −₹8,530 | −₹22,645 / −₹20,225 |
+| + close-back exit, 4-pt slippage | +77 | −21 | −₹6,797 / −₹8,462 | −₹10,780 / −₹19,883 |
+Negative after charges in both halves in every case. ChatGPT and Grok reviews (27 Oct) reached the same decision.
