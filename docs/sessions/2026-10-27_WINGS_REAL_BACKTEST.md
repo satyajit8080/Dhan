@@ -69,3 +69,15 @@ Output: `docs/exports/strangle_robustness_output.txt`. 1 lot, Rs 150 + 4 pts per
 - Walk-forward: the best variant on H1 (delta 0.20) made Rs +36,989 on H2 (positive, smaller).
 - Strikes beyond +-1,000 (delta 0.10 / 0.05, +-1,200, +-1,500) use extrapolated prices.
 - The year contained no gap large enough to test the tail risk of a naked strangle.
+
+## Older data, file B (Oct 2021 - Oct 2023): only May - Oct 2023 exists
+
+Run of 27 Oct 2026: 4,376 windows, 195,831 bars, 4 refused days (rate limit; none needed), orders NONE. Dhan returned
+no SENSEX weekly option data before 26 May 2023 (weekly SENSEX derivatives relaunched in 2023). Expiries then were on
+Friday; expiry days are now found from the data (the ATM straddle more than doubles overnight when the weekly rolls),
+which matches the Thursday rule week for week on Oct 2025 - Oct 2026.
+
+15 tradable weeks, 1 lot (`docs/exports/strangle_robustness_2023.txt`): a low-volatility period, so +-1,000 earned
+only ~55 pts of credit. Strangle +-1,000 sold 2 days before expiry: 86.7% win, Rs -431. Delta 0.10: 86.7%,
+Rs +6,909, worst -4,574. Sold 1 day before: 100%, Rs +5,595. A fixed 1,000-pt distance depends on the volatility
+regime; delta-based strikes adapt. The 2023-2025 file (A) holds the June 2024 election week.

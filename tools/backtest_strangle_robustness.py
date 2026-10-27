@@ -4,7 +4,7 @@ Strike distance, delta-based (adaptive) strikes, entry time, entry day, simple w
 Strikes beyond +-1,000 use the linear-extrapolated smile (no data there).
 Usage: python3 tools/backtest_strangle_robustness.py PICKLE  (PICKLE = pickle.dump(backtest_wings.load(...)))"""
 import sys,pickle,statistics as st,collections; sys.path.insert(0,'tools'); import backtest_wings as w
-D=pickle.load(open(sys.argv[1],'rb')); w.EXP.update(w.expiries(D)); w.EXTRAP['mode']='linear'
+D=pickle.load(open(sys.argv[1],"rb")); w.EXP.update(w.expiries(D)); w.EXTRAP["mode"]="linear"
 def dist(n):  # sell call K+n, put K-n (100-pt strikes)
   return lambda r:[('C',r['K']+n,1),('P',r['K']-n,1)]
 def delta(t):

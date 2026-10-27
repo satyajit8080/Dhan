@@ -1,0 +1,22 @@
+-- strike distance (Tue 09:30, hold to expiry; beyond 1,000 = extrapolated)
+strangle +-600                 n 15 win  66.7% net    -6950 (H1   +1439 / H2   -8390) worst  -15117 maxDD  -15117 t -0.32 credit 154
+strangle +-800                 n 15 win  66.7% net    -4772 (H1   -2977 / H2   -1795) worst  -12119 maxDD  -12119 t -0.31 credit 94
+strangle +-1000                n 15 win  86.7% net     -431 (H1   -4262 / H2   +3831) worst   -8777 maxDD   -8777 t -0.04 credit 55
+strangle +-1200                n 15 win  93.3% net     +398 (H1   -3388 / H2   +3786) worst   -5206 maxDD   -5206 t 0.07 credit 32
+strangle +-1500                n 15 win  66.7% net    +1006 (H1    +313 / H2    +694) worst    -110 maxDD    -159 t 1.86 credit 14
+-- adaptive: strike by delta (Ajit-style)
+strangle delta 0.20            n 15 win  66.7% net    -9867 (H1   +1346 / H2  -11213) worst  -13349 maxDD  -13349 t -0.48 credit 137
+strangle delta 0.15            n 15 win  66.7% net    -3479 (H1   +2157 / H2   -5637) worst   -8182 maxDD   -8182 t -0.26 credit 98
+strangle delta 0.10            n 15 win  86.7% net    +6909 (H1   +4488 / H2   +2421) worst   -4574 maxDD   -4574 t 1.19 credit 59
+strangle delta 0.05            n 15 win 100.0% net    +4899 (H1   +2170 / H2   +2728) worst    +241 maxDD      +0 t 16.28 credit 26
+-- entry time (+-1000)
+strangle +-1000 entry 09:30    n 15 win  86.7% net     -431 (H1   -4262 / H2   +3831) worst   -8777 maxDD   -8777 t -0.04 credit 55
+strangle +-1000 entry 11:00    n 15 win  93.3% net    +1732 (H1   -4753 / H2   +6485) worst   -8777 maxDD   -8777 t 0.18 credit 50
+strangle +-1000 entry 13:00    n 15 win  86.7% net    -2658 (H1   -6866 / H2   +4207) worst  -10746 maxDD  -10746 t -0.23 credit 49
+strangle +-1000 entry 15:00    n 15 win  93.3% net    +4038 (H1    -857 / H2   +4895) worst   -5146 maxDD   -5146 t 0.69 credit 44
+-- entry day (+-1000)
+strangle +-1000 3 days before  n 15 win  73.3% net    -7466 (H1   -3910 / H2   -3556) worst  -13420 maxDD  -13420 t -0.39 credit 90
+strangle +-1000 2 days before  n 15 win  86.7% net     -431 (H1   -4262 / H2   +3831) worst   -8777 maxDD   -8777 t -0.04 credit 55
+strangle +-1000 1 days before  n 15 win 100.0% net    +5595 (H1   +3726 / H2   +1869) worst     +18 maxDD      +0 t 4.46 credit 28
+-- walk-forward: pick best of the variants on H1, see its H2
+best on H1: d0.10 H1 +4488 -> H2 +2421

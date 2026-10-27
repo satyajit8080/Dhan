@@ -103,13 +103,17 @@ def value(pos, r):
 
 
 def expiries(D):
-    """Expiry days: Thursday, or the last trading day before it when Thursday is a holiday."""
-    wk = collections.defaultdict(list)
-    for d in sorted(D):
-        x = datetime.date.fromisoformat(d)
-        if x.weekday() <= 3:
-            wk[x.isocalendar()[:2]].append(d)
-    return sorted(v[-1] for v in wk.values())
+    """Expiry days found from the data: the next day's opening ATM straddle is more than twice this day's
+    last-hour straddle (the nearest weekly rolled to a new expiry). Works for any expiry weekday (Friday, Tuesday,
+    Thursday over the years); on the Oct 2025 - Oct 2026 data it matches the Thursday rule week for week."""
+    ds = sorted(D)
+    out = []
+    for a, b in zip(ds, ds[1:]):
+        la = [end_straddle(r) for r in D[a] if r["hm"] >= "14:30"]
+        fb = [end_straddle(r) for r in D[b] if r["hm"] <= "09:45"]
+        if la and fb and sorted(fb)[len(fb) // 2] > 2.0 * sorted(la)[len(la) // 2]:
+            out.append(a)
+    return out
 
 
 def end_straddle(r):
@@ -124,14 +128,16 @@ def settle(pos, R):
 
 
 STRUCT = {  # name: (legs at entry from row r, charges Rs, slippage pts)
-    "STRANGLE_1000": (lambda r: [("C", r["cK"], 1), ("P", r["pK"], 1)], 150.0, 4.0),
-    "IRON_FLY_1000": (lambda r: [("C", r["K"], 1), ("P", r["K"], 1), ("C", r["cK"], -1), ("P", r["pK"], -1)], 250.0, 8.0),
+    # strikes are fixed offsets from the ATM strike (the rolling ATM+-10 was sometimes 900 or 1,100 away in 2023)
+    "STRANGLE_1000": (lambda r: [("C", r["K"] + 1000, 1), ("P", r["K"] - 1000, 1)], 150.0, 4.0),
+    "IRON_FLY_1000": (lambda r: [("C", r["K"], 1), ("P", r["K"], 1), ("C", r["K"] + 1000, -1), ("P", r["K"] - 1000, -1)],
+                      250.0, 8.0),
     # iron condor: sell +-1,000 (real prices), buy +-2,000 (extrapolated smile: no data beyond +-1,000)
-    "CONDOR_1000_2000": (lambda r: [("C", r["cK"], 1), ("P", r["pK"], 1), ("C", r["cK"] + 1000, -1),
-                                    ("P", r["pK"] - 1000, -1)], 250.0, 6.0),
+    "CONDOR_1000_2000": (lambda r: [("C", r["K"] + 1000, 1), ("P", r["K"] - 1000, 1), ("C", r["K"] + 2000, -1),
+                                    ("P", r["K"] - 2000, -1)], 250.0, 6.0),
     # iron condor inside the real data: sell +-500, buy +-1,000
-    "CONDOR_500_1000": (lambda r: [("C", r["K"] + 500, 1), ("P", r["K"] - 500, 1), ("C", r["cK"], -1),
-                                   ("P", r["pK"], -1)], 250.0, 8.0),
+    "CONDOR_500_1000": (lambda r: [("C", r["K"] + 500, 1), ("P", r["K"] - 500, 1), ("C", r["K"] + 1000, -1),
+                                   ("P", r["K"] - 1000, -1)], 250.0, 8.0),
 }
 
 
@@ -142,8 +148,6 @@ def run(D, struct, entry_day, entry="09:30", exit_=None, stop=None, tp=None):
     days = sorted(D)
     out = []
     for e in expiries(D):
-        if e == days[-1] and datetime.date.fromisoformat(e).weekday() != 3:
-            continue                                        # current, unfinished week
         d0 = entry_day(e, days)
         if d0 is None:
             continue
