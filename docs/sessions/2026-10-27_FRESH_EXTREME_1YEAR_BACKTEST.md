@@ -23,3 +23,15 @@ May, Jun, Sep, Oct 2026; 115 positive vs 124 negative days.
 
 Conclusion: on a year of data the current rule does not show an edge; the 12–26 Oct result looks like a favourable
 period. Larger targets are positive only in the second half and before slippage. Not a basis for real orders.
+
+## Early-exit tests (path-based, 27 Oct; `tools/backtest_fresh_extreme_exits.py`)
+Rules: `closeback,a` = exit when a 1-min close is more than `a` pts back through the entry; `noprog,X,N` = exit after
+N minutes if the index has not gone X pts beyond the entry. Points per strike, first half | second half.
+
+| Rule | stop −11 | stop −15 (slippage) | stop −15, skip Thursday |
+|---|---|---|---|
+| none | −828 / +249 | −1,788 / −411 | −1,320 / −219 |
+| closeback 0 | −642 / +137 | −1,074 / −43 | −705 / +45 |
+| noprog 12 in 2 min | −746 / +273 | −1,642 / −315 | −1,172 / −131 |
+No rule is positive in both halves. The close-back exit halves the loss but the first half stays clearly negative.
+Final conclusion: no robust edge; do not trade FRESH_EXTREME with real money.
