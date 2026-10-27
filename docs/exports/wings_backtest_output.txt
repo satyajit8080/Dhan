@@ -1,0 +1,58 @@
+days 247 (2025-10-27 .. 2026-10-26), expiry weeks 53. Costs: strangle Rs 150 + 4 pts, iron fly Rs 250 + 8 pts (+4 on stops); lot 20; expiry legs settle at the last-30-min average spot.
+-- intraday iron fly, 09:30-15:00, stop +25%, take profit 30% (research report)
+IRON_FLY intraday Mon                                n  51 win  27.5% pts   -1450 avg credit  658 worst   -178 | net 1 lot Rs   -41741 (H1  -24078 / H2  -17663) maxDD  -41741 | {'TIME': 49, 'SL': 2}
+IRON_FLY intraday Tue                                n  48 win  56.2% pts    -473 avg credit  599 worst   -174 | net 1 lot Rs   -21453 (H1   -4181 / H2  -17271) maxDD  -26279 | {'TIME': 44, 'SL': 4}
+IRON_FLY intraday Wed                                n  51 win  54.9% pts    -820 avg credit  517 worst   -175 | net 1 lot Rs   -29156 (H1  -12803 / H2  -16353) maxDD  -32284 | {'TIME': 37, 'SL': 11, 'TP': 3}
+IRON_FLY intraday Thu                                n  48 win  52.1% pts    +107 avg credit  365 worst   -172 | net 1 lot Rs    -9857 (H1   -9148 / H2    -709) maxDD  -18682 | {'TP': 20, 'SL': 22, 'TIME': 6}
+IRON_FLY intraday Fri                                n  48 win  37.5% pts    -711 avg credit  698 worst   -149 | net 1 lot Rs   -26220 (H1  -14171 / H2  -12049) maxDD  -26302 | {'TIME': 48}
+IRON_FLY intraday Mon/Tue/Wed/Fri                    n 199 win  43.7% pts   -3530 avg credit  618 worst   -178 | net 1 lot Rs  -120355 (H1  -57625 / H2  -62730) maxDD -120355 | {'TIME': 179, 'SL': 17, 'TP': 3}
+IRON_FLY intraday expiry day only                    n  53 win  52.8% pts    +156 avg credit  373 worst   -172 | net 1 lot Rs   -10132 (H1  -11761 / H2   +1629) maxDD  -17078 | {'TP': 23, 'SL': 23, 'TIME': 7}
+-- held to expiry (one trade per week)
+STRANGLE_1000 day after last expiry stop - tp -      n  51 win  70.6% pts   +5320 avg credit  436 worst  -1743 | net 1 lot Rs   +98741 (H1  +59745 / H2  +38996) maxDD  -46814 | {'EXPIRY': 51}
+STRANGLE_1000 day after last expiry stop - tp 50%    n  51 win  78.4% pts    +838 avg credit  436 worst  -1743 | net 1 lot Rs    +9117 (H1   +4873 / H2   +4243) maxDD  -46814 | {'TP': 40, 'EXPIRY': 11}
+STRANGLE_1000 day after last expiry stop 50% tp -    n  51 win  56.9% pts   +3346 avg credit  436 worst  -2000 | net 1 lot Rs   +59264 (H1  -27145 / H2  +86409) maxDD  -76233 | {'EXPIRY': 30, 'SL': 21}
+STRANGLE_1000 day after last expiry stop 50% tp 50%  n  51 win  62.7% pts    -551 avg credit  436 worst  -2000 | net 1 lot Rs   -18668 (H1  -61781 / H2  +43113) maxDD  -90520 | {'TP': 32, 'SL': 19}
+STRANGLE_1000 day after last expiry stop 100% tp -   n  51 win  64.7% pts   +2409 avg credit  436 worst  -2000 | net 1 lot Rs   +40528 (H1   -9402 / H2  +49929) maxDD  -55731 | {'EXPIRY': 34, 'SL': 17}
+STRANGLE_1000 day after last expiry stop 100% tp 50% n  51 win  74.5% pts    -436 avg credit  436 worst  -2000 | net 1 lot Rs   -16373 (H1  -30227 / H2  +13854) maxDD  -67284 | {'TP': 38, 'SL': 13}
+STRANGLE_1000 2 days before expiry stop - tp -       n  52 win  82.7% pts   +6161 avg credit  263 worst   -872 | net 1 lot Rs  +115423 (H1  +66672 / H2  +48752) maxDD  -23765 | {'EXPIRY': 52}
+STRANGLE_1000 2 days before expiry stop - tp 50%     n  52 win  90.4% pts   +4634 avg credit  263 worst   -872 | net 1 lot Rs   +84876 (H1  +53428 / H2  +31449) maxDD  -23765 | {'TP': 46, 'EXPIRY': 6}
+STRANGLE_1000 2 days before expiry stop 50% tp -     n  52 win  53.8% pts   +1611 avg credit  263 worst  -1260 | net 1 lot Rs   +24418 (H1   -5098 / H2  +29516) maxDD  -39018 | {'EXPIRY': 28, 'SL': 24}
+STRANGLE_1000 2 days before expiry stop 50% tp 50%   n  52 win  65.4% pts   +1131 avg credit  263 worst  -1260 | net 1 lot Rs   +14823 (H1   +5664 / H2   +9159) maxDD  -39018 | {'TP': 34, 'SL': 18}
+STRANGLE_1000 2 days before expiry stop 100% tp -    n  52 win  73.1% pts   +4822 avg credit  263 worst  -1260 | net 1 lot Rs   +88643 (H1  +37045 / H2  +51598) maxDD  -42758 | {'EXPIRY': 40, 'SL': 12}
+STRANGLE_1000 2 days before expiry stop 100% tp 50%  n  52 win  82.7% pts   +3170 avg credit  263 worst  -1260 | net 1 lot Rs   +55594 (H1  +27474 / H2  +28120) maxDD  -42758 | {'TP': 43, 'SL': 9}
+STRANGLE_1000 1 day before expiry stop - tp -        n  52 win  92.3% pts   +2328 avg credit  116 worst  -1073 | net 1 lot Rs   +38760 (H1   +2612 / H2  +36148) maxDD  -38181 | {'EXPIRY': 52}
+STRANGLE_1000 1 day before expiry stop - tp 50%      n  52 win  96.2% pts   +2191 avg credit  116 worst   -821 | net 1 lot Rs   +36023 (H1  +14917 / H2  +21106) maxDD  -16569 | {'TP': 49, 'EXPIRY': 3}
+STRANGLE_1000 1 day before expiry stop 50% tp -      n  52 win  51.9% pts    +176 avg credit  116 worst   -782 | net 1 lot Rs    -4279 (H1   -7001 / H2   +2722) maxDD  -29012 | {'EXPIRY': 27, 'SL': 25}
+STRANGLE_1000 1 day before expiry stop 50% tp 50%    n  52 win  67.3% pts    +550 avg credit  116 worst   -782 | net 1 lot Rs    +3190 (H1   +1160 / H2   +2030) maxDD  -15787 | {'TP': 35, 'SL': 17}
+STRANGLE_1000 1 day before expiry stop 100% tp -     n  52 win  63.5% pts    +323 avg credit  116 worst   -782 | net 1 lot Rs    -1345 (H1   -1212 / H2    -134) maxDD  -25090 | {'EXPIRY': 33, 'SL': 19}
+STRANGLE_1000 1 day before expiry stop 100% tp 50%   n  52 win  75.0% pts    +501 avg credit  116 worst   -782 | net 1 lot Rs    +2221 (H1    +369 / H2   +1852) maxDD  -15787 | {'TP': 39, 'SL': 13}
+STRANGLE_1000 expiry morning stop - tp -             n  52 win  96.2% pts    +309 avg credit   23 worst   -471 | net 1 lot Rs    -1619 (H1   -8146 / H2   +6527) maxDD  -10493 | {'EXPIRY': 52}
+STRANGLE_1000 expiry morning stop - tp 50%           n  52 win  86.5% pts    +206 avg credit   23 worst   -241 | net 1 lot Rs    -3675 (H1   -4570 / H2    +895) maxDD   -6557 | {'TP': 47, 'EXPIRY': 5}
+STRANGLE_1000 expiry morning stop 50% tp -           n  52 win  59.6% pts    -201 avg credit   23 worst    -81 | net 1 lot Rs   -11822 (H1   -7049 / H2   -4773) maxDD  -13345 | {'EXPIRY': 31, 'SL': 21}
+STRANGLE_1000 expiry morning stop 50% tp 50%         n  52 win  59.6% pts    -212 avg credit   23 worst    -50 | net 1 lot Rs   -12040 (H1   -6391 / H2   -5650) maxDD  -12608 | {'TP': 35, 'SL': 16, 'EXPIRY': 1}
+STRANGLE_1000 expiry morning stop 100% tp -          n  52 win  75.0% pts    +177 avg credit   23 worst    -81 | net 1 lot Rs    -4255 (H1   -5757 / H2   +1502) maxDD   -6688 | {'EXPIRY': 39, 'SL': 13}
+STRANGLE_1000 expiry morning stop 100% tp 50%        n  52 win  71.2% pts     -38 avg credit   23 worst    -66 | net 1 lot Rs    -8557 (H1   -5979 / H2   -2578) maxDD   -9124 | {'TP': 41, 'SL': 10, 'EXPIRY': 1}
+IRON_FLY_1000 day after last expiry stop - tp -      n  51 win  41.2% pts    +839 avg credit  698 worst   -456 | net 1 lot Rs    +4029 (H1   +6011 / H2   -1982) maxDD  -31283 | {'EXPIRY': 51}
+IRON_FLY_1000 day after last expiry stop - tp 50%    n  51 win  45.1% pts    +373 avg credit  698 worst   -456 | net 1 lot Rs    -5283 (H1  -10062 / H2   +4778) maxDD  -25999 | {'EXPIRY': 33, 'TP': 18}
+IRON_FLY_1000 day after last expiry stop 50% tp -    n  51 win  41.2% pts    +995 avg credit  698 worst   -344 | net 1 lot Rs    +7159 (H1   +9141 / H2   -1982) maxDD  -31283 | {'EXPIRY': 49, 'SL': 2}
+IRON_FLY_1000 day after last expiry stop 50% tp 50%  n  51 win  45.1% pts    +530 avg credit  698 worst   -344 | net 1 lot Rs    -2154 (H1   -6932 / H2   +4778) maxDD  -25999 | {'EXPIRY': 31, 'SL': 2, 'TP': 18}
+IRON_FLY_1000 day after last expiry stop 100% tp -   n  51 win  41.2% pts    +839 avg credit  698 worst   -456 | net 1 lot Rs    +4029 (H1   +6011 / H2   -1982) maxDD  -31283 | {'EXPIRY': 51}
+IRON_FLY_1000 day after last expiry stop 100% tp 50% n  51 win  45.1% pts    +373 avg credit  698 worst   -456 | net 1 lot Rs    -5283 (H1  -10062 / H2   +4778) maxDD  -25999 | {'EXPIRY': 33, 'TP': 18}
+IRON_FLY_1000 2 days before expiry stop - tp -       n  52 win  48.1% pts    +470 avg credit  618 worst   -482 | net 1 lot Rs    -3610 (H1  -19206 / H2  +15596) maxDD  -36624 | {'EXPIRY': 52}
+IRON_FLY_1000 2 days before expiry stop - tp 50%     n  52 win  50.0% pts    -196 avg credit  618 worst   -482 | net 1 lot Rs   -16917 (H1  -10251 / H2   -6666) maxDD  -37407 | {'TP': 21, 'EXPIRY': 31}
+IRON_FLY_1000 2 days before expiry stop 50% tp -     n  52 win  48.1% pts   +1156 avg credit  618 worst   -371 | net 1 lot Rs   +10118 (H1  -19561 / H2  +29678) maxDD  -36338 | {'EXPIRY': 40, 'SL': 12}
+IRON_FLY_1000 2 days before expiry stop 50% tp 50%   n  52 win  50.0% pts    +491 avg credit  618 worst   -371 | net 1 lot Rs    -3190 (H1  -10606 / H2   +7416) maxDD  -27792 | {'TP': 21, 'SL': 12, 'EXPIRY': 19}
+IRON_FLY_1000 2 days before expiry stop 100% tp -    n  52 win  48.1% pts    +470 avg credit  618 worst   -482 | net 1 lot Rs    -3610 (H1  -19206 / H2  +15596) maxDD  -36624 | {'EXPIRY': 52}
+IRON_FLY_1000 2 days before expiry stop 100% tp 50%  n  52 win  50.0% pts    -196 avg credit  618 worst   -482 | net 1 lot Rs   -16917 (H1  -10251 / H2   -6666) maxDD  -37407 | {'TP': 21, 'EXPIRY': 31}
+IRON_FLY_1000 1 day before expiry stop - tp -        n  52 win  53.8% pts   -1523 avg credit  532 worst   -559 | net 1 lot Rs   -43451 (H1  -11787 / H2  -31664) maxDD  -65285 | {'EXPIRY': 52}
+IRON_FLY_1000 1 day before expiry stop - tp 50%      n  52 win  55.8% pts   -1168 avg credit  532 worst   -559 | net 1 lot Rs   -36360 (H1  -20101 / H2  -16259) maxDD  -55506 | {'EXPIRY': 37, 'TP': 15}
+IRON_FLY_1000 1 day before expiry stop 50% tp -      n  52 win  48.1% pts   -1224 avg credit  532 worst   -356 | net 1 lot Rs   -37489 (H1   -8569 / H2  -28920) maxDD  -54849 | {'EXPIRY': 31, 'SL': 21}
+IRON_FLY_1000 1 day before expiry stop 50% tp 50%    n  52 win  50.0% pts    -940 avg credit  532 worst   -356 | net 1 lot Rs   -31803 (H1  -16883 / H2  -14920) maxDD  -46474 | {'EXPIRY': 17, 'TP': 14, 'SL': 21}
+IRON_FLY_1000 1 day before expiry stop 100% tp -     n  52 win  53.8% pts   -1593 avg credit  532 worst   -559 | net 1 lot Rs   -44861 (H1  -13197 / H2  -31664) maxDD  -65285 | {'EXPIRY': 51, 'SL': 1}
+IRON_FLY_1000 1 day before expiry stop 100% tp 50%   n  52 win  55.8% pts   -1238 avg credit  532 worst   -559 | net 1 lot Rs   -37769 (H1  -21510 / H2  -16259) maxDD  -55506 | {'EXPIRY': 36, 'TP': 15, 'SL': 1}
+IRON_FLY_1000 expiry morning stop - tp -             n  52 win  69.2% pts   +1762 avg credit  365 worst   -726 | net 1 lot Rs   +22230 (H1  -13713 / H2  +35943) maxDD  -31946 | {'EXPIRY': 52}
+IRON_FLY_1000 expiry morning stop - tp 50%           n  52 win  71.2% pts   +1350 avg credit  365 worst   -726 | net 1 lot Rs   +14009 (H1  -15468 / H2  +29476) maxDD  -32616 | {'EXPIRY': 35, 'TP': 17}
+IRON_FLY_1000 expiry morning stop 50% tp -           n  52 win  59.6% pts   +1413 avg credit  365 worst   -296 | net 1 lot Rs   +15262 (H1  -17354 / H2  +32616) maxDD  -23496 | {'EXPIRY': 34, 'SL': 18}
+IRON_FLY_1000 expiry morning stop 50% tp 50%         n  52 win  61.5% pts   +1310 avg credit  365 worst   -296 | net 1 lot Rs   +13192 (H1  -12957 / H2  +26149) maxDD  -22412 | {'EXPIRY': 19, 'TP': 16, 'SL': 17}
+IRON_FLY_1000 expiry morning stop 100% tp -          n  52 win  67.3% pts   +1477 avg credit  365 worst   -474 | net 1 lot Rs   +16548 (H1   -6270 / H2  +22817) maxDD  -31472 | {'EXPIRY': 46, 'SL': 6}
+IRON_FLY_1000 expiry morning stop 100% tp 50%        n  52 win  69.2% pts   +1066 avg credit  365 worst   -474 | net 1 lot Rs    +8326 (H1   -8025 / H2  +16350) maxDD  -31472 | {'EXPIRY': 29, 'TP': 17, 'SL': 6}
