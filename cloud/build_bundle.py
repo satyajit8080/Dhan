@@ -320,6 +320,10 @@ EVERYDAY = {
 HISTORY = {"MODE": '"HISTORY"', "HISTORY_DAYS": "365", "HISTORY_WINDOW_DAYS": "5"}
 # Expired SENSEX options, rolling ATM, both expiry codes (user, 27 Oct 2026: back-test on real option prices).
 HISTORY_OPTIONS = {"MODE": '"HISTORY"', "HISTORY_KIND": '"OPTIONS"', "HISTORY_DAYS": "365", "HISTORY_WINDOW_DAYS": "5"}
+# Iron-fly wings: rolling ATM-10 / ATM+10 (about 1,000 pts on 100-pt strikes), nearest weekly only, 1-day windows
+# because 5-day windows were refused (DH-905) in the ATM run (user, 27 Oct 2026: test the hedged iron fly).
+HISTORY_WINGS = {"MODE": '"HISTORY"', "HISTORY_KIND": '"OPTIONS"', "HISTORY_DAYS": "365", "HISTORY_WINDOW_DAYS": "1",
+                 "HISTORY_OPTION_STRIKES": '["ATM-10", "ATM+10"]', "HISTORY_OPTION_EXPIRY_CODES": "[1]"}
 
 
 def with_config(text: str, values: dict) -> str:
@@ -341,6 +345,7 @@ def build() -> dict:
     files["everyday/main.py"] = with_config(files["single/sensex_observer.py"], EVERYDAY)
     files["history/main.py"] = with_config(files["single/sensex_observer.py"], HISTORY)
     files["history_options/main.py"] = with_config(files["single/sensex_observer.py"], HISTORY_OPTIONS)
+    files["history_wings/main.py"] = with_config(files["single/sensex_observer.py"], HISTORY_WINGS)
     return files
 
 

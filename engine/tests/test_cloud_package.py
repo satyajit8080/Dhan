@@ -535,6 +535,33 @@ class EndToEnd(unittest.TestCase):
         self.assertEqual(hist["OPT_1_ATM_CALL_2026-10-21_2026-10-25"]["payload"]["ce"]["spot"], [73000.0, 73010.0])
         self.assertNotIn(self.token, text)
 
+    def test_history_wings_file_downloads_far_strikes_read_only(self):
+        spec = importlib.util.spec_from_file_location("bx_history_wings_under_test", DIST / "history_wings" / "main.py")
+        m = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = m
+        spec.loader.exec_module(m)
+        _loaded["history"] = m
+        self.assertEqual((m.MODE, m.HISTORY_KIND, m.HISTORY_OPTION_STRIKES, m.HISTORY_OPTION_EXPIRY_CODES,
+                          m.HISTORY_WINDOW_DAYS), ("HISTORY", "OPTIONS", ["ATM-10", "ATM+10"], [1], 1))
+        leg = {"timestamp": [1792986360], "open": [20.0], "close": [21.0], "spot": [73000.0], "strike": [74000.0]}
+        body = json.dumps({"data": {"ce": leg, "pe": leg}}).encode()
+        start = datetime(2026, 10, 27, 3, 30, tzinfo=timezone.utc)
+        code, text, t = run_main(m, mode="HISTORY", env=self.env, clock_start=start,
+                                 cfg={"HISTORY_DAYS": 2, "RECORD_CHUNK": 400},
+                                 script={"/charts/rollingoption": [(200, body)] * 8})
+        self.assertEqual(code, 0, text[-1500:])
+        self.assertEqual({p for _, p in t.calls}, {"/charts/rollingoption"})
+        ev = [json.loads(l[3:]) for l in text.splitlines() if l.startswith("BX|{")]
+        wins = [(tuple(e["series"]), e["fromDate"]) for e in ev if e["event"] == "history_window"]
+        self.assertEqual(len(wins), 8)                                   # ATM-10/ATM+10 x CALL/PUT x 2 days
+        self.assertEqual(wins[0], ((1, "ATM-10", "CALL"), "2026-10-25"))
+        done = [e for e in ev if e["event"] == "history_done"][0]
+        self.assertEqual((done["windows"], done["orders"]), (8, "NONE"))
+        _, records, bad, incomplete, secrets, hist = decode_cloud_log.decode_all(text.splitlines())
+        self.assertEqual((bad, incomplete, secrets), ([], [], []))
+        self.assertIn("OPT_1_ATM+10_CALL_2026-10-26_2026-10-26", hist)
+        self.assertNotIn(self.token, text)
+
     def test_everyday_file_exits_quietly_on_a_weekend(self):
         sat = datetime(2026, 10, 17, 3, 30, tzinfo=timezone.utc)
         code, text, t = run_main(load_everyday(), mode="OBSERVE", env=self.env, clock_start=sat, cfg={"STRIKES": []})
