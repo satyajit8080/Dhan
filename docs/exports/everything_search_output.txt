@@ -1,0 +1,49 @@
+decision points 5434 (days x entry times), halves split at 2026-04-28
+combinations with >= 20 trades in each half: 41988
+positive after costs: first half 6736, second half 6258, BOTH 1436 (3.42%)
+chance baseline (random day sign flips, 3 runs): positive in both halves 3.61, 3.07, 3.94 %
+
+Top 20 chosen on the FIRST half only -> their SECOND-half result:
+momentum 60 min          follow all days          fut 11:45 hold close | H1 n 123 win 68.3% net Rs  +197632 | H2 n 124 win 52.4% net Rs   -28625
+momentum 120 min         follow all days          fut 12:15 hold close | H1 n 123 win 59.3% net Rs  +189606 | H2 n 124 win 48.4% net Rs   -21961
+momentum 15 min          fade   high IV           fut 10:30 hold close | H1 n  56 win 66.1% net Rs  +184470 | H2 n  52 win 59.6% net Rs   -16081
+range position           follow all days          fut 12:00 hold close | H1 n  92 win 64.1% net Rs  +175910 | H2 n  85 win 48.2% net Rs   -97161
+range position           follow all days          fut 12:15 hold close | H1 n  91 win 63.7% net Rs  +166753 | H2 n  93 win 47.3% net Rs   -86551
+momentum 5 min           follow high IV           fut 11:15 hold close | H1 n  56 win 60.7% net Rs  +165994 | H2 n  52 win 63.5% net Rs   +34813
+momentum 120 min         follow high IV           fut 12:15 hold close | H1 n  56 win 64.3% net Rs  +164060 | H2 n  52 win 50.0% net Rs   +29413
+momentum 30 min          follow high IV           fut 12:15 hold close | H1 n  56 win 60.7% net Rs  +156606 | H2 n  52 win 53.8% net Rs      +94
+range position           follow high IV           fut 12:00 hold close | H1 n  42 win 78.6% net Rs  +151135 | H2 n  34 win 58.8% net Rs   +12028
+range position           follow all days          fut 12:30 hold close | H1 n  99 win 63.6% net Rs  +150926 | H2 n  89 win 56.2% net Rs   -13701
+range position           follow high IV           fut 12:15 hold close | H1 n  40 win 75.0% net Rs  +148871 | H2 n  41 win 56.1% net Rs     -160
+momentum 15 min          follow high IV           fut 12:00 hold close | H1 n  56 win 67.9% net Rs  +146739 | H2 n  52 win 53.8% net Rs   -39263
+range position           follow all days          fut 11:45 hold close | H1 n  83 win 67.5% net Rs  +145784 | H2 n  90 win 46.7% net Rs   -71226
+momentum 120 min         follow high IV           fut 13:00 hold close | H1 n  56 win 64.3% net Rs  +138732 | H2 n  52 win 51.9% net Rs   -14549
+momentum 60 min          fade   high IV           fut 11:15 hold close | H1 n  56 win 58.9% net Rs  +136559 | H2 n  52 win 53.8% net Rs   -33006
+momentum 5 min           follow high IV           fut 10:45 hold close | H1 n  56 win 66.1% net Rs  +134985 | H2 n  52 win 53.8% net Rs   -34569
+momentum 5 min           follow all days          fut 09:30 hold close | H1 n 123 win 56.9% net Rs  +131618 | H2 n 124 win 50.0% net Rs   -56597
+momentum 5 min           follow all days          fut 11:15 hold close | H1 n 123 win 52.8% net Rs  +129919 | H2 n 124 win 54.0% net Rs   -85164
+range position           follow high IV           fut 12:30 hold close | H1 n  48 win 68.8% net Rs  +126351 | H2 n  38 win 65.8% net Rs   +44899
+momentum 30 min          follow all days          fut 12:15 hold close | H1 n 123 win 54.5% net Rs  +121604 | H2 n 124 win 52.4% net Rs   -35353
+of the top 100 first-half picks, 32 were positive in the second half
+
+Positive in both halves, best 20 by the weaker half:
+momentum 60 min          follow high IV           fut 12:00 hold close | H1 n  56 win 67.9% net Rs  +110548 | H2 n  52 win 63.5% net Rs   +70799
+momentum 5 min           fade   high IV           fut 10:30 hold close | H1 n  56 win 71.4% net Rs   +96878 | H2 n  52 win 59.6% net Rs   +65406
+momentum 120 min         follow high IV           fut 12:30 hold close | H1 n  56 win 64.3% net Rs   +89323 | H2 n  52 win 61.5% net Rs   +56622
+opening gap              fade   Mon               fut 09:30 hold close | H1 n  25 win 56.0% net Rs   +62756 | H2 n  25 win 52.0% net Rs   +54877
+momentum 60 min          fade   low IV            fut 10:30 hold close | H1 n  57 win 61.4% net Rs   +51979 | H2 n  72 win 54.2% net Rs   +60024
+momentum 60 min          follow all days          fut 12:00 hold close | H1 n 123 win 53.7% net Rs   +72912 | H2 n 124 win 57.3% net Rs   +51528
+opening gap              fade   Mon               fut 09:45 hold close | H1 n  25 win 60.0% net Rs   +50082 | H2 n  25 win 56.0% net Rs   +50952
+previous day             fade   high IV           fut 09:45 hold close | H1 n  56 win 50.0% net Rs   +48429 | H2 n  52 win 57.7% net Rs   +56959
+momentum 30 min          follow high IV           fut 13:15 hold close | H1 n  56 win 62.5% net Rs   +51825 | H2 n  52 win 53.8% net Rs   +46223
+momentum 5 min           follow Fri               fut 11:15 hold close | H1 n  25 win 64.0% net Rs   +45398 | H2 n  23 win 73.9% net Rs   +56248
+range position           follow high IV           fut 12:30 hold close | H1 n  48 win 68.8% net Rs  +126351 | H2 n  38 win 65.8% net Rs   +44899
+momentum 60 min          follow Fri               fut 11:45 hold close | H1 n  25 win 80.0% net Rs   +67144 | H2 n  23 win 60.9% net Rs   +44500
+opening gap              fade   Mon               fut 10:45 hold close | H1 n  25 win 60.0% net Rs   +53781 | H2 n  25 win 60.0% net Rs   +44309
+range position           fade   low IV            fut 10:30 hold close | H1 n  38 win 60.5% net Rs   +44046 | H2 n  58 win 55.2% net Rs   +43490
+momentum 15 min          fade   high IV           fut 11:00 hold close | H1 n  56 win 33.9% net Rs   +50064 | H2 n  52 win 51.9% net Rs   +41341
+range position           fade   all days          fut 10:30 hold close | H1 n  83 win 51.8% net Rs   +66041 | H2 n  97 win 53.6% net Rs   +40842
+momentum 30 min          fade   all days          fut 10:00 hold close | H1 n 123 win 50.4% net Rs   +74073 | H2 n 124 win 50.0% net Rs   +40725
+range position           follow high IV           fut 11:45 hold close | H1 n  36 win 75.0% net Rs  +114558 | H2 n  38 win 57.9% net Rs   +39849
+momentum 120 min         follow Fri               fut 12:30 hold close | H1 n  25 win 72.0% net Rs   +39566 | H2 n  23 win 60.9% net Rs   +41585
+opening gap              fade   Mon               fut 10:00 hold close | H1 n  25 win 60.0% net Rs   +60670 | H2 n  25 win 60.0% net Rs   +39391
