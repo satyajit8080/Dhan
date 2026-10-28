@@ -37,6 +37,33 @@ def strike_for_delta(r, kind, t):
     return K
 
 
+def entry_row(R, cfg):
+    """Entry minute on the entry day. Default 09:30. cfg['entry']:
+         ('time', 'HH:MM')                  fixed time
+         ('pullback', X, fallback)          the index first moves >= X % from the day open (either way), then gives
+                                            back half of that move -> enter; none by 15:00 -> fallback ('skip' or 'HH:MM')
+         ('spike', ratio, fallback)         ATM straddle >= ratio x its 09:30 value -> enter"""
+    rule = cfg.get("entry", ("time", "09:30"))
+    if rule[0] == "time":
+        return next((r for r in R if r["hm"] >= rule[1]), None)
+    o = R[0]["spot"]; ext = None; base = next((w.end_straddle(r) for r in R if r["hm"] >= "09:30"), None)
+    for r in R:
+        if r["hm"] < "09:30" or r["hm"] > "15:00":
+            continue
+        if rule[0] == "pullback":
+            mv = r["spot"] - o
+            if ext is None and abs(mv) >= rule[1] / 100 * o:
+                ext = mv
+            if ext is not None:
+                if abs(mv) > abs(ext) and mv * ext > 0:
+                    ext = mv
+                if (mv / ext) <= 0.5:
+                    return r
+        elif rule[0] == "spike" and base and w.end_straddle(r) >= rule[1] * base:
+            return r
+    return None if rule[2] == "skip" else next((r for r in R if r["hm"] >= rule[2]), None)
+
+
 def simulate(D, cfg):
     days = sorted(D); exps = sorted(w.EXP); out = []
     hist = []
@@ -47,10 +74,11 @@ def simulate(D, cfg):
         if i < 4:
             continue
         d0 = days[i - 1]
-        r0 = next((r for r in D[d0] if r["hm"] >= "09:30"), None)
+        r0 = entry_row(D[d0], cfg)
         if r0 is None:
             continue
-        st = w.end_straddle(r0)
+        r930 = next((r for r in D[d0] if r["hm"] >= "09:30"), r0)
+        st = w.end_straddle(r930)
         med = sorted(hist)[len(hist) // 2] if len(hist) >= 5 else None
         hist = (hist + [st])[-10:]
         vol = None if med is None else ("HIGH" if st > 1.2 * med else ("LOW" if st < 0.8 * med else "MID"))
@@ -139,32 +167,25 @@ def report(name, o):
 
 def main():
     D = {}
-    for p in sys.argv[1:]:
+    for p in [a for a in sys.argv[1:] if not a.startswith("--")]:
         D.update(pickle.load(open(p, "rb")))
     w.EXP.clear(); w.EXP.update(w.expiries(D)); w.EXTRAP["mode"] = "linear"
     print("days %d (%s .. %s), expiry weeks %d; lot 20; 1 trading day before expiry, 09:30 entry" % (len(D), min(D), max(D), len(w.EXP)))
     variants = [
         ("strangle d0.10 (base)", {}),
-        ("strangle, skip HIGH vol", {"skip_vol": "HIGH"}),
-        ("strangle, skip LOW vol", {"skip_vol": "LOW"}),
-        ("strangle, d0.07 in HIGH vol", {"wide_high_vol": True}),
-        ("strangle, skip trend weeks", {"skip_trend": True}),
-        ("strangle, trend side d0.05", {"trend": "skew"}),
-        ("strangle, only side against trend", {"trend": "one_side"}),
-        ("strangle, close side at short strike", {"adjust": "close", "at": "strike"}),
-        ("strangle, close side halfway", {"adjust": "close", "at": "half"}),
-        ("strangle, roll side at short strike", {"adjust": "roll", "at": "strike"}),
-        ("strangle, roll side halfway", {"adjust": "roll", "at": "half"}),
-        ("strangle, skip LOW vol + trend d0.05 + roll at strike", {"skip_vol": "LOW", "trend": "skew", "adjust": "roll", "at": "strike"}),
+        ("strangle d0.10 + d0.07 in HIGH vol", {"wide_high_vol": True}),
         ("condor d0.10 + 1000 wings (base)", {"wings": 1000}),
-        ("condor, skip HIGH vol", {"wings": 1000, "skip_vol": "HIGH"}),
-        ("condor, skip LOW vol", {"wings": 1000, "skip_vol": "LOW"}),
-        ("condor, skip trend weeks", {"wings": 1000, "skip_trend": True}),
-        ("condor, trend side d0.05", {"wings": 1000, "trend": "skew"}),
-        ("condor, close side at short strike", {"wings": 1000, "adjust": "close", "at": "strike"}),
-        ("condor, roll side at short strike", {"wings": 1000, "adjust": "roll", "at": "strike"}),
-        ("condor, roll side halfway", {"wings": 1000, "adjust": "roll", "at": "half"}),
+        ("condor + d0.07 in HIGH vol", {"wings": 1000, "wide_high_vol": True}),
     ]
+    if "--retrace" in sys.argv:
+        base = list(variants); variants = []
+        entries = [("09:30", ("time", "09:30")), ("12:00", ("time", "12:00")), ("15:00", ("time", "15:00")),
+                   ("pullback 0.3% (skip if none)", ("pullback", 0.3, "skip")), ("pullback 0.3% (else 15:00)", ("pullback", 0.3, "15:00")),
+                   ("pullback 0.5% (skip if none)", ("pullback", 0.5, "skip")), ("pullback 0.5% (else 15:00)", ("pullback", 0.5, "15:00")),
+                   ("straddle +10% spike (skip if none)", ("spike", 1.10, "skip")), ("straddle +10% spike (else 15:00)", ("spike", 1.10, "15:00"))]
+        for bn, bc in base[1::2]:
+            for en, ec in entries:
+                variants.append(("%s | entry %s" % (bn, en), dict(bc, entry=ec)))
     for name, cfg in variants:
         report(name, simulate(D, cfg))
 
