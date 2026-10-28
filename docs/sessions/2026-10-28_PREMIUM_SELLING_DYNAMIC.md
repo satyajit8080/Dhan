@@ -28,3 +28,8 @@ happened, plus costs; (2) vol/trend filters mostly cut weeks and profit; the use
 (delta 0.07) in high-vol weeks: similar profit, worst week −₹9,991 and max drawdown −₹9,991 (vs −₹16,831);
 (3) all base and filter variants are positive in both halves and every year. Model-priced wings mean these figures
 are simulations; the forward paper condor (real prices for all legs) is the check. No orders.
+
+Follow-up: condor with delta 0.07 in high-vol weeks: 167 weeks, 91.0 %, +₹75,206 (H1 +32,701 / H2 +42,505), worst week
+−₹10,352, max drawdown −₹10,979 (base condor −₹17,781). Adding "skip low vol": 137 weeks, 92.7 %, +₹72,539, max
+drawdown −₹10,352. Best risk-adjusted defined-risk version: condor d0.10, d0.07 when the entry straddle is > 1.2× its
+10-week median.
