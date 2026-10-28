@@ -1,0 +1,39 @@
+crossings 4894 (FILTERED base 763), features am,basket5,breadth,calm,confirm,exp0,exp1,extreme,ivhi,ivup,oi_ok,pcr_ok,t2,top3, halves split at 2026-04-28
+combinations evaluated: 16720
+win >= 80 % in first half: 0; of those >= 80 % in second half too: 0; >= 80 % in both AND net > 0 in both: 0
+win >= 70 % in both halves: 1; net > 0 in both halves (any win rate): 0
+
+Highest first-half win rates (chosen on H1) -> second half:
+  ALL      basket5=N & exp1=N & ivup=Y                                exit +4/-11 | n  30/ 34 | win H1 76.7% H2 55.9% | net Rs H1   -1800 / H2   -4160
+  ALL      basket5=N & exp1=N & ivup=Y                                exit +3/-11 | n  30/ 34 | win H1 76.7% H2 55.9% | net Rs H1   -2260 / H2   -4540
+  ALL      basket5=N & calm=Y & ivup=Y                                exit +4/-11 | n  33/ 37 | win H1 75.8% H2 62.2% | net Rs H1   -2070 / H2   -3830
+  ALL      basket5=N & calm=Y & ivup=Y                                exit +3/-11 | n  33/ 37 | win H1 75.8% H2 62.2% | net Rs H1   -2570 / H2   -4290
+  ALL      confirm=Y & oi_ok=Y & t2=Y                                 exit +3/-11 | n  41/ 48 | win H1 75.6% H2 52.1% | net Rs H1   -3210 / H2   -6920
+  ALL      am=N & basket5=N & oi_ok=N                                 exit +4/-11 | n  53/ 73 | win H1 75.5% H2 56.2% | net Rs H1   -3370 / H2   -8870
+  ALL      am=N & basket5=N & oi_ok=N                                 exit +3/-11 | n  53/ 73 | win H1 75.5% H2 58.9% | net Rs H1   -4170 / H2   -9130
+  ALL      confirm=Y & ivup=Y & pcr_ok=Y                              exit +3/-11 | n  64/ 66 | win H1 75.0% H2 65.2% | net Rs H1   -5120 / H2   -7100
+  ALL      basket5=N & ivup=Y & top3=N                                exit +4/-11 | n  35/ 43 | win H1 74.3% H2 62.8% | net Rs H1   -2350 / H2   -4370
+  ALL      basket5=N & ivup=Y & top3=N                                exit +3/-11 | n  35/ 43 | win H1 74.3% H2 62.8% | net Rs H1   -2870 / H2   -4910
+  ALL      basket5=N & breadth=Y & oi_ok=N                            exit +6/-15 | n  31/ 31 | win H1 74.2% H2 51.6% | net Rs H1   -1810 / H2   -4294
+  ALL      confirm=Y & ivup=Y & pcr_ok=Y                              exit +4/-11 | n  64/ 66 | win H1 73.4% H2 60.6% | net Rs H1   -4460 / H2   -7140
+  ALL      basket5=N & exp1=N & ivup=Y                                exit +6/-11 | n  30/ 34 | win H1 73.3% H2 52.9% | net Rs H1   -1220 / H2   -3740
+  ALL      basket5=N & exp1=N & ivup=Y                                exit +6/-15 | n  30/ 34 | win H1 73.3% H2 58.8% | net Rs H1   -1860 / H2   -4180
+  ALL      calm=Y & extreme=Y & pcr_ok=Y                              exit +6/-15 | n  37/ 61 | win H1 73.0% H2 59.0% | net Rs H1   -2350 / H2   -7450
+
+Best by net profit in the weaker half:
+  FILTERED calm=Y & exp1=N & top3=Y                                   exit +6/-11 | n  31/ 20 | win H1 67.7% H2 55.0% | net Rs H1   -1850 / H2   -2060
+  FILTERED calm=Y & exp1=N & top3=Y                                   exit +6/-15 | n  31/ 20 | win H1 71.0% H2 70.0% | net Rs H1   -2230 / H2   -1520
+  FILTERED calm=Y & extreme=Y & top3=Y                                exit +6/-11 | n  31/ 23 | win H1 64.5% H2 56.5% | net Rs H1   -2190 / H2   -2250
+  FILTERED calm=Y & pcr_ok=N & top3=Y                                 exit +6/-15 | n  30/ 22 | win H1 70.0% H2 63.6% | net Rs H1   -2280 / H2   -2260
+  FILTERED breadth=Y & calm=Y & top3=Y                                exit +6/-11 | n  30/ 22 | win H1 63.3% H2 54.5% | net Rs H1   -2240 / H2   -2300
+  FILTERED calm=Y & pcr_ok=N & top3=Y                                 exit +6/-11 | n  30/ 22 | win H1 66.7% H2 54.5% | net Rs H1   -1900 / H2   -2300
+  FILTERED basket5=Y & calm=Y & top3=Y                                exit +6/-11 | n  34/ 25 | win H1 64.7% H2 56.0% | net Rs H1   -2380 / H2   -2490
+  FILTERED calm=Y & extreme=Y & top3=Y                                exit +6/-15 | n  31/ 23 | win H1 67.7% H2 65.2% | net Rs H1   -2650 / H2   -2210
+  FILTERED calm=Y & top3=Y                                            exit +6/-11 | n  35/ 26 | win H1 62.9% H2 57.7% | net Rs H1   -2670 / H2   -2440
+  FILTERED calm=Y & t2=Y & top3=Y                                     exit +6/-11 | n  35/ 26 | win H1 62.9% H2 57.7% | net Rs H1   -2670 / H2   -2440
+  FILTERED calm=Y & exp1=N & top3=Y                                   exit +4/-11 | n  31/ 20 | win H1 67.7% H2 55.0% | net Rs H1   -2690 / H2   -2500
+  ALL      oi_ok=N & t2=Y & top3=Y                                    exit +6/-11 | n  31/ 21 | win H1 61.3% H2 47.6% | net Rs H1   -2530 / H2   -2690
+
+Reference rows:
+  FILTERED (no extra filter)                                          exit +6/-11 | n 418/345 | win H1 44.0% H2 57.7% | net Rs H1  -58775 / H2  -32390
+  ALL      (no extra filter)                                          exit +6/-11 | n 2518/2376 | win H1 47.8% H2 52.0% | net Rs H1 -320781 / H2 -268730
