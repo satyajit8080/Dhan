@@ -1,0 +1,20 @@
+stocks with data: 30 / 30
+decision points 16215 (every 5 min), features 40, days 246, halves split at 2026-04-29
+Walk-forward (monthly retrain on past months only), entry at t+1. Top 10% most confident predictions traded.
+H      model    | first half (Jan-Apr 2026 tested)                           | second half (Apr-Oct 2026)                                
+15     ridge    | right 48.4% corr +0.001 top10%: SENSEX  +13.7 pts, option net   -3.9, future net   -8.3 | right 49.6% corr +0.010 top10%: SENSEX   +3.5 pts, option net   -6.8, future net  -18.5
+15     boosting | right 46.9% corr -0.053 top10%: SENSEX   -8.2 pts, option net  -13.9, future net  -30.2 | right 51.3% corr +0.029 top10%: SENSEX   +4.3 pts, option net   -5.9, future net  -17.7
+30     ridge    | right 46.7% corr -0.022 top10%: SENSEX   +8.6 pts, option net  -12.0, future net  -13.4 | right 50.1% corr +0.018 top10%: SENSEX  +13.3 pts, option net   -5.4, future net   -8.7
+30     boosting | right 46.6% corr -0.081 top10%: SENSEX  -26.2 pts, option net  -26.0, future net  -48.2 | right 51.5% corr +0.037 top10%: SENSEX  +10.3 pts, option net   -5.6, future net  -11.7
+60     ridge    | right 46.3% corr -0.027 top10%: SENSEX  -11.5 pts, option net  -30.7, future net  -33.5 | right 51.3% corr +0.033 top10%: SENSEX  +23.4 pts, option net  -10.6, future net   +1.4
+60     boosting | right 45.3% corr -0.113 top10%: SENSEX  -41.1 pts, option net  -41.0, future net  -63.1 | right 50.9% corr +0.023 top10%: SENSEX   +9.9 pts, option net  -14.1, future net  -12.1
+close  ridge    | right 49.3% corr +0.000 top10%: SENSEX  +32.5 pts, option net  -43.6, future net  +10.5 | right 52.6% corr +0.059 top10%: SENSEX  +56.0 pts, option net  -39.8, future net  +34.0
+close  boosting | right 48.9% corr -0.061 top10%: SENSEX   +6.1 pts, option net  -37.8, future net  -15.9 | right 52.4% corr +0.008 top10%: SENSEX   -7.8 pts, option net  -66.3, future net  -29.8
+
+Chance baseline (each day's outcome randomly sign-flipped), boosting, 3 runs per horizon:
+  H 15     sign right H1/H2: 50.1%/50.2%, 49.4%/50.3%, 49.7%/50.5%
+  H 30     sign right H1/H2: 49.1%/49.4%, 48.1%/49.0%, 49.2%/50.0%
+  H 60     sign right H1/H2: 49.2%/49.3%, 48.5%/50.4%, 51.3%/48.8%
+  H close  sign right H1/H2: 50.3%/48.5%, 46.2%/52.4%, 51.6%/49.4%
+
+Option net = buying the SENSEX ATM CE/PE at t+1 and selling at t+1+H (real premiums) minus 5 pts; future net = SENSEX move minus 22 pts. Points per lot unit; x20 for Rs per lot.

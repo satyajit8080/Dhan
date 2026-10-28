@@ -1,0 +1,33 @@
+stocks with data: 30 / 30; days 247; halves split at 2026-04-28
+snapshots: 1474
+chance baseline (each day's outcome randomly sign-flipped, 5 runs): combinations > 22 pts in both halves: [3, 17, 7, 4, 16]
+rule x time x horizon combinations (>= 15 trades per half): 216
+avg pts > 0 in both halves: 54 | > 10 pts (option-viable) in both: 28 | > 22 pts (futures-viable) in both: 9
+
+Top 12 chosen on the FIRST half -> second half:
+  IT vs banks opposite -> follow banks             12:30 hold close | n  51/ 56 win 56.1% | avg SENSEX pts in trade direction H1  +95.5 / H2   +2.4
+  IT vs banks opposite -> follow IT [REVERSED]     12:30 hold close | n  51/ 56 win 56.1% | avg SENSEX pts in trade direction H1  +95.5 / H2   +2.4
+  IT vs banks opposite -> follow banks             13:30 hold close | n  50/ 56 win 50.9% | avg SENSEX pts in trade direction H1  +73.5 / H2  +33.0
+  IT vs banks opposite -> follow IT [REVERSED]     13:30 hold close | n  50/ 56 win 50.9% | avg SENSEX pts in trade direction H1  +73.5 / H2  +33.0
+  breadth >= 0.7 up / <= 0.3 down -> follow        12:30 hold close | n  57/ 63 win 59.2% | avg SENSEX pts in trade direction H1  +67.2 / H2  +20.6
+  broad move > 0.3% -> follow                      12:30 hold close | n  54/ 59 win 59.3% | avg SENSEX pts in trade direction H1  +66.1 / H2  +19.0
+  broad move > 0.3% -> follow [REVERSED]           11:00 hold close | n  60/ 53 win 52.2% | avg SENSEX pts in trade direction H1  +52.1 / H2  +52.3
+  broad move > 0.6% -> follow                      12:30 hold close | n  35/ 35 win 60.0% | avg SENSEX pts in trade direction H1  +51.7 / H2  +73.2
+  IT vs banks opposite -> follow banks             12:00 hold close | n  51/ 56 win 51.4% | avg SENSEX pts in trade direction H1  +49.1 / H2  -14.0
+  IT vs banks opposite -> follow IT [REVERSED]     12:00 hold close | n  51/ 56 win 51.4% | avg SENSEX pts in trade direction H1  +49.1 / H2  -14.0
+  broad move > 0.6% -> follow [REVERSED]           10:00 hold 30    | n  36/ 31 win 55.2% | avg SENSEX pts in trade direction H1  +47.6 / H2   +2.6
+  broad move > 0.3% -> follow [REVERSED]           10:00 hold 30    | n  53/ 47 win 56.0% | avg SENSEX pts in trade direction H1  +44.7 / H2   +8.8
+
+Best by the weaker half:
+  broad move > 0.3% -> follow [REVERSED]           11:00 hold close | n  60/ 53 win 52.2% | avg SENSEX pts in trade direction H1  +52.1 / H2  +52.3
+  broad move > 0.6% -> follow                      12:30 hold close | n  35/ 35 win 60.0% | avg SENSEX pts in trade direction H1  +51.7 / H2  +73.2
+  broad move > 0.3% -> follow                      13:30 hold close | n  58/ 56 win 52.6% | avg SENSEX pts in trade direction H1  +38.1 / H2  +41.4
+  breadth >= 0.7 up / <= 0.3 down -> follow        13:30 hold close | n  63/ 59 win 52.5% | avg SENSEX pts in trade direction H1  +41.4 / H2  +33.1
+  IT vs banks opposite -> follow banks             13:30 hold close | n  50/ 56 win 50.9% | avg SENSEX pts in trade direction H1  +73.5 / H2  +33.0
+  IT vs banks opposite -> follow IT [REVERSED]     13:30 hold close | n  50/ 56 win 50.9% | avg SENSEX pts in trade direction H1  +73.5 / H2  +33.0
+  breadth >= 0.7 up / <= 0.3 down -> follow        12:00 hold close | n  58/ 62 win 60.0% | avg SENSEX pts in trade direction H1  +28.1 / H2  +28.8
+  IT vs banks opposite -> follow banks             13:30 hold 60    | n  50/ 56 win 58.5% | avg SENSEX pts in trade direction H1  +24.2 / H2  +28.6
+  IT vs banks opposite -> follow IT [REVERSED]     13:30 hold 60    | n  50/ 56 win 58.5% | avg SENSEX pts in trade direction H1  +24.2 / H2  +28.6
+  broad move > 0.6% -> follow [REVERSED]           11:00 hold close | n  40/ 35 win 50.7% | avg SENSEX pts in trade direction H1  +21.2 / H2  +82.9
+  breadth >= 0.7 up / <= 0.3 down -> follow        10:00 hold close | n  62/ 59 win 52.1% | avg SENSEX pts in trade direction H1  +32.3 / H2  +20.6
+  breadth >= 0.7 up / <= 0.3 down -> follow        12:30 hold close | n  57/ 63 win 59.2% | avg SENSEX pts in trade direction H1  +67.2 / H2  +20.6
