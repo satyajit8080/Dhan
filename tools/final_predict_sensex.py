@@ -31,6 +31,10 @@ W = {"HDFCBANK": 15, "ICICIBANK": 10, "RELIANCE": 10, "INFY": 6, "BHARTIARTL": 5
 SECTOR = {"IT": ("INFY", "TCS", "HCLTECH", "TECHM"), "BANKS": ("HDFCBANK", "ICICIBANK", "AXISBANK", "KOTAKBANK", "SBIN"),
           "FIN": ("BAJFINANCE", "BAJAJFINSV"), "ENERGY": ("RELIANCE", "NTPC", "POWERGRID")}
 HORIZONS = (15, 30, 60, "close")
+if os.environ.get("WEIGHTS_JSON"):                         # another index (e.g. NIFTY): {stock: weight %}
+    W = json.load(open(os.environ["WEIGHTS_JSON"]))
+COST_OPT = float(os.environ.get("COST_OPT", "5"))           # index pts per option round trip
+COST_FUT = float(os.environ.get("COST_FUT", "22"))          # index pts per future round trip
 
 
 def load_legs(path_glob, key_side):
@@ -66,7 +70,7 @@ def build(csvfile, hdir, sdir):
                    lambda b: ("SENSEX", "CALL" if "_CALL_" in b else "PUT"))
     ST = load_legs(os.path.join(sdir, "*.json"), lambda b: (b.rsplit("_", 2)[0], b.rsplit("_", 2)[1]))
     names = [n for n in W if (n, "CALL") in ST]
-    print("stocks with data: %d / 30" % len(names))
+    print("stocks with data: %d / %d" % (len(names), len(W)))
     # FRESH events
     fresh = {}
     for d, bars in days.items():
@@ -230,8 +234,8 @@ def score(pred, y, meta, H, half, top=0.1):
             tg = meta[k][1][H]
             v = tg[1] if sg > 0 else tg[2]
             if v is not None:
-                opt.append(v - 5.0)
-        fut = (np.sign(p[s]) * t[s]) - 22.0
+                opt.append(v - COST_OPT)
+        fut = (np.sign(p[s]) * t[s]) - COST_FUT
         res[hn] = dict(n=int(m.sum()), acc=100 * np.mean(np.sign(p) == np.sign(t)), corr=float(np.corrcoef(p, t)[0, 1]),
                        top_n=int(s.sum()), top_pts=float((np.sign(p[s]) * t[s]).mean()),
                        opt=float(np.mean(opt)) if opt else float("nan"), fut=float(fut.mean()))
@@ -265,8 +269,8 @@ def main():
             r = score(pred, y, meta, H, half)
             accs.append("%.1f%%/%.1f%%" % (r.get("H1", {}).get("acc", float("nan")), r.get("H2", {}).get("acc", float("nan"))))
         print("  H %-6s sign right H1/H2: %s" % (H, ", ".join(accs)))
-    print("\nOption net = buying the SENSEX ATM CE/PE at t+1 and selling at t+1+H (real premiums) minus 5 pts; "
-          "future net = SENSEX move minus 22 pts. Points per lot unit; x20 for Rs per lot.")
+    print("\nOption net = buying the index ATM CE/PE at t+1 and selling at t+1+H (real premiums) minus %g pts; "
+          "future net = index move minus %g pts. Index points per unit; multiply by the lot size for Rs." % (COST_OPT, COST_FUT))
 
 
 if __name__ == "__main__":

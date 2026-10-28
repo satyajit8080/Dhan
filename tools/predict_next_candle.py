@@ -32,6 +32,10 @@ W = {"HDFCBANK": 15, "ICICIBANK": 10, "RELIANCE": 10, "INFY": 6, "BHARTIARTL": 5
      "BAJAJFINSV": 1.2, "TATASTEEL": 1.2, "ASIANPAINT": 1.1, "ADANIPORTS": 1.1, "TECHM": 1.0, "ETERNAL": 1.2,
      "TRENT": 1.0, "BEL": 1.0}                               # approximate SENSEX weights (2025), %
 BANKS = ("HDFCBANK", "ICICIBANK", "AXISBANK", "KOTAKBANK", "SBIN")
+if os.environ.get("WEIGHTS_JSON"):                         # another index (e.g. NIFTY): {stock: weight %}
+    W = json.load(open(os.environ["WEIGHTS_JSON"]))
+COST_OPT = float(os.environ.get("COST_OPT", "5"))           # index pts per option round trip
+COST_FUT = float(os.environ.get("COST_FUT", "22"))          # index pts per future round trip
 
 
 def load_stocks(ddir):
@@ -82,7 +86,7 @@ def build(csvfile, hdir, sdir):
     fx, fc = fresh_events(days)
     O = load_sensex_opt(hdir); S = load_stocks(sdir)
     names = [n for n in W if (n, "CALL") in S]
-    print("stocks with data: %d (%s)" % (len(names), ",".join(names)))
+    print("stocks with data: %d / %d (%s)" % (len(names), len(W), ",".join(names)))
     X, Y1, Y5, D, OPT = [], [], [], [], []
     cols = None
     for d in sorted(days):
@@ -227,9 +231,9 @@ def main():
                     s = (np.abs(p) >= thr)
                     g = np.where(p > 0, oc, op)[s]; g = g[~np.isnan(g)]
                     if len(g) >= 20:
-                        print("      -> buying the SENSEX ATM option on the top %d%%: n %d, premium change avg %+.2f pts, "
-                              "up in %.1f%% (costs ~5 pts per round trip) " % (100 - q, len(g), g.mean(), 100 * np.mean(g > 0)))
-    print("\nCosts to beat per trade: ~5 SENSEX pts (ATM option round trip), ~22 pts (future).")
+                        print("      -> buying the ATM index option on the top %d%%: n %d, premium change avg %+.2f pts, "
+                              "up in %.1f%% (costs ~%g pts per round trip) " % (100 - q, len(g), g.mean(), 100 * np.mean(g > 0), COST_OPT))
+    print("\nCosts to beat per trade: ~%g index pts (ATM option round trip), ~%g pts (future)." % (COST_OPT, COST_FUT))
 
 
 if __name__ == "__main__":
