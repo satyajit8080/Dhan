@@ -1,0 +1,2 @@
+week_expiry,strategy,lots,entry_time,short_ce,long_ce,short_pe,long_pe,credit_pts,settle_pts,net_rs,note
+2026-10-29,condor,13,2026-10-28 09:30,74300,75300,71400,70400,83.15,,,paper; breakevens 71316.85 / 74383.15
