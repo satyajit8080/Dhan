@@ -14,13 +14,15 @@ Strategies (one at a time per stock and side):
 Exits: target +10 / +20 / +40 %, stop -10 / -20 %, time stop 10 / 30 / 60 min or 15:15. No entries before 09:30 or
 after 14:30. Strike rolls during the hold are bridged with delta 0.5. Costs per trade: 1.2 % of the entry premium
 (about 1 % bid-ask round trip + ~0.2 % STT/exchange/stamp; brokerage per order not included because it depends on
-the lot value). Results are in % of premium per trade; halves split at 28 Apr 2026, chosen on the first half.
+the lot value). CLOSE_EXITS=1 exits only at 1-min closes beyond the target/stop (no assumed fills at the level, so
+spikes and gaps through the stop are not flattered). Results are in % of premium per trade; halves split at 28 Apr 2026, chosen on the first half.
 """
 import datetime, glob, itertools, json, os, sys
 from collections import defaultdict
 
 IST = datetime.timezone(datetime.timedelta(hours=5, minutes=30))
 COST = 1.2
+CLOSE_EXITS = os.environ.get("CLOSE_EXITS") == "1"   # 1 = exits only on 1-min closes (no intrabar fills at the level)
 
 
 def load(ddir):
@@ -50,9 +52,12 @@ def run_exit(s, i, tp, sl, hold, sign):
             break
         sh = 0.0 if k2 == K else 0.5 * (k2 - K) * sign
         h, l, c = h + sh, l + sh, c + sh
-        if l <= e * (1 - sl):
+        if CLOSE_EXITS:
+            if c <= e * (1 - sl) or c >= e * (1 + tp):
+                return 100 * (c - e) / e - COST
+        elif l <= e * (1 - sl):
             return -100 * sl - COST
-        if h >= e * (1 + tp):
+        elif h >= e * (1 + tp):
             return 100 * tp - COST
         last = c
     return 100 * (last - e) / e - COST

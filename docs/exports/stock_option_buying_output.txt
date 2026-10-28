@@ -1,0 +1,103 @@
+### intrabar exits, 8 stocks
+stocks AXISBANK,BHARTIARTL,HDFCBANK,ICICIBANK,INFY,RELIANCE,SBIN,TCS | days 248 | series 3968 | halves split at 2026-04-29
+combinations (>= 30 trades per half): 936 | positive avg after costs: H1 49, H2 16, BOTH 16
+
+Top 15 chosen on the FIRST half -> second half:
+A premium +15% in 1 min                      TP 40% SL 10% hold 10   | n 1036/ 933 win 30.8% | avg per trade H1  +2.01% / H2  -0.14%
+A premium +15% in 1 min                      TP 40% SL 10% hold 60   | n 1036/ 933 win 24.9% | avg per trade H1  +1.88% / H2  -0.38%
+A premium +15% in 1 min                      TP 40% SL 10% hold eod  | n 1036/ 933 win 24.2% | avg per trade H1  +1.86% / H2  -0.34%
+A premium +15% in 1 min                      TP 40% SL 10% hold 30   | n 1036/ 933 win 25.7% | avg per trade H1  +1.76% / H2  -0.41%
+A premium +15% in 1 min +volume              TP 40% SL 10% hold 10   | n  278/ 293 win 30.1% | avg per trade H1  +1.14% / H2  +0.03%
+A premium +15% in 3 min                      TP 40% SL 10% hold 10   | n 1592/1506 win 34.2% | avg per trade H1  +1.02% / H2  +0.63%
+A premium +10% in 1 min                      TP 40% SL 10% hold 30   | n 1729/1687 win 28.0% | avg per trade H1  +0.83% / H2  +0.16%
+A premium +10% in 1 min                      TP 40% SL 10% hold 60   | n 1729/1687 win 25.8% | avg per trade H1  +0.82% / H2  +0.29%
+A premium +15% in 1 min +volume              TP 40% SL 10% hold 60   | n  278/ 293 win 25.2% | avg per trade H1  +0.80% / H2  +0.35%
+A premium +15% in 3 min                      TP 40% SL 10% hold 30   | n 1592/1506 win 27.5% | avg per trade H1  +0.76% / H2  +0.33%
+A premium +10% in 1 min                      TP 40% SL 10% hold 10   | n 1729/1687 win 32.8% | avg per trade H1  +0.73% / H2  +0.29%
+A premium +15% in 1 min +volume              TP 40% SL 10% hold 30   | n  278/ 293 win 25.6% | avg per trade H1  +0.73% / H2  +0.20%
+A premium +15% in 3 min                      TP 40% SL 10% hold 60   | n 1592/1506 win 25.5% | avg per trade H1  +0.69% / H2  +0.38%
+A premium +10% in 1 min                      TP 40% SL 10% hold eod  | n 1729/1687 win 24.1% | avg per trade H1  +0.68% / H2  +0.35%
+A premium +15% in 1 min +volume              TP 40% SL 10% hold eod  | n  278/ 293 win 23.8% | avg per trade H1  +0.62% / H2  +0.49%
+
+Positive in both halves (best 15 by the weaker half):
+A premium +15% in 3 min                      TP 40% SL 10% hold 10   | n 1592/1506 win 34.2% | avg per trade H1  +1.02% / H2  +0.63%
+A premium +15% in 1 min +volume              TP 40% SL 10% hold eod  | n  278/ 293 win 23.8% | avg per trade H1  +0.62% / H2  +0.49%
+A premium +15% in 3 min                      TP 40% SL 10% hold eod  | n 1592/1506 win 24.1% | avg per trade H1  +0.60% / H2  +0.44%
+A premium +15% in 3 min                      TP 40% SL 10% hold 60   | n 1592/1506 win 25.5% | avg per trade H1  +0.69% / H2  +0.38%
+B stock opening-range break                  TP 40% SL 10% hold 10   | n 1397/1421 win 43.7% | avg per trade H1  +0.36% / H2  +0.41%
+A premium +15% in 1 min +volume              TP 40% SL 10% hold 60   | n  278/ 293 win 25.2% | avg per trade H1  +0.80% / H2  +0.35%
+A premium +10% in 1 min                      TP 40% SL 10% hold eod  | n 1729/1687 win 24.1% | avg per trade H1  +0.68% / H2  +0.35%
+A premium +15% in 3 min                      TP 40% SL 10% hold 30   | n 1592/1506 win 27.5% | avg per trade H1  +0.76% / H2  +0.33%
+A premium +10% in 1 min                      TP 40% SL 10% hold 10   | n 1729/1687 win 32.8% | avg per trade H1  +0.73% / H2  +0.29%
+A premium +10% in 1 min                      TP 40% SL 10% hold 60   | n 1729/1687 win 25.8% | avg per trade H1  +0.82% / H2  +0.29%
+B stock opening-range break                  TP 40% SL 20% hold 10   | n 1397/1421 win 44.9% | avg per trade H1  +0.27% / H2  +0.26%
+A premium +15% in 1 min +volume              TP 40% SL 10% hold 30   | n  278/ 293 win 25.6% | avg per trade H1  +0.73% / H2  +0.20%
+A premium +10% in 1 min                      TP 40% SL 10% hold 30   | n 1729/1687 win 28.0% | avg per trade H1  +0.83% / H2  +0.16%
+A premium +15% in 5 min                      TP 40% SL 10% hold 10   | n 1859/1878 win 33.8% | avg per trade H1  +0.41% / H2  +0.06%
+A premium +15% in 1 min +volume              TP 40% SL 10% hold 10   | n  278/ 293 win 30.1% | avg per trade H1  +1.14% / H2  +0.03%
+
+Follow-through after a sudden premium jump (no exits, no costs):
+  + 5% in 1 min         -> after  5 min: avg -0.02%, higher in 42% of 8946
+  + 5% in 1 min         -> after 10 min: avg +0.18%, higher in 42% of 8604
+  + 5% in 1 min         -> after 30 min: avg +1.08%, higher in 40% of 7699
+  +10% in 3 min         -> after  5 min: avg +0.29%, higher in 42% of 5210
+  +10% in 3 min         -> after 10 min: avg +0.45%, higher in 41% of 4992
+  +10% in 3 min         -> after 30 min: avg +1.81%, higher in 38% of 4440
+  +10% in 3 min +vol    -> after  5 min: avg -0.51%, higher in 39% of 1379
+  +10% in 3 min +vol    -> after 10 min: avg -0.74%, higher in 36% of 1327
+  +10% in 3 min +vol    -> after 30 min: avg -2.17%, higher in 35% of 1212
+  +15% in 5 min +vol    -> after  5 min: avg -1.26%, higher in 38% of 917
+  +15% in 5 min +vol    -> after 10 min: avg -0.49%, higher in 37% of 895
+  +15% in 5 min +vol    -> after 30 min: avg +0.28%, higher in 35% of 816
+
+### close-only exits, 8 stocks
+stocks AXISBANK,BHARTIARTL,HDFCBANK,ICICIBANK,INFY,RELIANCE,SBIN,TCS | days 248 | series 3968 | halves split at 2026-04-29
+combinations (>= 30 trades per half): 936 | positive avg after costs: H1 17, H2 31, BOTH 5
+
+Top 15 chosen on the FIRST half -> second half:
+B stock opening-range break                  TP 10% SL 20% hold 10   | n 1397/1421 win 47.2% | avg per trade H1  +0.55% / H2  +0.15%
+B stock opening-range break                  TP 20% SL 20% hold 10   | n 1397/1421 win 45.4% | avg per trade H1  +0.52% / H2  -0.01%
+B stock opening-range break                  TP 40% SL 20% hold 10   | n 1397/1421 win 44.9% | avg per trade H1  +0.50% / H2  +0.40%
+B stock opening-range break                  TP 10% SL 10% hold 10   | n 1397/1421 win 46.5% | avg per trade H1  +0.49% / H2  +0.13%
+B stock opening-range break                  TP 20% SL 10% hold 10   | n 1397/1421 win 44.6% | avg per trade H1  +0.47% / H2  -0.02%
+B stock opening-range break                  TP 40% SL 10% hold 10   | n 1397/1421 win 44.1% | avg per trade H1  +0.45% / H2  +0.38%
+A premium +15% in 3 min                      TP 40% SL 20% hold 10   | n 1592/1506 win 41.9% | avg per trade H1  +0.31% / H2  +0.31%
+A premium +15% in 1 min                      TP 40% SL 10% hold 10   | n 1036/ 933 win 32.6% | avg per trade H1  +0.30% / H2  -2.57%
+A premium +15% in 1 min                      TP 40% SL 10% hold eod  | n 1036/ 933 win 25.5% | avg per trade H1  +0.23% / H2  -3.29%
+A premium +15% in 1 min                      TP 40% SL 10% hold 60   | n 1036/ 933 win 26.3% | avg per trade H1  +0.18% / H2  -3.44%
+B stock opening-range break                  TP 10% SL 20% hold 60   | n 1397/1421 win 53.7% | avg per trade H1  +0.15% / H2  -0.38%
+B stock opening-range break                  TP 10% SL 20% hold 30   | n 1397/1421 win 50.2% | avg per trade H1  +0.13% / H2  -0.09%
+B stock opening-range break                  TP 10% SL 10% hold 60   | n 1397/1421 win 49.4% | avg per trade H1  +0.13% / H2  -0.30%
+B stock opening-range break                  TP 10% SL 10% hold eod  | n 1397/1421 win 51.0% | avg per trade H1  +0.12% / H2  -0.60%
+A premium +15% in 1 min                      TP 40% SL 10% hold 30   | n 1036/ 933 win 27.2% | avg per trade H1  +0.08% / H2  -3.42%
+
+Positive in both halves (best 15 by the weaker half):
+B stock opening-range break                  TP 40% SL 20% hold 10   | n 1397/1421 win 44.9% | avg per trade H1  +0.50% / H2  +0.40%
+B stock opening-range break                  TP 40% SL 10% hold 10   | n 1397/1421 win 44.1% | avg per trade H1  +0.45% / H2  +0.38%
+A premium +15% in 3 min                      TP 40% SL 20% hold 10   | n 1592/1506 win 41.9% | avg per trade H1  +0.31% / H2  +0.31%
+B stock opening-range break                  TP 10% SL 20% hold 10   | n 1397/1421 win 47.2% | avg per trade H1  +0.55% / H2  +0.15%
+B stock opening-range break                  TP 10% SL 10% hold 10   | n 1397/1421 win 46.5% | avg per trade H1  +0.49% / H2  +0.13%
+
+Follow-through after a sudden premium jump (no exits, no costs):
+  + 5% in 1 min         -> after  5 min: avg -0.02%, higher in 42% of 8946
+  + 5% in 1 min         -> after 10 min: avg +0.18%, higher in 42% of 8604
+  + 5% in 1 min         -> after 30 min: avg +1.08%, higher in 40% of 7699
+  +10% in 3 min         -> after  5 min: avg +0.29%, higher in 42% of 5210
+  +10% in 3 min         -> after 10 min: avg +0.45%, higher in 41% of 4992
+  +10% in 3 min         -> after 30 min: avg +1.81%, higher in 38% of 4440
+  +10% in 3 min +vol    -> after  5 min: avg -0.51%, higher in 39% of 1379
+  +10% in 3 min +vol    -> after 10 min: avg -0.74%, higher in 36% of 1327
+  +10% in 3 min +vol    -> after 30 min: avg -2.17%, higher in 35% of 1212
+  +15% in 5 min +vol    -> after  5 min: avg -1.26%, higher in 38% of 917
+  +15% in 5 min +vol    -> after 10 min: avg -0.49%, higher in 37% of 895
+  +15% in 5 min +vol    -> after 30 min: avg +0.28%, higher in 35% of 816
+
+### opening-range break, fresh stocks only
+intrabar    TP 40% SL 10% hold 10 | n 724 win 41.2% | avg H1 -0.16% H2 +0.23% | per stock: AXISBANK -0.22 BHARTIARTL +0.30
+intrabar    TP 40% SL 20% hold 10 | n 724 win 42.5% | avg H1 -0.21% H2 +0.12% | per stock: AXISBANK -0.43 BHARTIARTL +0.36
+intrabar    TP 20% SL 10% hold 10 | n 724 win 41.6% | avg H1 -0.33% H2 -0.47% | per stock: AXISBANK -0.45 BHARTIARTL -0.34
+intrabar    TP 10% SL 10% hold 10 | n 724 win 44.9% | avg H1 -0.39% H2 -0.59% | per stock: AXISBANK -0.23 BHARTIARTL -0.77
+close-exits TP 40% SL 10% hold 10 | n 724 win 41.6% | avg H1 -0.54% H2 -0.12% | per stock: AXISBANK -0.43 BHARTIARTL -0.22
+close-exits TP 40% SL 20% hold 10 | n 724 win 42.5% | avg H1 -0.35% H2 -0.02% | per stock: AXISBANK -0.29 BHARTIARTL -0.06
+close-exits TP 20% SL 10% hold 10 | n 724 win 42.0% | avg H1 -0.33% H2 -0.59% | per stock: AXISBANK -0.48 BHARTIARTL -0.44
+close-exits TP 10% SL 10% hold 10 | n 724 win 44.1% | avg H1 -0.17% H2 +0.03% | per stock: AXISBANK +0.04 BHARTIARTL -0.18
