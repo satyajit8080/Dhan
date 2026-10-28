@@ -26,3 +26,18 @@ Only the 2.0×, zero-slippage second half is positive in points (+317) and still
 
 Conclusion: v3 as written has no edge on a year of real option prices, in either half, at any target tested.
 No real orders; no strategy change. RULES.md unchanged.
+
+## Variant search (28 Oct; `tools/backtest_v3_variants.py`)
+2,731 v3 signals (all levels, expiry days kept and flagged). Grid: ATM option (real premium, ₹70 + 1.5 pts) or SENSEX
+future (index pts, ₹400 + 2 pts) × 4–5 stops (close-back, fixed) × 6–8 targets (k × risk, fixed) × hold 5/10/20/30 min ×
+16 filters (side, fresh/old, morning/afternoon, with/against the move since the open, first signal of the day,
+expiry day, day before expiry, new extreme, combinations). Selection on the first half only, check on the second.
+
+- **4,096 combinations: 0 positive after costs in the first half, 0 in the second half, 0 in both.**
+- Best first-half pick (first signal of the day, option, close-back stop, +10 target): 68 % wins, −₹12,952 H1, −₹16,487 H2.
+- Raw follow-through (average index move after entry, no costs): first half −6.0 pts at 10 min / −11.6 at 20 min
+  (breakouts reversed); second half +2.9 / +4.9 (small continuation). The direction is not stable between halves, so
+  neither following nor fading the breakout is reliable, and both are far below the ~4–5 pt option or ~22 pt futures
+  round-trip cost.
+
+Conclusion: no variant of v3 tested here makes money after costs in either half. Not a basis for real orders.
