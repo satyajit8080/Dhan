@@ -31,7 +31,9 @@ import type { Candle } from '../src/endpoints/historical.js';
 import { decideDirection, type OiView, type DirectionVerdict } from '../src/direction.js';
 import { istDateOf, istTimeOf } from '../src/indicators.js';
 
-const [dataDir, fromDate, toDate, outDir] = process.argv.slice(2) as [string, string, string, string];
+const [dataDir, fromDate, toDate, outDir, configJson] = process.argv.slice(2) as [string, string, string, string, string?];
+/** Optional 5th arg: JSON overrides for DirectionConfig, for testing variants. */
+const configOverride = configJson ? (JSON.parse(configJson) as Record<string, unknown>) : undefined;
 if (!dataDir || !fromDate || !toDate || !outDir) {
   console.error('usage: backtest.ts <data_dir> <from> <to> <out_dir>');
   process.exit(1);
@@ -250,6 +252,7 @@ for (const day of inRange) {
       nowMs,
       bars1m: [...history, ...today.slice(0, i + 1)],
       oi: oiViewAt(bar.timestampMs, code),
+      config: configOverride,
     });
 
     for (const b of v.blockers) {
@@ -321,6 +324,7 @@ const group = (k: (t: Trade) => string) => {
 };
 
 const summary = {
+  configOverride: configOverride ?? null,
   period: { from: fromDate, to: toDate, sessions: inRange.length },
   overall: stats(trades),
   bySide: group((t) => t.side),
