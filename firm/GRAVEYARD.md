@@ -23,3 +23,4 @@ All on real option premiums with costs unless noted. Details in `docs/sessions/2
 | Long straddles (buy volatility) | negative except 31 wide-open days |
 | Condor adjustments (close / roll tested side) | −₹28k to −₹35k vs +₹75k without |
 | Condor delayed / retracement entry | all below the 09:30 entry |
+| CE only when green (any definition), PE only when red | win 49–51 %, all negative both halves; even look-ahead 'day closes green' 51.5 %, −₹1.56 lakh |
