@@ -7,11 +7,7 @@ var __getOwnPropNames = Object.getOwnPropertyNames;
 var __getProtoOf = Object.getPrototypeOf;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
 var __commonJS = (cb, mod) => function __require() {
-  try {
-    return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
-  } catch (e) {
-    throw mod = 0, e;
-  }
+  return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
 };
 var __export = (target, all) => {
   for (var name in all)
@@ -3338,6 +3334,37 @@ var require_utils = __commonJS({
       }
       return output.join("");
     }
+    function removeDotSegmentsRelative(path) {
+      if (path === "" || path[0] === "/") {
+        return removeDotSegments(path);
+      }
+      const segments = path.split("/");
+      const last = segments.length - 1;
+      const output = [];
+      let trailingDirectory = false;
+      for (let i = 0; i <= last; i++) {
+        const segment = segments[i];
+        if (segment === "." || segment === "..") {
+          if (segment === "..") {
+            if (output.length !== 0 && output[output.length - 1] !== "..") {
+              output.pop();
+            } else {
+              output.push("..");
+            }
+          }
+          trailingDirectory = i === last;
+        } else {
+          output.push(segment);
+        }
+      }
+      if (trailingDirectory && output[output.length - 1] !== "..") {
+        output.push("");
+      }
+      if (output.length === 0 || output[0] === "" || output[0].includes(":")) {
+        output.unshift(".");
+      }
+      return output.join("/");
+    }
     var HOST_DELIMS = { "@": "%40", "/": "%2F", "?": "%3F", "#": "%23", ":": "%3A" };
     var HOST_DELIM_RE = /[@/?#:]/g;
     var HOST_DELIM_NO_COLON_RE = /[@/?#]/g;
@@ -3598,6 +3625,7 @@ var require_utils = __commonJS({
       encodeFragment,
       escapePreservingEscapes,
       removeDotSegments,
+      removeDotSegmentsRelative,
       isIPv4,
       isUUID,
       normalizeIPv6,
@@ -3821,16 +3849,18 @@ var require_schemes = __commonJS({
 var require_fast_uri = __commonJS({
   "node_modules/fast-uri/index.js"(exports2, module2) {
     "use strict";
-    var { normalizeIPv6, removeDotSegments, recomposeAuthority, normalizePercentEncoding, normalizePathEncoding, serializePathEncoding, normalizeQueryFragmentEncoding, encodeQuery, encodeFragment, reescapeHostDelimiters, isIPv4, nonSimpleDomain } = require_utils();
+    var { normalizeIPv6, removeDotSegments, removeDotSegmentsRelative, recomposeAuthority, normalizePercentEncoding, normalizePathEncoding, serializePathEncoding, normalizeQueryFragmentEncoding, encodeQuery, encodeFragment, reescapeHostDelimiters, isIPv4, nonSimpleDomain } = require_utils();
     var { SCHEMES, getSchemeHandler } = require_schemes();
     var VALID_SCHEME = /^[A-Za-z][A-Za-z0-9+.-]*$/u;
     var MALFORMED_SCHEME_ERROR = "URI scheme is malformed.";
-    function decodeValidScheme(scheme) {
-      const decodedScheme = unescape(String(scheme));
-      if (!VALID_SCHEME.test(decodedScheme)) {
+    var MALFORMED_HOST_ERROR = "URI host is malformed.";
+    var FORBIDDEN_DOMAIN_HOST_CHARACTER = /[\0-\x20"#/:<>?@[\\\]^`{|}\x7F]/u;
+    function validateScheme(scheme) {
+      const stringScheme = String(scheme);
+      if (!VALID_SCHEME.test(stringScheme)) {
         throw new TypeError(MALFORMED_SCHEME_ERROR);
       }
-      return decodedScheme;
+      return stringScheme;
     }
     function normalize(uri, options) {
       if (typeof uri === "string") {
@@ -3867,6 +3897,9 @@ var require_fast_uri = __commonJS({
       const resolvedSchemeHandler = getSchemeHandler(options && options.scheme || resolved.scheme);
       const resolvedHost = resolved.host;
       const resolvedHostIsIP = resolvedHost !== void 0 && resolvedHost !== "" && (isIPv4(resolvedHost) || normalizeIPv6(resolvedHost).isIPV6);
+      if (hasForbiddenDomainHost(resolved, options || {}, resolvedSchemeHandler, resolvedHostIsIP)) {
+        throw new Error(MALFORMED_HOST_ERROR);
+      }
       canonicalizeHost(resolved, options || {}, resolvedSchemeHandler, resolvedHostIsIP);
       const encodedASCIIHost = resolvedHost && resolvedHost.indexOf("%") !== -1 && !new RegExp("\\P{ASCII}", "u").test(resolvedHost);
       if (resolved.error && !encodedASCIIHost) {
@@ -3908,14 +3941,15 @@ var require_fast_uri = __commonJS({
             if (relative.path[0] === "/") {
               target.path = removeDotSegments(relative.path);
             } else {
-              if ((base.userinfo !== void 0 || base.host !== void 0 || base.port !== void 0) && !base.path) {
+              const baseHasAuthority = base.userinfo !== void 0 || base.host !== void 0 || base.port !== void 0;
+              if (baseHasAuthority && !base.path) {
                 target.path = "/" + relative.path;
               } else if (!base.path) {
                 target.path = relative.path;
               } else {
                 target.path = base.path.slice(0, base.path.lastIndexOf("/") + 1) + relative.path;
               }
-              target.path = removeDotSegments(target.path);
+              target.path = base.scheme === void 0 && !baseHasAuthority && target.path[0] !== "/" ? removeDotSegmentsRelative(target.path) : removeDotSegments(target.path);
             }
             target.query = relative.query;
           }
@@ -3953,12 +3987,13 @@ var require_fast_uri = __commonJS({
       const options = Object.assign({}, opts);
       const uriTokens = [];
       if (component.scheme) {
-        component.scheme = decodeValidScheme(component.scheme);
+        component.scheme = validateScheme(component.scheme);
       }
       const schemeHandler = getSchemeHandler(options.scheme || component.scheme);
       if (schemeHandler && schemeHandler.serialize) schemeHandler.serialize(component, options);
       const hasAuthority = component.userinfo !== void 0 || component.host !== void 0 || component.port !== void 0;
-      const pathNoScheme = !options.skipEscape && component.scheme === void 0 && !hasAuthority;
+      const schemelessReference = (component.scheme === void 0 || options.reference === "suffix") && !hasAuthority;
+      const pathNoScheme = !options.skipEscape && schemelessReference;
       if (component.path !== void 0) {
         if (!options.skipEscape) {
           component.path = serializePathEncoding(component.path, pathNoScheme);
@@ -3967,7 +4002,7 @@ var require_fast_uri = __commonJS({
         }
       }
       if (options.reference !== "suffix" && component.scheme) {
-        component.scheme = decodeValidScheme(component.scheme);
+        component.scheme = validateScheme(component.scheme);
         uriTokens.push(component.scheme, ":");
       }
       const authority = recomposeAuthority(component);
@@ -3983,9 +4018,9 @@ var require_fast_uri = __commonJS({
       if (component.path !== void 0) {
         let s = component.path;
         if (!options.absolutePath && (!schemeHandler || !schemeHandler.absolutePath)) {
-          s = removeDotSegments(s);
+          s = schemelessReference && s[0] !== "/" ? removeDotSegmentsRelative(s) : removeDotSegments(s);
         }
-        if (pathNoScheme) {
+        if (schemelessReference) {
           s = serializePathEncoding(s, true);
         }
         if (authority === void 0 && s[0] === "/" && s[1] === "/") {
@@ -4032,15 +4067,33 @@ var require_fast_uri = __commonJS({
       return hasMalformedPercentEncoding(matches[3]) || host !== void 0 && !isIPLiteral(host) && hasMalformedPercentEncoding(host) || hasMalformedPercentEncoding(matches[6]) || hasMalformedPercentEncoding(matches[7]) || hasMalformedPercentEncoding(matches[8]);
     }
     function canonicalizeHost(parsed, options, schemeHandler, isIP) {
+      if (hasForbiddenDomainHost(parsed, options, schemeHandler, isIP)) {
+        parsed.error = parsed.error || MALFORMED_HOST_ERROR;
+        return true;
+      }
       if (!options.unicodeSupport && (!schemeHandler || !schemeHandler.unicodeSupport) && parsed.host && !isIPLiteral(parsed.host) && (options.domainHost || schemeHandler && schemeHandler.domainHost) && isIP === false && nonSimpleDomain(parsed.host)) {
+        let url;
         try {
-          parsed.host = new URL("http://" + parsed.host).hostname;
+          url = new URL("http://" + parsed.host);
         } catch (e) {
           parsed.error = parsed.error || "Host's domain name can not be converted to ASCII: " + e;
           return true;
         }
+        if (!isHostOnlyURL(url)) {
+          parsed.error = parsed.error || MALFORMED_HOST_ERROR;
+          return true;
+        }
+        parsed.host = url.hostname;
       }
       return false;
+    }
+    function hasForbiddenDomainHost(parsed, options, schemeHandler, isIP) {
+      return Boolean(
+        parsed.host && isIP === false && !isIPLiteral(parsed.host) && (options.domainHost || schemeHandler && schemeHandler.domainHost) && FORBIDDEN_DOMAIN_HOST_CHARACTER.test(parsed.host)
+      );
+    }
+    function isHostOnlyURL(url) {
+      return url.username === "" && url.password === "" && url.port === "" && url.pathname === "/" && url.search === "" && url.hash === "" && url.hostname !== "";
     }
     function parseWithStatus(uri, opts) {
       const options = Object.assign({}, opts);
@@ -4096,9 +4149,8 @@ var require_fast_uri = __commonJS({
         parsed.query = matches[7];
         parsed.fragment = matches[8];
         if (parsed.scheme !== void 0) {
-          const decodedScheme = unescape(parsed.scheme);
-          if (VALID_SCHEME.test(decodedScheme)) {
-            parsed.scheme = decodedScheme.toLowerCase();
+          if (VALID_SCHEME.test(parsed.scheme)) {
+            parsed.scheme = parsed.scheme.toLowerCase();
           } else {
             parsed.error = parsed.error || MALFORMED_SCHEME_ERROR;
             malformedScheme = true;
@@ -4126,7 +4178,7 @@ var require_fast_uri = __commonJS({
             malformedIPLiteral = hasIPLiteralBracket && (!bracketedIPLiteral || ipv6result.error === true);
             parsed.host = isIP ? ipv6result.host : ipv6result.host.toLowerCase();
             if (malformedIPLiteral) {
-              parsed.error = parsed.error || "URI host is malformed.";
+              parsed.error = parsed.error || MALFORMED_HOST_ERROR;
               malformedAuthorityOrPort = true;
             }
           } else {
@@ -4154,7 +4206,7 @@ var require_fast_uri = __commonJS({
           if (!isIP) {
             host = normalizePercentEncoding(host.toLowerCase());
           }
-          parsed.host = reescapeHostDelimiters(host, isIP);
+          parsed.host = isIP || options.scheme !== "null" ? reescapeHostDelimiters(host, isIP) : host;
         }
         if (!schemeHandler || schemeHandler && !schemeHandler.skipNormalize) {
           if (parsed.path) {
@@ -11028,7 +11080,7 @@ ZodNaN.create = (params) => {
     ...processCreateParams(params)
   });
 };
-var BRAND = /* @__PURE__ */ Symbol("zod_brand");
+var BRAND = Symbol("zod_brand");
 var ZodBranded = class extends ZodType {
   _parse(input) {
     const { ctx } = this._processInputParams(input);
@@ -11230,14 +11282,14 @@ var ostring = () => stringType().optional();
 var onumber = () => numberType().optional();
 var oboolean = () => booleanType().optional();
 var coerce = {
-  string: ((arg) => ZodString.create({ ...arg, coerce: true })),
-  number: ((arg) => ZodNumber.create({ ...arg, coerce: true })),
-  boolean: ((arg) => ZodBoolean.create({
+  string: (arg) => ZodString.create({ ...arg, coerce: true }),
+  number: (arg) => ZodNumber.create({ ...arg, coerce: true }),
+  boolean: (arg) => ZodBoolean.create({
     ...arg,
     coerce: true
-  })),
-  bigint: ((arg) => ZodBigInt.create({ ...arg, coerce: true })),
-  date: ((arg) => ZodDate.create({ ...arg, coerce: true }))
+  }),
+  bigint: (arg) => ZodBigInt.create({ ...arg, coerce: true }),
+  date: (arg) => ZodDate.create({ ...arg, coerce: true })
 };
 var NEVER = INVALID;
 
@@ -11288,6 +11340,7 @@ function $constructor(name, initializer3, params) {
   Object.defineProperty(_, "name", { value: name });
   return _;
 }
+var $brand = Symbol("zod_brand");
 var $ZodAsyncError = class extends Error {
   constructor() {
     super(`Encountered Promise during synchronous parse. Use .parseAsync() instead.`);
@@ -13791,6 +13844,8 @@ function en_default2() {
 }
 
 // node_modules/zod/v4/core/registries.js
+var $output = Symbol("ZodOutput");
+var $input = Symbol("ZodInput");
 var $ZodRegistry = class {
   constructor() {
     this._map = /* @__PURE__ */ new Map();
@@ -15068,10 +15123,10 @@ var ZodMiniType = /* @__PURE__ */ $constructor("ZodMiniType", (inst, def) => {
   };
   inst.clone = (_def, params) => clone(inst, _def, params);
   inst.brand = () => inst;
-  inst.register = ((reg, meta) => {
+  inst.register = (reg, meta) => {
     reg.add(inst, meta);
     return inst;
-  });
+  };
 });
 var ZodMiniObject = /* @__PURE__ */ $constructor("ZodMiniObject", (inst, def) => {
   $ZodObject.init(inst, def);
@@ -15350,10 +15405,10 @@ var ZodType2 = /* @__PURE__ */ $constructor("ZodType", (inst, def) => {
   };
   inst.clone = (def2, params) => clone(inst, def2, params);
   inst.brand = () => inst;
-  inst.register = ((reg, meta) => {
+  inst.register = (reg, meta) => {
     reg.add(inst, meta);
     return inst;
-  });
+  };
   inst.parse = (data, params) => parse2(inst, data, params, { callee: inst.parse });
   inst.safeParse = (data, params) => safeParse3(inst, data, params);
   inst.parseAsync = async (data, params) => parseAsync2(inst, data, params, { callee: inst.parseAsync });
@@ -17323,13 +17378,11 @@ function assertCompleteRequestPrompt(request) {
   if (request.params.ref.type !== "ref/prompt") {
     throw new TypeError(`Expected CompleteRequestPrompt, but got ${request.params.ref.type}`);
   }
-  void request;
 }
 function assertCompleteRequestResourceTemplate(request) {
   if (request.params.ref.type !== "ref/resource") {
     throw new TypeError(`Expected CompleteRequestResourceTemplate, but got ${request.params.ref.type}`);
   }
-  void request;
 }
 var CompleteResultSchema = ResultSchema.extend({
   completion: looseObject({
@@ -17482,7 +17535,7 @@ function isTerminal(status) {
 }
 
 // node_modules/zod-to-json-schema/dist/esm/Options.js
-var ignoreOverride = /* @__PURE__ */ Symbol("Let zodToJsonSchema decide on which parser to use");
+var ignoreOverride = Symbol("Let zodToJsonSchema decide on which parser to use");
 var defaultOptions = {
   name: void 0,
   $refStrategy: "root",
@@ -18848,6 +18901,9 @@ var Protocol = class {
       this.setRequestHandler(GetTaskPayloadRequestSchema, async (request, extra) => {
         const handleTaskResult = async () => {
           const taskId = request.params.taskId;
+          if (!await this._taskStore.getTask(taskId, extra.sessionId)) {
+            throw new McpError(ErrorCode.InvalidParams, `Task not found: ${taskId}`);
+          }
           if (this._taskMessageQueue) {
             let queuedMessage;
             while (queuedMessage = await this._taskMessageQueue.dequeue(taskId, extra.sessionId)) {
@@ -18878,12 +18934,12 @@ var Protocol = class {
             throw new McpError(ErrorCode.InvalidParams, `Task not found: ${taskId}`);
           }
           if (!isTerminal(task.status)) {
-            await this._waitForTaskUpdate(taskId, extra.signal);
+            await this._waitForTaskUpdate(taskId, extra.signal, extra.sessionId);
             return await handleTaskResult();
           }
           if (isTerminal(task.status)) {
             const result = await this._taskStore.getTaskResult(taskId, extra.sessionId);
-            this._clearTaskQueue(taskId);
+            this._clearTaskQueue(taskId, extra.sessionId);
             return {
               ...result,
               _meta: {
@@ -18920,7 +18976,7 @@ var Protocol = class {
             throw new McpError(ErrorCode.InvalidParams, `Cannot cancel task in terminal status: ${task.status}`);
           }
           await this._taskStore.updateTaskStatus(request.params.taskId, "cancelled", "Client cancelled task execution.", extra.sessionId);
-          this._clearTaskQueue(request.params.taskId);
+          this._clearTaskQueue(request.params.taskId, extra.sessionId);
           const cancelledTask = await this._taskStore.getTask(request.params.taskId, extra.sessionId);
           if (!cancelledTask) {
             throw new McpError(ErrorCode.InvalidParams, `Task not found after cancellation: ${request.params.taskId}`);
@@ -19048,6 +19104,19 @@ var Protocol = class {
     const handler = this._requestHandlers.get(request.method) ?? this.fallbackRequestHandler;
     const capturedTransport = this._transport;
     const relatedTaskId = request.params?._meta?.[RELATED_TASK_META_KEY]?.taskId;
+    const sessionId = capturedTransport?.sessionId;
+    const store = this._taskStore;
+    let relatedTaskFound = true;
+    let relatedTaskLookup;
+    if (relatedTaskId && store && this._taskMessageQueue && sessionId !== void 0) {
+      relatedTaskFound = false;
+      relatedTaskLookup = (async () => {
+        if (!await store.getTask(relatedTaskId, sessionId)) {
+          throw new McpError(ErrorCode.InvalidParams, `Task not found: ${relatedTaskId}`);
+        }
+        relatedTaskFound = true;
+      })();
+    }
     if (handler === void 0) {
       const errorResponse = {
         jsonrpc: "2.0",
@@ -19057,7 +19126,10 @@ var Protocol = class {
           message: "Method not found"
         }
       };
-      if (relatedTaskId && this._taskMessageQueue) {
+      if (relatedTaskId && relatedTaskLookup) {
+        const queuedError = { type: "error", message: errorResponse, timestamp: Date.now() };
+        relatedTaskLookup.then(() => this._enqueueTaskMessage(relatedTaskId, queuedError, sessionId), () => capturedTransport?.send(errorResponse)).catch((error2) => this._onerror(new Error(`Failed to send an error response: ${error2}`)));
+      } else if (relatedTaskId && this._taskMessageQueue) {
         this._enqueueTaskMessage(relatedTaskId, {
           type: "error",
           message: errorResponse,
@@ -19108,7 +19180,10 @@ var Protocol = class {
       closeSSEStream: extra?.closeSSEStream,
       closeStandaloneSSEStream: extra?.closeStandaloneSSEStream
     };
-    Promise.resolve().then(() => {
+    (relatedTaskLookup ?? Promise.resolve()).then(() => {
+      if (relatedTaskLookup && abortController.signal.aborted) {
+        throw new McpError(ErrorCode.ConnectionClosed, "Request was cancelled");
+      }
       if (taskCreationParams) {
         this.assertTaskHandlerCapability(request.method);
       }
@@ -19143,7 +19218,7 @@ var Protocol = class {
           ...error2["data"] !== void 0 && { data: error2["data"] }
         }
       };
-      if (relatedTaskId && this._taskMessageQueue) {
+      if (relatedTaskId && this._taskMessageQueue && relatedTaskFound) {
         await this._enqueueTaskMessage(relatedTaskId, {
           type: "error",
           message: errorResponse,
@@ -19623,7 +19698,7 @@ var Protocol = class {
       throw new Error("Cannot enqueue task message: taskStore and taskMessageQueue are not configured");
     }
     const maxQueueSize = this._options?.maxTaskQueueSize;
-    await this._taskMessageQueue.enqueue(taskId, message, sessionId, maxQueueSize);
+    await this._taskMessageQueue.enqueue(taskId, message, sessionId ?? this._transport?.sessionId, maxQueueSize);
   }
   /**
    * Clears the message queue for a task and rejects any pending request resolvers.
@@ -19652,12 +19727,13 @@ var Protocol = class {
    * Uses polling to check for updates at the task's configured poll interval.
    * @param taskId The task ID to wait for
    * @param signal Abort signal to cancel the wait
+   * @param sessionId Session of the request that waits, passed to the task store
    * @returns Promise that resolves when an update occurs or rejects if aborted
    */
-  async _waitForTaskUpdate(taskId, signal) {
+  async _waitForTaskUpdate(taskId, signal, sessionId) {
     let interval = this._options?.defaultTaskPollInterval ?? 1e3;
     try {
-      const task = await this._taskStore?.getTask(taskId);
+      const task = await this._taskStore?.getTask(taskId, sessionId);
       if (task?.pollInterval) {
         interval = task.pollInterval;
       }
@@ -20449,7 +20525,7 @@ var Server = class extends Protocol {
 };
 
 // node_modules/@modelcontextprotocol/sdk/dist/esm/server/completable.js
-var COMPLETABLE_SYMBOL = /* @__PURE__ */ Symbol.for("mcp.completable");
+var COMPLETABLE_SYMBOL = Symbol.for("mcp.completable");
 function isCompletable(schema) {
   return !!schema && typeof schema === "object" && COMPLETABLE_SYMBOL in schema;
 }
@@ -20536,6 +20612,42 @@ var ExperimentalMcpServerTasks = class {
 };
 
 // node_modules/@modelcontextprotocol/sdk/dist/esm/server/mcp.js
+function toolInputElementCount(value, max) {
+  let count = 0;
+  const stack = [value];
+  while (stack.length > 0) {
+    const node = stack.pop();
+    if (node === null || typeof node !== "object")
+      continue;
+    if (Array.isArray(node)) {
+      for (const child of node) {
+        if (++count > max)
+          return count;
+        if (child !== null && typeof child === "object")
+          stack.push(child);
+      }
+    } else {
+      for (const key in node) {
+        if (!Object.prototype.hasOwnProperty.call(node, key))
+          continue;
+        if (++count > max)
+          return count;
+        const child = node[key];
+        if (child !== null && typeof child === "object")
+          stack.push(child);
+      }
+    }
+  }
+  return count;
+}
+function resolveMaxToolInputElements(value) {
+  if (value === void 0 || value === Infinity)
+    return void 0;
+  if (typeof value !== "number" || Number.isNaN(value) || value < 1) {
+    throw new RangeError(`maxToolInputElements must be a number of at least 1, or Infinity, got ${String(value)}`);
+  }
+  return value;
+}
 var McpServer = class {
   constructor(serverInfo, options) {
     this._registeredResources = {};
@@ -20547,6 +20659,16 @@ var McpServer = class {
     this._resourceHandlersInitialized = false;
     this._promptHandlersInitialized = false;
     this.server = new Server(serverInfo, options);
+    this._maxToolInputElements = resolveMaxToolInputElements(options?.maxToolInputElements);
+    if (options?.capabilities?.tools) {
+      this.setToolRequestHandlers();
+    }
+    if (options?.capabilities?.resources) {
+      this.setResourceRequestHandlers();
+    }
+    if (options?.capabilities?.prompts) {
+      this.setPromptRequestHandlers();
+    }
   }
   /**
    * Access experimental features.
@@ -20677,12 +20799,15 @@ var McpServer = class {
    * Validates tool input arguments against the tool's input schema.
    */
   async validateToolInput(tool, args, toolName) {
+    if (this._maxToolInputElements !== void 0 && toolInputElementCount(args, this._maxToolInputElements) > this._maxToolInputElements) {
+      throw new McpError(ErrorCode.InvalidParams, `Invalid arguments for tool ${toolName}: arguments contain more than the maximum of ${this._maxToolInputElements} elements`);
+    }
     if (!tool.inputSchema) {
       return void 0;
     }
     const inputObj = normalizeObjectSchema(tool.inputSchema);
     const schemaToParse = inputObj ?? tool.inputSchema;
-    const parseResult = await safeParseAsync2(schemaToParse, args);
+    const parseResult = await safeParseAsync2(schemaToParse, args ?? {});
     if (!parseResult.success) {
       const error2 = "error" in parseResult ? parseResult.error : "Unknown error";
       const errorMessage = getParseErrorMessage(error2);
@@ -20920,7 +21045,7 @@ var McpServer = class {
       }
       if (prompt.argsSchema) {
         const argsObj = normalizeObjectSchema(prompt.argsSchema);
-        const parseResult = await safeParseAsync2(argsObj, request.params.arguments);
+        const parseResult = await safeParseAsync2(argsObj, request.params.arguments ?? {});
         if (!parseResult.success) {
           const error2 = "error" in parseResult ? parseResult.error : "Unknown error";
           const errorMessage = getParseErrorMessage(error2);
@@ -21616,7 +21741,6 @@ var TokenProvider = class {
   constructor(log) {
     this.log = log;
   }
-  log;
   memoryToken = null;
   memoryClientId = null;
   fileCache = null;
@@ -21738,7 +21862,6 @@ var TokenBucket = class {
     this.tokens = spec.capacity;
     this.lastRefillMs = Date.now();
   }
-  spec;
   tokens;
   lastRefillMs;
   /** Serialises waiters so they drain in arrival order. */
@@ -21788,8 +21911,6 @@ var RateLimiter = class _RateLimiter {
       note: "Brief specifies 7000/day; Dhan publishes a higher figure. Conservative default in force."
     });
   }
-  dailyQuota;
-  log;
   buckets = /* @__PURE__ */ new Map();
   /** For optionchain: last request time per unique key. */
   lastByKey = /* @__PURE__ */ new Map();
@@ -21878,10 +21999,6 @@ var Transport = class {
     this.limiter = limiter;
     this.log = log;
   }
-  settings;
-  tokens;
-  limiter;
-  log;
   get rateLimiter() {
     return this.limiter;
   }
@@ -22061,7 +22178,6 @@ var InstrumentRegistry = class {
   constructor(log) {
     this.log = log;
   }
-  log;
   underlying(name) {
     const key = name.trim().toUpperCase();
     const spec = UNDERLYINGS[key];
@@ -22167,9 +22283,6 @@ var ExpiryCache = class {
     this.ttlMs = ttlMs;
     this.log = log;
   }
-  transport;
-  ttlMs;
-  log;
   cache = /* @__PURE__ */ new Map();
   key(scrip, segment) {
     return `${segment}:${scrip}`;
@@ -22251,8 +22364,6 @@ var ScripMaster = class {
     this.ttlMs = ttlMs;
     this.log = log;
   }
-  ttlMs;
-  log;
   rows = null;
   fetchedAtMs = 0;
   async load(force = false) {
@@ -22568,7 +22679,7 @@ function atr(candles, period = 14) {
 }
 function adx(candles, period = 14) {
   const n = candles.length;
-  if (n < period * 2) return { adx: null, plusDi: null, minusDi: null };
+  if (n < period * 2) return { adx: null, adxPrevious: null, plusDi: null, minusDi: null };
   const plusDm = [];
   const minusDm = [];
   const tr = [];
@@ -22605,6 +22716,7 @@ function adx(candles, period = 14) {
     const m2 = sMinus[last];
     return {
       adx: null,
+      adxPrevious: null,
       plusDi: t2 && p2 != null && t2 !== 0 ? 100 * p2 / t2 : null,
       minusDi: t2 && m2 != null && t2 !== 0 ? 100 * m2 / t2 : null
     };
@@ -22616,6 +22728,7 @@ function adx(candles, period = 14) {
   const m = sMinus[lastIdx];
   return {
     adx: adxSeries[adxSeries.length - 1] ?? null,
+    adxPrevious: adxSeries[adxSeries.length - 2] ?? null,
     plusDi: t === 0 ? null : 100 * p / t,
     minusDi: t === 0 ? null : 100 * m / t
   };
@@ -23459,6 +23572,357 @@ function buildTradePlan(side, levels, entryPremium, delta, gamma) {
   };
 }
 
+// src/direction.ts
+var DEFAULT_DIRECTION_CONFIG = {
+  penetrationAtrMult: 0.15,
+  penetrationFloorPts: 8,
+  minBodyPct: 0.4,
+  volumeLookback: 10,
+  adxTrendMin: 23,
+  adxFloor: 20,
+  diSpreadMin: 3,
+  adxFlatTolerance: 0.5,
+  rejectionAdxMax: 25,
+  rejectionMinWickPct: 0.4,
+  rejectionTouchPts: 5,
+  noEntryWithinPts: 3,
+  retestBandPts: 5,
+  retestLookbackBars: 10,
+  stopBufferAtrMult: 0.05,
+  stopBufferMinPts: 2,
+  stopBufferMaxPts: 4,
+  targetRiskMultiple: 1.5,
+  timeStopMinutes: 10,
+  oiStrikesEachSide: 2,
+  noTradeWindows: [
+    ["09:15", "09:25"],
+    ["11:30", "13:00"],
+    ["14:50", "15:30"]
+  ]
+};
+function buildOiView(strikes, pcrNow, past, nowMs) {
+  if (past && past.oi.length > 0) {
+    const then = new Map(past.oi.map((o) => [o.k, o]));
+    const out = [];
+    for (const s of strikes) {
+      const p = then.get(s.strike);
+      if (!p) continue;
+      out.push({
+        strike: s.strike,
+        ceOiChange: s.ce?.oi != null && p.ce != null ? s.ce.oi - p.ce : null,
+        peOiChange: s.pe?.oi != null && p.pe != null ? s.pe.oi - p.pe : null
+      });
+    }
+    return {
+      basis: "intraday",
+      minutesBack: Math.round((nowMs - past.t) / 6e4),
+      strikes: out,
+      pcrNow,
+      pcrPast: past.pcr
+    };
+  }
+  return {
+    basis: "vs_previous_day",
+    minutesBack: null,
+    strikes: strikes.map((s) => ({
+      strike: s.strike,
+      ceOiChange: s.ce?.oi != null && s.ce.previousOi != null ? s.ce.oi - s.ce.previousOi : null,
+      peOiChange: s.pe?.oi != null && s.pe.previousOi != null ? s.pe.oi - s.pe.previousOi : null
+    })),
+    pcrNow,
+    pcrPast: null
+  };
+}
+function sumOf(xs) {
+  const v = xs.filter((x) => x !== null);
+  return v.length === 0 ? null : v.reduce((a, b) => a + b, 0);
+}
+function oiConfirmation(side, level, view, strikesEachSide = 2) {
+  const sorted = [...view.strikes].sort((a, b) => a.strike - b.strike);
+  const below = sorted.filter((s) => s.strike <= level).slice(-strikesEachSide);
+  const above = sorted.filter((s) => s.strike >= level).slice(0, strikesEachSide);
+  const putBelow = sumOf(below.map((s) => s.peOiChange));
+  const callAbove = sumOf(above.map((s) => s.ceOiChange));
+  const pcrDelta = view.pcrNow !== null && view.pcrPast !== null ? view.pcrNow - view.pcrPast : null;
+  const supporting = [];
+  const contrary = [];
+  const fmt = (n) => `${n > 0 ? "+" : ""}${Math.round(n)}`;
+  const at = (xs) => xs.map((s) => s.strike).join("/");
+  const putLabel = `put OI ${fmt(putBelow ?? 0)} at ${at(below)}`;
+  const callLabel = `call OI ${fmt(callAbove ?? 0)} at ${at(above)}`;
+  const pcrLabel = pcrDelta === null ? "" : `PCR ${view.pcrPast.toFixed(2)} \u2192 ${view.pcrNow.toFixed(2)}`;
+  if (side === "CE") {
+    if (putBelow !== null && putBelow > 0) supporting.push(`Put writing: ${putLabel}`);
+    if (putBelow !== null && putBelow < 0) contrary.push(`Put unwinding: ${putLabel}`);
+    if (callAbove !== null && callAbove < 0) supporting.push(`Call unwinding: ${callLabel}`);
+    if (callAbove !== null && callAbove > 0) contrary.push(`Call writing: ${callLabel}`);
+    if (pcrDelta !== null && pcrDelta > 0) supporting.push(`PCR rising: ${pcrLabel}`);
+    if (pcrDelta !== null && pcrDelta < 0) contrary.push(`PCR falling: ${pcrLabel}`);
+  } else {
+    if (callAbove !== null && callAbove > 0) supporting.push(`Call writing: ${callLabel}`);
+    if (callAbove !== null && callAbove < 0) contrary.push(`Call unwinding: ${callLabel}`);
+    if (putBelow !== null && putBelow < 0) supporting.push(`Put unwinding: ${putLabel}`);
+    if (putBelow !== null && putBelow > 0) contrary.push(`Put writing: ${putLabel}`);
+    if (pcrDelta !== null && pcrDelta < 0) supporting.push(`PCR falling: ${pcrLabel}`);
+    if (pcrDelta !== null && pcrDelta > 0) contrary.push(`PCR rising: ${pcrLabel}`);
+  }
+  return {
+    confirmed: supporting.length >= 1 && supporting.length > contrary.length,
+    supporting,
+    contrary,
+    basis: view.basis
+  };
+}
+function inWindow(nowMs, windows) {
+  const t = istTimeOf(nowMs);
+  return windows.find(([a, b]) => t >= a && t < b) ?? null;
+}
+function bodyPct(c) {
+  const range = c.high - c.low;
+  return range > 0 ? Math.abs(c.close - c.open) / range : 0;
+}
+function volOf(c, byTs) {
+  if (c.volume != null && c.volume > 0) return c.volume;
+  return byTs?.get(c.timestampMs) ?? null;
+}
+function decideDirection(input) {
+  const cfg = { ...DEFAULT_DIRECTION_CONFIG, ...input.config };
+  const blockers = [];
+  const bars = input.bars1m.filter((b) => b.timestampMs + 6e4 <= input.nowMs);
+  const last = bars[bars.length - 1];
+  const fiveMin = aggregateCandles(bars, 5);
+  const a = adx(fiveMin, 14);
+  const trend = {
+    adx: a.adx,
+    adxPrevious: a.adxPrevious,
+    plusDi: a.plusDi,
+    minusDi: a.minusDi,
+    atr14: atr(fiveMin, 14)
+  };
+  const penetration = trend.atr14 !== null ? Math.max(cfg.penetrationAtrMult * trend.atr14, cfg.penetrationFloorPts) : null;
+  const stopBuffer = trend.atr14 !== null ? Math.min(
+    Math.max(cfg.stopBufferAtrMult * trend.atr14, cfg.stopBufferMinPts),
+    cfg.stopBufferMaxPts
+  ) : null;
+  const verdict = (c) => {
+    let targetLevel = null;
+    let targetSource = null;
+    let risk = null;
+    if (c && last) {
+      risk = Math.abs(last.close - c.stopLevel);
+      const now = deriveLevels(bars, last.close, input.levelConfig);
+      const next = c.side === "CE" ? now.resistance : now.support;
+      const nextDist = next ? Math.abs(next.price - last.close) : 0;
+      if (next && nextDist >= risk) {
+        targetLevel = next.price;
+        targetSource = `Next confirmed ${next.kind} (${next.touches} touches).`;
+      } else {
+        const d = cfg.targetRiskMultiple * risk;
+        targetLevel = c.side === "CE" ? last.close + d : last.close - d;
+        targetSource = `No level at least 1R away; ${cfg.targetRiskMultiple}\xD7 the stop distance.`;
+      }
+    }
+    return {
+      signal: c?.side ?? null,
+      setup: c?.setup ?? null,
+      entryMode: c?.entryMode ?? null,
+      level: c?.level ?? null,
+      entrySpot: c && last ? last.close : null,
+      stopLevel: c?.stopLevel ?? null,
+      targetLevel,
+      targetSource,
+      riskPoints: risk,
+      timeStopMinutes: cfg.timeStopMinutes,
+      reasons: c?.reasons ?? [],
+      blockers,
+      trend5m: trend,
+      penetrationPts: penetration,
+      stopBufferPts: stopBuffer,
+      oi: oiBySide,
+      lastClosedBarIst: last ? istTimeOf(last.timestampMs) : null,
+      configUsed: cfg
+    };
+  };
+  const oiBySide = { CE: null, PE: null };
+  const window = inWindow(input.nowMs, cfg.noTradeWindows);
+  if (window) {
+    blockers.push(`No-trade window ${window[0]}\u2013${window[1]} IST.`);
+    return verdict(null);
+  }
+  if (!last || bars.length < 30) {
+    blockers.push(`Need at least 30 closed 1-minute bars; have ${bars.length}.`);
+    return verdict(null);
+  }
+  if (penetration === null || stopBuffer === null) {
+    blockers.push("5-minute ATR14 unavailable: not enough 5-minute bars.");
+    return verdict(null);
+  }
+  const candidates = [];
+  const trendOk = (side) => {
+    if (trend.adx === null || trend.plusDi === null || trend.minusDi === null) {
+      return "5-min ADX/DI unavailable.";
+    }
+    if (trend.adx < cfg.adxFloor) {
+      return `5-min ADX ${trend.adx.toFixed(1)} < ${cfg.adxFloor}: non-trending.`;
+    }
+    if (trend.adx < cfg.adxTrendMin) {
+      return `5-min ADX ${trend.adx.toFixed(1)} < ${cfg.adxTrendMin}.`;
+    }
+    const spread = side === "CE" ? trend.plusDi - trend.minusDi : trend.minusDi - trend.plusDi;
+    if (spread < cfg.diSpreadMin) {
+      return `DI disagree for ${side}: +DI ${trend.plusDi.toFixed(1)}, \u2212DI ${trend.minusDi.toFixed(1)}.`;
+    }
+    if (trend.adxPrevious !== null && trend.adx < trend.adxPrevious - cfg.adxFlatTolerance) {
+      return `5-min ADX falling (${trend.adxPrevious.toFixed(1)} \u2192 ${trend.adx.toFixed(1)}).`;
+    }
+    return null;
+  };
+  const n = bars.length;
+  for (const side of ["CE", "PE"]) {
+    const dir = side === "CE" ? 1 : -1;
+    let found = null;
+    let sideBlocker = null;
+    for (let i = n - 2; i >= Math.max(n - 1 - cfg.retestLookbackBars, 20) && !found; i--) {
+      const pre = deriveLevels(bars.slice(0, i), bars[i - 1].close, input.levelConfig);
+      const lvl = side === "CE" ? pre.resistance : pre.support;
+      if (!lvl) continue;
+      const L = lvl.price;
+      const brk = bars[i];
+      if (dir * (brk.close - L) < penetration) continue;
+      const hold = bars[i + 1];
+      if (dir * (hold.close - L) <= 0) {
+        sideBlocker = `${side} break of ${L.toFixed(0)} at ${istTimeOf(brk.timestampMs)} failed to hold.`;
+        continue;
+      }
+      const stopLevel = L - dir * stopBuffer;
+      let failed = false;
+      for (let j = i + 2; j < n; j++) {
+        if (dir * (bars[j].close - stopLevel) <= 0) failed = true;
+      }
+      if (failed) {
+        sideBlocker = `${side} break of ${L.toFixed(0)} at ${istTimeOf(brk.timestampMs)} closed back through the level.`;
+        continue;
+      }
+      if (bodyPct(brk) < cfg.minBodyPct) {
+        sideBlocker = `${side} break bar at ${istTimeOf(brk.timestampMs)} not decisive: body ${(bodyPct(brk) * 100).toFixed(0)}% of range.`;
+        continue;
+      }
+      const v = volOf(brk, input.volumeByTs);
+      const prior = bars.slice(Math.max(0, i - cfg.volumeLookback), i).map((b) => volOf(b, input.volumeByTs)).filter((x) => x !== null);
+      if (v === null || prior.length < cfg.volumeLookback) {
+        sideBlocker = `${side} break at ${istTimeOf(brk.timestampMs)}: volume unavailable.`;
+        continue;
+      }
+      const avg = prior.reduce((s, x) => s + x, 0) / prior.length;
+      if (v <= avg) {
+        sideBlocker = `${side} break at ${istTimeOf(brk.timestampMs)}: volume ${v} \u2264 10-bar avg ${avg.toFixed(0)}.`;
+        continue;
+      }
+      let entryMode;
+      if (i + 1 === n - 1) {
+        if (dir * (last.close - L) <= cfg.noEntryWithinPts) {
+          sideBlocker = `${side} second-bar entry within ${cfg.noEntryWithinPts} pts of ${L.toFixed(0)}.`;
+          continue;
+        }
+        entryMode = "second_bar";
+      } else {
+        const extreme = side === "CE" ? last.low : last.high;
+        const retested = dir * (extreme - L) <= cfg.retestBandPts && dir * (last.close - L) > 0;
+        if (!retested) {
+          sideBlocker = `${side} break of ${L.toFixed(0)} confirmed at ${istTimeOf(brk.timestampMs)}; waiting for a retest.`;
+          continue;
+        }
+        entryMode = "retest";
+      }
+      const t = trendOk(side);
+      if (t) {
+        sideBlocker = `${side} breakout: ${t}`;
+        continue;
+      }
+      if (!input.oi) {
+        sideBlocker = `${side} breakout: no OI data.`;
+        continue;
+      }
+      const oc = oiConfirmation(side, L, input.oi, cfg.oiStrikesEachSide);
+      oiBySide[side] = oc;
+      if (!oc.confirmed) {
+        sideBlocker = `${side} breakout: OI does not confirm (${oc.contrary.join("; ") || "no supporting OI/PCR change"}).`;
+        continue;
+      }
+      found = {
+        side,
+        setup: "breakout",
+        entryMode,
+        level: L,
+        stopLevel,
+        reasons: [
+          `1-min close ${dir > 0 ? "above" : "below"} ${lvl.kind} ${L.toFixed(0)} (${lvl.touches} touches) by ${Math.abs(brk.close - L).toFixed(0)} pts at ${istTimeOf(brk.timestampMs)}, next bar held`,
+          `Decisive bar: body ${(bodyPct(brk) * 100).toFixed(0)}% of range; volume ${(v / avg).toFixed(1)}\xD7 10-bar avg`,
+          `5-min ADX ${trend.adx.toFixed(1)}, +DI ${trend.plusDi.toFixed(1)} / \u2212DI ${trend.minusDi.toFixed(1)}`,
+          ...oc.supporting,
+          entryMode === "retest" ? "Retest of the level held" : "Second-bar entry"
+        ]
+      };
+    }
+    if (found) candidates.push(found);
+    else if (sideBlocker) blockers.push(sideBlocker);
+  }
+  const levelsNow = deriveLevels(bars, last.close, input.levelConfig);
+  const prev = bars[n - 2];
+  const rejections = [
+    ["PE", levelsNow.resistance],
+    ["CE", levelsNow.support]
+  ];
+  for (const [side, lvl] of rejections) {
+    if (!lvl) continue;
+    const L = lvl.price;
+    const rejects = (c) => {
+      const range = c.high - c.low;
+      if (range <= 0) return false;
+      if (side === "PE") {
+        const wick2 = c.high - Math.max(c.open, c.close);
+        return c.high >= L - cfg.rejectionTouchPts && c.close < L && wick2 / range >= cfg.rejectionMinWickPct;
+      }
+      const wick = Math.min(c.open, c.close) - c.low;
+      return c.low <= L + cfg.rejectionTouchPts && c.close > L && wick / range >= cfg.rejectionMinWickPct;
+    };
+    if (!(rejects(prev) && rejects(last))) continue;
+    if (trend.adx === null) {
+      blockers.push(`${side} rejection at ${L.toFixed(0)}: 5-min ADX unavailable.`);
+      continue;
+    }
+    if (trend.adx >= cfg.rejectionAdxMax) {
+      blockers.push(`${side} rejection at ${L.toFixed(0)}: 5-min ADX ${trend.adx.toFixed(1)} \u2265 ${cfg.rejectionAdxMax}, not fading a trend.`);
+      continue;
+    }
+    if (Math.abs(last.close - L) <= cfg.noEntryWithinPts) {
+      blockers.push(`${side} rejection entry within ${cfg.noEntryWithinPts} pts of ${L.toFixed(0)}.`);
+      continue;
+    }
+    candidates.push({
+      side,
+      setup: "rejection",
+      entryMode: "rejection",
+      level: L,
+      stopLevel: side === "PE" ? L + stopBuffer : L - stopBuffer,
+      reasons: [
+        `2 consecutive 1-min wicks rejecting ${lvl.kind} ${L.toFixed(0)} (${lvl.touches} touches)`,
+        `5-min ADX ${trend.adx.toFixed(1)} < ${cfg.rejectionAdxMax}: no strong trend to fade`
+      ]
+    });
+  }
+  const pick2 = (side) => candidates.find((c) => c.side === side && c.setup === "breakout") ?? candidates.find((c) => c.side === side) ?? null;
+  const ce = pick2("CE");
+  const pe = pick2("PE");
+  if (ce && pe) {
+    blockers.push("Both CE and PE qualified at once: conflict, no signal.");
+    return verdict(null);
+  }
+  const chosen = ce ?? pe;
+  if (!chosen && blockers.length === 0) blockers.push("No breakout or rejection setup on the latest closed bars.");
+  return verdict(chosen);
+}
+
 // src/priceHistory.ts
 var import_node_fs2 = require("node:fs");
 var import_node_path = require("node:path");
@@ -23474,7 +23938,6 @@ var PriceHistory = class {
     this.windowMinutes = windowMinutes;
     this.path = path ?? defaultStorePath();
   }
-  windowMinutes;
   observations = [];
   path;
   loaded = false;
@@ -23600,6 +24063,22 @@ var PriceHistory = class {
       if (o.dayLow !== null && (dayLow === null || o.dayLow < dayLow)) dayLow = o.dayLow;
     }
     return { dayHigh, dayLow, observations: this.observations.length };
+  }
+  /**
+   * The newest scan carrying OI that is between `minMinutes` and `maxMinutes`
+   * old, for intraday OI/PCR change. Null until the history reaches back that far.
+   */
+  oiObservationBetween(nowMs, minMinutes = 15, maxMinutes = 30) {
+    this.ensureLoaded();
+    const newest = nowMs - minMinutes * 6e4;
+    const oldest = nowMs - maxMinutes * 6e4;
+    for (let i = this.observations.length - 1; i >= 0; i--) {
+      const o = this.observations[i];
+      if (o.t > newest || o.t < oldest) continue;
+      if (!o.oi || o.oi.length === 0) continue;
+      return { t: o.t, pcr: o.pcr ?? null, oi: o.oi };
+    }
+    return null;
   }
   /** Enough history to attempt a level derivation? */
   sufficientForLevels(minObservations = 6, minSpanMinutes = 5) {
@@ -24813,9 +25292,8 @@ var Bull50DhanClient = class {
    * The complete internal picture: gated pricing, Greeks, liquidity, chain
    * positioning, price structure and ranked strike candidates for BOTH sides.
    *
-   * Returns no verdict and no trigger level. It assembles every input a
-   * decision rule could need and stops there, because the decision rules are
-   * not defined in this server.
+   * Also returns the direction verdict (`direction`, RULES.md §6) and, when it
+   * names a side, a premium plan for that side's best-ranked strike.
    */
   async getAnalysis(params) {
     const lots = params.lots ?? 5;
@@ -24861,13 +25339,17 @@ var Bull50DhanClient = class {
       }
     }
     const spotForLevels = snap.chain.underlyingLtpDoNotUseAsSpot ?? (candleData && candleData.candles.length > 0 ? candleData.candles[candleData.candles.length - 1].close : NaN);
+    const pastOi = this.history.oiObservationBetween(snap.epochMs);
+    const oiStrikes = [...snap.chain.strikes].sort((a, b) => Math.abs(a.strike - forward) - Math.abs(b.strike - forward)).slice(0, 21);
     this.history.record({
       t: snap.epochMs,
       index: Number.isFinite(spotForLevels) ? spotForLevels : null,
       forward,
       futures: snap.futures && Number.isFinite(snap.futures.ltp) ? snap.futures.ltp : null,
       dayHigh: snap.futures?.ohlc?.high ?? null,
-      dayLow: snap.futures?.ohlc?.low ?? null
+      dayLow: snap.futures?.ohlc?.low ?? null,
+      pcr: chainAnalysis.pcr.oiPcr,
+      oi: oiStrikes.map((s) => ({ k: s.strike, ce: s.ce?.oi ?? null, pe: s.pe?.oi ?? null }))
     });
     const realCandles = candleData?.candles ?? [];
     let levelSource = "none";
@@ -24952,12 +25434,74 @@ var Bull50DhanClient = class {
       posMap,
       params.selection
     );
+    const oneMinuteBasis = levelSource === "candles" && (params.interval ?? 1) === 1 || levelSource === "rolling_snapshots";
+    let volumeByTs;
+    if (oneMinuteBasis && levelSource === "candles" && !realCandles.some((c) => c.volume != null && c.volume > 0)) {
+      try {
+        const fut = await this.getCandles({
+          underlying: params.underlying,
+          series: "futures",
+          timeframe: "intraday",
+          interval: 1,
+          maxCandles: 1e4
+        });
+        volumeByTs = /* @__PURE__ */ new Map();
+        for (const c of fut.candles) {
+          if (c.volume != null && c.volume > 0) volumeByTs.set(c.timestampMs, c.volume);
+        }
+      } catch (err) {
+        candleErrors.push(`futures volume: ${err.message}`);
+      }
+    }
+    const direction = oneMinuteBasis ? decideDirection({
+      nowMs: snap.epochMs,
+      bars1m: levelBasis,
+      volumeByTs,
+      oi: buildOiView(snap.chain.strikes, chainAnalysis.pcr.oiPcr, pastOi, snap.epochMs),
+      levelConfig: cfg,
+      config: params.directionConfig
+    }) : null;
+    const lotSize = this.registry.underlying(params.underlying).lotSize;
+    const pick2 = direction?.signal === "CE" ? ce.best : direction?.signal === "PE" ? pe.best : null;
+    let signalPlan = null;
+    if (direction && direction.signal && pick2 && direction.entrySpot !== null) {
+      const delta = pick2.absDelta === null ? null : direction.signal === "PE" ? -pick2.absDelta : pick2.absDelta;
+      const stopPremium = projectPremium(
+        pick2.optionPrice,
+        delta,
+        pick2.gamma,
+        direction.stopLevel - direction.entrySpot
+      );
+      const targetPremium = projectPremium(
+        pick2.optionPrice,
+        delta,
+        pick2.gamma,
+        direction.targetLevel - direction.entrySpot
+      );
+      const riskPerLot = stopPremium !== null ? (pick2.optionPrice - stopPremium) * lotSize : null;
+      signalPlan = {
+        side: direction.signal,
+        strike: pick2.strike,
+        entryPremium: pick2.optionPrice,
+        targetPremium,
+        stopPremium,
+        riskPerLot,
+        maxLotsAtOnePercent: params.availableMargin && riskPerLot && riskPerLot > 0 ? Math.floor(0.01 * params.availableMargin / riskPerLot) : null,
+        note: "Premiums are delta/gamma projections from the entry spot, not quotes. Size so that riskPerLot \xD7 lots stays within 1% of available margin."
+      };
+    }
     return {
       published: true,
       underlying: snap.underlying,
       expiry: snap.expiry,
       fetchId: snap.fetchId,
       epochMs: snap.epochMs,
+      /**
+       * Direction verdict from RULES.md §6. `signal` null means NO SIGNAL;
+       * `blockers` says why. Null when no 1-minute basis was available.
+       */
+      direction,
+      signalPlan,
       pricing: {
         forward,
         T: snap.pricing.T,
@@ -24992,7 +25536,7 @@ var Bull50DhanClient = class {
       spotUsedForLevels: Number.isFinite(spotForLevels) ? spotForLevels : null,
       strikeRanking: {
         lots,
-        lotSize: this.registry.underlying(params.underlying).lotSize,
+        lotSize,
         ce: { best: ce.best, top: ce.ranked.slice(0, 6) },
         pe: { best: pe.best, top: pe.ranked.slice(0, 6) },
         criteriaUsed: ce.criteriaUsed
@@ -25014,7 +25558,7 @@ var Bull50DhanClient = class {
       },
       integrity: snap.integrity,
       warnings: snap.warnings,
-      note: "Complete analysis inputs. NO directional verdict and NO trigger level are produced: those rules are not defined in this server."
+      note: "`direction` carries the verdict (RULES.md \xA76). tradePlans show either side hypothetically and are not recommendations."
     };
   }
   // --- get_candles ---------------------------------------------------------
@@ -25549,17 +26093,21 @@ server.registerTool(
   "get_analysis",
   {
     title: "Complete options-market analysis (no verdict)",
-    description: "One call assembling everything a decision rule could need: gated parity pricing and Greeks, executable liquidity at size, full chain positioning (PCR, max pain, OI buildup, OI concentration, support/resistance peaks), price structure (swings, higher-highs/lower-lows, consolidation, candidate breakout levels), chart indicators, and ranked strike candidates for BOTH CE and PE. Produces NO directional verdict and NO trigger level, because those rules are not configured. Use this as the internal analysis step.",
+    description: "One call assembling everything a decision rule could need: gated parity pricing and Greeks, executable liquidity at size, full chain positioning (PCR, max pain, OI buildup, OI concentration, support/resistance peaks), price structure (swings, higher-highs/lower-lows, consolidation, candidate breakout levels), chart indicators, and ranked strike candidates for BOTH CE and PE. `direction` carries the CE/PE/NO SIGNAL verdict from the v3.1 rules (breakout or rejection setup, 5-min ADX/DI, writer-read OI/PCR), with blockers when no side qualifies; `signalPlan` prices the chosen strike. Use this as the internal analysis step.",
     inputSchema: {
       underlying: external_exports.string().describe("SENSEX, NIFTY or BANKNIFTY."),
       expiry: external_exports.string().optional().describe("YYYY-MM-DD. Omit for the nearest."),
       lots: external_exports.number().int().positive().optional().describe("Size for liquidity. Default 5."),
       series: external_exports.enum(["index", "futures"]).optional().describe("Candle series for structure. futures gives volume and VWAP."),
-      interval: external_exports.union([external_exports.literal(1), external_exports.literal(5), external_exports.literal(15), external_exports.literal(25), external_exports.literal(60)]).optional().describe("Intraday minutes. Default 5.")
+      interval: external_exports.union([external_exports.literal(1), external_exports.literal(5), external_exports.literal(15), external_exports.literal(25), external_exports.literal(60)]).optional().describe("Intraday minutes. Default 1; the direction verdict needs 1."),
+      available_margin: external_exports.number().positive().optional().describe("Available margin in rupees, to cap lots at 1% max loss.")
     }
   },
   guard(
-    async (args) => ok(await client.getAnalysis(args))
+    async (args) => {
+      const { available_margin, ...rest } = args;
+      return ok(await client.getAnalysis({ ...rest, availableMargin: available_margin }));
+    }
   )
 );
 server.registerTool(

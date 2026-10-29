@@ -116,6 +116,8 @@ export function atr(candles: Candle[], period = 14): number | null {
 
 export interface AdxResult {
   adx: number | null;
+  /** ADX one bar earlier, for "rising or flat". Null when not yet defined. */
+  adxPrevious: number | null;
   plusDi: number | null;
   minusDi: number | null;
 }
@@ -128,7 +130,7 @@ export interface AdxResult {
  */
 export function adx(candles: Candle[], period = 14): AdxResult {
   const n = candles.length;
-  if (n < period * 2) return { adx: null, plusDi: null, minusDi: null };
+  if (n < period * 2) return { adx: null, adxPrevious: null, plusDi: null, minusDi: null };
 
   const plusDm: number[] = [];
   const minusDm: number[] = [];
@@ -171,6 +173,7 @@ export function adx(candles: Candle[], period = 14): AdxResult {
     const m = sMinus[last];
     return {
       adx: null,
+      adxPrevious: null,
       plusDi: t && p != null && t !== 0 ? (100 * p) / t : null,
       minusDi: t && m != null && t !== 0 ? (100 * m) / t : null,
     };
@@ -184,6 +187,7 @@ export function adx(candles: Candle[], period = 14): AdxResult {
 
   return {
     adx: adxSeries[adxSeries.length - 1] ?? null,
+    adxPrevious: adxSeries[adxSeries.length - 2] ?? null,
     plusDi: t === 0 ? null : (100 * p) / t,
     minusDi: t === 0 ? null : (100 * m) / t,
   };

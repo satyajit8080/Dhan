@@ -68,21 +68,87 @@ Output is **one table, nothing else**:
 - **No-trade windows (IST):** 09:15–09:25, 11:30–13:00, after 14:50.
 - `WEAK_LEVEL` when the nearest level has fewer than 2 touches.
 
-## 6. Scalping rules (v3)
+## 6. Scalping rules (v3.1 — direction thresholds agreed 29 Oct 2026)
+
+Implemented in `server/src/direction.ts`; `get_analysis` returns the verdict as
+`direction` (signal CE / PE / null + blockers) and `signalPlan`.
 
 - Scope: SENSEX nearest weekly expiry (next weekly on expiry day), CE and PE.
-- Breakout scalp: 1-min close through a level, next bar holds, volume > 10-bar
-  average → enter on retest / second bar.
-- Rejection scalp: 2 consecutive 1-min wicks rejecting a level → opposite side.
-- No entry within 3 pts of a level.
-- Exits: target next level or +1.5× stop; stop on 1-min close back through the
-  level; time stop 10 min.
-- Filters: spread < 0.5% of premium; liquidity grade A/B at size (judge on
-  round-trip cost, not quoted spread); theta over 10 min < 1% of premium;
+- Timeframes: break, hold and entry on **closed 1-min bars** (a still-forming
+  bar is ignored). ATR, ADX and ±DI on **5-min bars** aggregated from them.
+
+### Setup A — breakout (trend-following)
+
+All of:
+1. A 1-min bar **closes** beyond a confirmed level by
+   `≥ max(0.15 × 5-min ATR14, 8 pts)`.
+2. That bar is **decisive**: body ≥ 40% of its range.
+3. Its volume > the 10-bar average. The index series has no volume, so the
+   futures series' 1-min volume is borrowed; no volume at all → no signal.
+4. The **next** 1-min bar does not close back inside the level.
+5. **5-min ADX ≥ 23** (ADX < 20 = non-trending, never), ±DI agree with the
+   side by ≥ 3 pts, and ADX not falling vs the previous 5-min bar (a dip of up
+   to 0.5 counts as flat; skipped when the previous value is unavailable).
+6. **OI/PCR confirm** (writer-dominated reading — SENSEX weeklies are mostly
+   written, not bought), on the 2 strikes each side of the level:
+   - CE: put OI building at/below the level, call OI unwinding at/above it,
+     PCR rising.
+   - PE: call OI building at/above the level, put OI unwinding at/below it,
+     PCR falling.
+   - At least one must support, and supporters must outnumber contrary
+     signals. Rising call OI above a CE breakout is **contrary** (writers
+     defending resistance).
+   - Change is intraday (vs a scan 15–30 min earlier, from rolling history)
+     when available; otherwise vs previous-day OI, with no PCR trend.
+
+Entry: on the **retest** (preferred) — the latest closed bar comes back within
+5 pts of the level and closes beyond it, within 10 bars of the break — or on
+the **second bar** (the hold bar itself).
+
+### Setup B — rejection (counter-trend)
+
+- 2 consecutive closed 1-min bars wick into a level (within 5 pts) and close
+  back away, rejecting wick ≥ 40% of range → the opposite side
+  (resistance → PE, support → CE).
+- **5-min ADX < 25**, so a strong trend is not faded. Setup A's ADX/DI and OI
+  filters do not apply.
+
+A breakout beats a rejection on the same side. CE and PE both qualifying at
+once is a conflict → NO SIGNAL.
+
+### Entry distance
+
+- **No fresh entry within 3 pts of the level** (second-bar and rejection
+  entries).
+- A **retest entry is exempt** — it is only reachable after the hold bar has
+  confirmed the break.
+
+### Exits
+
+- Stop: 1-min close back through the level **plus a buffer** of
+  `clamp(0.05 × 5-min ATR14, 2, 4)` pts.
+- Target: next confirmed level if at least 1R away, else 1.5× the stop
+  distance.
+- Time stop: 10 min.
+
+### Filters and risk
+
+- Spread < 0.5% of premium; liquidity grade A/B at size (judge on round-trip
+  cost, not quoted spread); theta over 10 min < 1% of premium;
   IV ≤ chain ATM IV + 1 pt.
-- Risk: max loss/trade 1% of available margin; stop after 3 losing scalps/day.
-- **Direction thresholds are not configured.** Without them the server returns
-  NO SIGNAL — never invent a CE/PE verdict.
+- Max loss/trade 1% of available margin. The stop buffer widens the stop, so
+  **size is recalculated**: lots = floor(1% of margin / risk per lot)
+  (`signalPlan.maxLotsAtOnePercent` when `available_margin` is passed).
+- Stop after 3 losing scalps/day (tracked by the user: the server sees no
+  positions).
+- No partial entries / scaling until orders are automated.
+
+### Known limits
+
+- Rolling-snapshot fallback covers only 90 min, too short for a 5-min ADX, and
+  carries no volume — so setup A cannot fire on fallback data; setup B can.
+- All thresholds live in `DEFAULT_DIRECTION_CONFIG`; paper-trade before
+  tuning (e.g. ADX 25, 0.2 × ATR).
 
 ## 7. Automation roadmap (not built)
 

@@ -195,30 +195,43 @@ candidate leg, or the market is closed, `NO SIGNAL`.
 `levels.breakdownBelow` (for PE) must be non-null. If `levelFailure` is set,
 report that error text verbatim instead of a signal.
 
-**Gate F — direction.** See section 4.
+**Gate F — direction.** `direction.signal` from `get_analysis` names the side. See section 4.
 
-## 4. DIRECTION — THE ONE RULE STILL NOT CONFIGURED
+## 4. DIRECTION — CONFIGURED (v3.1, RULES.md §6)
 
-Everything needed to decide is now computed and available in `get_analysis`:
+`get_analysis` (interval 1) returns `direction`, computed server-side from the
+agreed thresholds. **Use it as-is; never override it with your own reading.**
 
-- `levels` — confirmed resistance/support with touch counts, from 1-minute
-  price action; `levels5m` derived from the same bars for cross-checking
-- `priceStructure` — swings, higher-highs/lower-lows, consolidation
-- `candleIndicators` — EMA, ADX, +DI/−DI, ATR, RSI, VWAP, relative volume
-- `chain` — PCR, max pain, per-leg buildup, OI concentration
-- `strikeRanking` — scored candidates for both sides
-- `tradePlans` — entry/target/stop for either side
+- `direction.signal` = `CE` or `PE` → emit the signal. `direction.level` is the
+  BREAKOUT ABOVE / BREAKDOWN BELOW that fired, `direction.reasons` is the
+  REASON block, and `signalPlan` gives the strike, ENTRY, TARGET and STOP
+  premiums (delta/gamma projections, not quotes).
+- `direction.signal` = null → `NO SIGNAL`. `direction.blockers` is the answer
+  to "why".
+- `direction` = null (no 1-minute basis) → `NO SIGNAL`.
 
-What is NOT configured is the **threshold set** that turns those into a verdict:
-how far above the level counts as a break, what ADX counts as trending, what
-PCR counts as bullish, how many OI strikes must confirm.
+What the server checks, so you can explain it when asked:
 
-Until the user supplies those numbers, do not guess them. Return `NO SIGNAL`,
-and if asked why, say: the direction thresholds are not configured; the
-breakout level itself IS computed and can be shown on request.
+- **Setup A, breakout:** 1-min close beyond the level by
+  ≥ max(0.15 × 5-min ATR14, 8 pts); break bar body ≥ 40% of range; volume
+  above the 10-bar average; next bar holds; 5-min ADX ≥ 23 (< 20 never),
+  ±DI agree by ≥ 3, ADX not falling; OI/PCR confirm.
+- **OI is read for writers:** CE wants put writing at/below the level, call
+  unwinding at/above it, PCR rising. Rising call OI above a CE breakout argues
+  AGAINST it. PE is the mirror image.
+- **Setup B, rejection:** two consecutive 1-min wicks rejecting a level →
+  opposite side, only when 5-min ADX < 25.
+- **Entry:** retest preferred; second bar allowed. No fresh entry within 3 pts
+  of the level; a retest after a confirmed hold is exempt.
+- **Exit:** stop on a 1-min close back through the level plus a 2–4 pt buffer;
+  target next level (if ≥ 1R) else 1.5R; time stop 10 min.
+- **Size:** risk per lot comes from the stop premium; lots = floor(1% of
+  margin / risk per lot). Pass `available_margin` to get the cap.
 
-When the user does ask for the level alone, show it — that is configured and
-real:
+Gates A–E still apply on top: a `direction.signal` on a leg that fails
+liquidity, IV or freshness is still `NO SIGNAL`.
+
+When the user asks for the level alone, show it:
 
 ```
 SENSEX: 74756

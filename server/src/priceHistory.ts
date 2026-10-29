@@ -38,6 +38,10 @@ export interface Observation {
   dayHigh: number | null;
   /** Futures day low. */
   dayLow: number | null;
+  /** Chain OI PCR at this scan. Optional: older persisted files lack it. */
+  pcr?: number | null;
+  /** OI per strike near the forward at this scan, for intraday OI change. */
+  oi?: { k: number; ce: number | null; pe: number | null }[];
 }
 
 export type LevelSourceQuality = 'candles' | 'rolling_snapshots' | 'reference_only' | 'none';
@@ -202,6 +206,27 @@ export class PriceHistory {
       if (o.dayLow !== null && (dayLow === null || o.dayLow < dayLow)) dayLow = o.dayLow;
     }
     return { dayHigh, dayLow, observations: this.observations.length };
+  }
+
+  /**
+   * The newest scan carrying OI that is between `minMinutes` and `maxMinutes`
+   * old, for intraday OI/PCR change. Null until the history reaches back that far.
+   */
+  oiObservationBetween(
+    nowMs: number,
+    minMinutes = 15,
+    maxMinutes = 30,
+  ): { t: number; pcr: number | null; oi: { k: number; ce: number | null; pe: number | null }[] } | null {
+    this.ensureLoaded();
+    const newest = nowMs - minMinutes * 60_000;
+    const oldest = nowMs - maxMinutes * 60_000;
+    for (let i = this.observations.length - 1; i >= 0; i--) {
+      const o = this.observations[i]!;
+      if (o.t > newest || o.t < oldest) continue;
+      if (!o.oi || o.oi.length === 0) continue;
+      return { t: o.t, pcr: o.pcr ?? null, oi: o.oi };
+    }
+    return null;
   }
 
   /** Enough history to attempt a level derivation? */

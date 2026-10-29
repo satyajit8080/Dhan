@@ -10,7 +10,7 @@ forward recovery and an internal Black-76 pricing core. Never places orders.
 | Path | What |
 |---|---|
 | `plugin/` | Installable Claude plugin `bull50-dhan` v1.7.0: MCP server bundle, `/dhan-token`, `/sensex-snapshot`, `sensex-scalp` skill |
-| `server/` | TypeScript source of the MCP server + 204 tests |
+| `server/` | TypeScript source of the MCP server + 229 tests |
 | `engine/` | Python `refresh_table.py` (option breakout premiums), `commodity_engine.py` (MCX), sample data |
 | `docs/` | Signal log |
 | `.claude-plugin/marketplace.json` | Lets Claude install the plugin straight from this repo |
@@ -25,7 +25,7 @@ Needs Node 20+. Then each morning: `/dhan-token <token> <client_id>`.
 ```bash
 cd server
 npm ci
-npm test          # 204 tests, offline
+npm test          # 229 tests, offline
 npm run build     # tsc -> dist/
 npm run bundle    # rebuild plugin/server/mcpServer.cjs
 ```

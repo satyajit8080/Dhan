@@ -471,8 +471,10 @@ server.registerTool(
       '(PCR, max pain, OI buildup, OI concentration, support/resistance peaks), ' +
       'price structure (swings, higher-highs/lower-lows, consolidation, candidate ' +
       'breakout levels), chart indicators, and ranked strike candidates for BOTH ' +
-      'CE and PE. Produces NO directional verdict and NO trigger level, because ' +
-      'those rules are not configured. Use this as the internal analysis step.',
+      'CE and PE. `direction` carries the CE/PE/NO SIGNAL verdict from the v3.1 ' +
+      'rules (breakout or rejection setup, 5-min ADX/DI, writer-read OI/PCR), with ' +
+      'blockers when no side qualifies; `signalPlan` prices the chosen strike. ' +
+      'Use this as the internal analysis step.',
     inputSchema: {
       underlying: z.string().describe('SENSEX, NIFTY or BANKNIFTY.'),
       expiry: z.string().optional().describe('YYYY-MM-DD. Omit for the nearest.'),
@@ -484,7 +486,12 @@ server.registerTool(
       interval: z
         .union([z.literal(1), z.literal(5), z.literal(15), z.literal(25), z.literal(60)])
         .optional()
-        .describe('Intraday minutes. Default 5.'),
+        .describe('Intraday minutes. Default 1; the direction verdict needs 1.'),
+      available_margin: z
+        .number()
+        .positive()
+        .optional()
+        .describe('Available margin in rupees, to cap lots at 1% max loss.'),
     },
   },
   guard(
@@ -494,7 +501,11 @@ server.registerTool(
       lots?: number;
       series?: 'index' | 'futures';
       interval?: 1 | 5 | 15 | 25 | 60;
-    }) => ok(await client.getAnalysis(args)),
+      available_margin?: number;
+    }) => {
+      const { available_margin, ...rest } = args;
+      return ok(await client.getAnalysis({ ...rest, availableMargin: available_margin }));
+    },
   ),
 );
 

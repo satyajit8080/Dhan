@@ -38,8 +38,10 @@ import {
   deriveLevels,
   aggregateCandles,
   buildTradePlan,
+  projectPremium,
   type LevelConfig,
 } from './levels.js';
+import { buildOiView, decideDirection, type DirectionConfig } from './direction.js';
 import type { DepthAssessment } from './liquidity.js';
 import { PriceHistory, type LevelSourceQuality } from './priceHistory.js';
 import type { ConfirmedLevel, LevelResult } from './levels.js';
@@ -241,9 +243,8 @@ export class Bull50DhanClient {
    * The complete internal picture: gated pricing, Greeks, liquidity, chain
    * positioning, price structure and ranked strike candidates for BOTH sides.
    *
-   * Returns no verdict and no trigger level. It assembles every input a
-   * decision rule could need and stops there, because the decision rules are
-   * not defined in this server.
+   * Also returns the direction verdict (`direction`, RULES.md §6) and, when it
+   * names a side, a premium plan for that side's best-ranked strike.
    */
   async getAnalysis(params: {
     underlying: string;
@@ -253,6 +254,9 @@ export class Bull50DhanClient {
     interval?: IntradayInterval;
     selection?: SelectionCriteria;
     levelConfig?: LevelConfig;
+    directionConfig?: Partial<DirectionConfig>;
+    /** Available margin in rupees, for the 1%-max-loss lot cap. */
+    availableMargin?: number;
   }) {
     const lots = params.lots ?? 5;
 
@@ -320,6 +324,12 @@ export class Bull50DhanClient {
         ? candleData.candles[candleData.candles.length - 1]!.close
         : NaN);
 
+    //     OI near the forward rides along, so later scans can measure
+    //     intraday OI and PCR change instead of change vs previous day.
+    const pastOi = this.history.oiObservationBetween(snap.epochMs);
+    const oiStrikes = [...snap.chain.strikes]
+      .sort((a, b) => Math.abs(a.strike - forward) - Math.abs(b.strike - forward))
+      .slice(0, 21);
     this.history.record({
       t: snap.epochMs,
       index: Number.isFinite(spotForLevels) ? spotForLevels : null,
@@ -327,6 +337,8 @@ export class Bull50DhanClient {
       futures: snap.futures && Number.isFinite(snap.futures.ltp) ? snap.futures.ltp : null,
       dayHigh: snap.futures?.ohlc?.high ?? null,
       dayLow: snap.futures?.ohlc?.low ?? null,
+      pcr: chainAnalysis.pcr.oiPcr,
+      oi: oiStrikes.map((s) => ({ k: s.strike, ce: s.ce?.oi ?? null, pe: s.pe?.oi ?? null })),
     });
 
     // 4. Breakout / breakdown from PRICE ACTION, with a three-tier source.
@@ -464,12 +476,97 @@ export class Bull50DhanClient {
       params.selection,
     );
 
+    // 5. Direction (RULES.md §6). Needs 1-minute bars: real ones at interval 1,
+    //    or the synthetic 1-minute bars from rolling history.
+    const oneMinuteBasis =
+      (levelSource === 'candles' && (params.interval ?? 1) === 1) ||
+      levelSource === 'rolling_snapshots';
+
+    // The index series carries no volume; borrow the futures series' 1-minute
+    // volume so the breakout volume check can run at all.
+    let volumeByTs: Map<number, number> | undefined;
+    if (
+      oneMinuteBasis &&
+      levelSource === 'candles' &&
+      !realCandles.some((c) => c.volume != null && c.volume > 0)
+    ) {
+      try {
+        const fut = await this.getCandles({
+          underlying: params.underlying,
+          series: 'futures',
+          timeframe: 'intraday',
+          interval: 1,
+          maxCandles: 10_000,
+        });
+        volumeByTs = new Map();
+        for (const c of fut.candles) {
+          if (c.volume != null && c.volume > 0) volumeByTs.set(c.timestampMs, c.volume);
+        }
+      } catch (err) {
+        candleErrors.push(`futures volume: ${(err as Error).message}`);
+      }
+    }
+
+    const direction = oneMinuteBasis
+      ? decideDirection({
+          nowMs: snap.epochMs,
+          bars1m: levelBasis,
+          volumeByTs,
+          oi: buildOiView(snap.chain.strikes, chainAnalysis.pcr.oiPcr, pastOi, snap.epochMs),
+          levelConfig: cfg,
+          config: params.directionConfig,
+        })
+      : null;
+
+    const lotSize = this.registry.underlying(params.underlying).lotSize;
+    const pick = direction?.signal === 'CE' ? ce.best : direction?.signal === 'PE' ? pe.best : null;
+    let signalPlan = null;
+    if (direction && direction.signal && pick && direction.entrySpot !== null) {
+      const delta =
+        pick.absDelta === null ? null : direction.signal === 'PE' ? -pick.absDelta : pick.absDelta;
+      const stopPremium = projectPremium(
+        pick.optionPrice,
+        delta,
+        pick.gamma,
+        direction.stopLevel! - direction.entrySpot,
+      );
+      const targetPremium = projectPremium(
+        pick.optionPrice,
+        delta,
+        pick.gamma,
+        direction.targetLevel! - direction.entrySpot,
+      );
+      const riskPerLot =
+        stopPremium !== null ? (pick.optionPrice - stopPremium) * lotSize : null;
+      signalPlan = {
+        side: direction.signal,
+        strike: pick.strike,
+        entryPremium: pick.optionPrice,
+        targetPremium,
+        stopPremium,
+        riskPerLot,
+        maxLotsAtOnePercent:
+          params.availableMargin && riskPerLot && riskPerLot > 0
+            ? Math.floor((0.01 * params.availableMargin) / riskPerLot)
+            : null,
+        note:
+          'Premiums are delta/gamma projections from the entry spot, not quotes. ' +
+          'Size so that riskPerLot × lots stays within 1% of available margin.',
+      };
+    }
+
     return {
       published: true,
       underlying: snap.underlying,
       expiry: snap.expiry,
       fetchId: snap.fetchId,
       epochMs: snap.epochMs,
+      /**
+       * Direction verdict from RULES.md §6. `signal` null means NO SIGNAL;
+       * `blockers` says why. Null when no 1-minute basis was available.
+       */
+      direction,
+      signalPlan,
       pricing: {
         forward,
         T: snap.pricing.T,
@@ -504,7 +601,7 @@ export class Bull50DhanClient {
       spotUsedForLevels: Number.isFinite(spotForLevels) ? spotForLevels : null,
       strikeRanking: {
         lots,
-        lotSize: this.registry.underlying(params.underlying).lotSize,
+        lotSize,
         ce: { best: ce.best, top: ce.ranked.slice(0, 6) },
         pe: { best: pe.best, top: pe.ranked.slice(0, 6) },
         criteriaUsed: ce.criteriaUsed,
@@ -533,8 +630,8 @@ export class Bull50DhanClient {
       integrity: snap.integrity,
       warnings: snap.warnings,
       note:
-        'Complete analysis inputs. NO directional verdict and NO trigger level are ' +
-        'produced: those rules are not defined in this server.',
+        '`direction` carries the verdict (RULES.md §6). tradePlans show either side ' +
+        'hypothetically and are not recommendations.',
     };
   }
 
