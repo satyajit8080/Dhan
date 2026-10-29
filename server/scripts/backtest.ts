@@ -2,7 +2,9 @@
  * Minute-by-minute backtest of the v3.1 direction rules (RULES.md §6) on
  * SENSEX history fetched by backtest/fetch_data.py.
  *
- *   npx tsx scripts/backtest.ts <data_dir> <from YYYY-MM-DD> <to YYYY-MM-DD> <out_dir>
+ *   npx tsx scripts/backtest.ts <data_dir[,data_dir...]> <from YYYY-MM-DD> <to YYYY-MM-DD> <out_dir>
+ *
+ * Several data dirs (comma-separated) are merged; overlapping bars dedupe.
  *
  * Replays the server's own `decideDirection` — no re-implementation — on each
  * closed 1-min bar. Option premiums, IV and OI are Dhan's expired-weekly
@@ -43,28 +45,35 @@ const MIN = 60_000;
 
 // ---------------------------------------------------------------- data
 interface Cols { [k: string]: number[] }
-const load = (f: string): Cols => JSON.parse(readFileSync(join(dataDir, f), 'utf8')) as Cols;
+const dirs = dataDir.split(',');
+const load = (dir: string, f: string): Cols => JSON.parse(readFileSync(join(dir, f), 'utf8')) as Cols;
 
-const idx = load('index_1m.json');
-const allBars: Candle[] = idx.timestamp!.map((t, i) => ({
-  timestampMs: t * 1000,
-  open: idx.open![i]!,
-  high: idx.high![i]!,
-  low: idx.low![i]!,
-  close: idx.close![i]!,
-  volume: idx.volume![i] ?? null,
-  openInterest: null,
-}));
+const barMap = new Map<number, Candle>();
+for (const dir of dirs) {
+  const idx = load(dir, 'index_1m.json');
+  idx.timestamp!.forEach((t, i) =>
+    barMap.set(t * 1000, {
+      timestampMs: t * 1000,
+      open: idx.open![i]!,
+      high: idx.high![i]!,
+      low: idx.low![i]!,
+      close: idx.close![i]!,
+      volume: idx.volume![i] ?? null,
+      openInterest: null,
+    }),
+  );
+}
+const allBars = [...barMap.values()].sort((a, b) => a.timestampMs - b.timestampMs);
 
 interface OptRow { o: number; h: number; l: number; c: number; oi: number; iv: number }
 /** minute → code → side → strike → row */
 const opt = new Map<number, Map<number, { CE: Map<number, OptRow>; PE: Map<number, OptRow> }>>();
-for (const code of [1, 2]) {
+for (const dir of dirs) for (const code of [1, 2]) {
   for (const [typ, side] of [['CALL', 'CE'], ['PUT', 'PE']] as const) {
     for (let off = -5; off <= 5; off++) {
       const f = `opt_${code}_${typ}_${off}.json`;
-      if (!existsSync(join(dataDir, f))) continue;
-      const d = load(f);
+      if (!existsSync(join(dir, f))) continue;
+      const d = load(dir, f);
       const ts = d.timestamp ?? [];
       for (let i = 0; i < ts.length; i++) {
         const k = d.strike![i];
