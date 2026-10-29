@@ -24,3 +24,4 @@ All on real option premiums with costs unless noted. Details in `docs/sessions/2
 | Condor adjustments (close / roll tested side) | −₹28k to −₹35k vs +₹75k without |
 | Condor delayed / retracement entry | all below the 09:30 entry |
 | CE only when green (any definition), PE only when red | win 49–51 %, all negative both halves; even look-ahead 'day closes green' 51.5 %, −₹1.56 lakh |
+| First breakout of the day only, then stop | 60 variants (exits +6/−11 … +30/−15, from 09:15/09:30/10:00), 0 profitable; best FILTERED +20/−10 −₹5,325/yr |
