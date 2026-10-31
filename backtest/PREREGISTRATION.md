@@ -127,3 +127,70 @@ capital.
 If the corrected baseline ORB loses more than ₹50 per trade under base fills
 **and** neither H1a nor H2 passes, intraday SENSEX option-buying research
 stops.
+
+---
+
+# Pre-registration: H3 — hedged expiry-day iron fly (written 1 Nov 2026, before any run)
+
+Committed before the code that tests it. Same rules as above apply: nothing
+changes after the first run.
+
+## Variant budget
+
+This adds **1 trial → 10 of 20 used.**
+
+## Data and expiry days
+
+- Same data and test window: 27 Oct 2025 – 29 Oct 2026.
+- **Expiry day:** the code-1 cheaper ATM leg closes at ≤ ₹1 at the day's last
+  bar, or the straddle time value ≤ 50 pts. This is the detector validated in
+  the H1a/H2 robustness check: it reproduces every Thursday plus the four
+  known shifted expiries, so it is fixed here before H3 runs.
+
+## Rules
+
+- Universe: expiry days only, 0DTE (expiry code 1).
+- **Setup at the 09:44 bar close:** ATM `K` = SENSEX close rounded to the
+  nearest 100. Straddle `W` = ATM CE close + ATM PE close. Wings at the strikes
+  nearest `K + W` (CE) and `K − W` (PE), rounded to 100.
+- **If a wing is more than 500 pts from K, or any of the 4 legs has no price at
+  entry, skip the day and count it** (our data holds ATM±5 strikes only).
+- **Entry at the 09:45 open:** sell 1 lot ATM CE and ATM PE, buy 1 lot of each
+  wing. Credit `C` = (short fills) − (long fills), using the fill model.
+- **Mark** each minute from 1-min closes (a leg with no bar keeps its last
+  close): loss = cost to close at closes − C.
+- **Exits:**
+  - stop when the marked loss ≥ 1.0 × C on a 1-min close, filled at the next
+    minute's open;
+  - otherwise all legs close at the 15:10 bar's close;
+  - no adjustments, no re-entry.
+- **Fills:**
+  - 0DTE half-spread on every leg: base `max(1.0% × price, ₹0.10)`, stress
+    `max(1.5% × price, ₹0.10)`;
+  - buys pay price + h, sells receive price − h.
+- **Charges:** 8 orders per day, as above (brokerage, BSE, SEBI, GST, stamp on
+  buys, STT on every sell by date).
+- **Margin:** no historical margin data exists. P&L is reported per set of
+  4 lots, plus the worst day; return on capital is not claimed.
+
+## Comparison
+
+- Flat (0).
+- The ungated naked expiry-day ORB on the same days (from the corrected
+  baseline).
+
+## Pass rules (Stage 2), all required
+
+1. Net > 0 under base fills, and ≥ 0 under stress fills.
+2. It beats a random-entry control: 1,000 runs with the same days and rules
+   but an entry minute drawn uniformly from 09:45–13:30.
+   `p = (k + 1) / 1001`; pass if p < 0.10. The iron fly takes no side, so this
+   control does not leak direction.
+3. Net stays > 0 after removing the best calendar month.
+4. The top 5 days make up < 50% of net.
+
+Also reported (not pass rules): win rate, average win and loss, worst day,
+max drawdown, and P&L by month.
+
+Passing earns only a NIFTY replication and the multi-year holdout, never
+capital.
