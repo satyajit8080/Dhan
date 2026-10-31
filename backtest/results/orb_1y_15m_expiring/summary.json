@@ -1,0 +1,259 @@
+{
+  "strategy": {
+    "confirm": "15m",
+    "expiryContract": "expiring",
+    "stopPct": 0.25,
+    "trailTrigger": 0.25,
+    "trailPct": 0.15
+  },
+  "period": {
+    "from": "2025-10-27",
+    "to": "2026-10-29",
+    "sessions": 252,
+    "noRangeDays": 7
+  },
+  "overall": {
+    "trades": 264,
+    "winRatePct": 45.5,
+    "netPerLot": -27497,
+    "grossPerLot": -2526,
+    "expectancyPerTrade": -104,
+    "avgWin": 1912,
+    "avgLoss": -1784,
+    "profitFactor": 0.89,
+    "maxDrawdown": -39427
+  },
+  "byDayType": {
+    "expiry": {
+      "trades": 64,
+      "winRatePct": 35.9,
+      "netPerLot": -964,
+      "grossPerLot": 3529,
+      "expectancyPerTrade": -15,
+      "avgWin": 1575,
+      "avgLoss": -907,
+      "profitFactor": 0.97,
+      "maxDrawdown": -17284
+    },
+    "non-expiry": {
+      "trades": 200,
+      "winRatePct": 48.5,
+      "netPerLot": -26533,
+      "grossPerLot": -6055,
+      "expectancyPerTrade": -133,
+      "avgWin": 1992,
+      "avgLoss": -2133,
+      "profitFactor": 0.88,
+      "maxDrawdown": -35187
+    }
+  },
+  "bySide": {
+    "CE": {
+      "trades": 130,
+      "winRatePct": 42.3,
+      "netPerLot": -42715,
+      "grossPerLot": -30109,
+      "expectancyPerTrade": -329,
+      "avgWin": 1737,
+      "avgLoss": -1844,
+      "profitFactor": 0.69,
+      "maxDrawdown": -46746
+    },
+    "PE": {
+      "trades": 134,
+      "winRatePct": 48.5,
+      "netPerLot": 15218,
+      "grossPerLot": 27583,
+      "expectancyPerTrade": 114,
+      "avgWin": 2060,
+      "avgLoss": -1720,
+      "profitFactor": 1.13,
+      "maxDrawdown": -23170
+    }
+  },
+  "byExit": {
+    "eod": {
+      "trades": 39,
+      "winRatePct": 71.8,
+      "netPerLot": 64674,
+      "grossPerLot": 69220,
+      "expectancyPerTrade": 1658,
+      "avgWin": 2564,
+      "avgLoss": -648,
+      "profitFactor": 10.07,
+      "maxDrawdown": -2035
+    },
+    "stop": {
+      "trades": 133,
+      "winRatePct": 0,
+      "netPerLot": -249796,
+      "grossPerLot": -238143,
+      "expectancyPerTrade": -1878,
+      "avgWin": 0,
+      "avgLoss": -1878,
+      "profitFactor": 0,
+      "maxDrawdown": -249796
+    },
+    "trail": {
+      "trades": 92,
+      "winRatePct": 100,
+      "netPerLot": 157625,
+      "grossPerLot": 166397,
+      "expectancyPerTrade": 1713,
+      "avgWin": 1713,
+      "avgLoss": 0,
+      "profitFactor": null,
+      "maxDrawdown": 0
+    }
+  },
+  "byMonth": {
+    "2025-10": {
+      "trades": 7,
+      "winRatePct": 42.9,
+      "netPerLot": -5323,
+      "grossPerLot": -4637,
+      "expectancyPerTrade": -760,
+      "avgWin": 445,
+      "avgLoss": -1664,
+      "profitFactor": 0.2,
+      "maxDrawdown": -6160
+    },
+    "2025-11": {
+      "trades": 21,
+      "winRatePct": 38.1,
+      "netPerLot": -10219,
+      "grossPerLot": -8398,
+      "expectancyPerTrade": -487,
+      "avgWin": 1223,
+      "avgLoss": -1539,
+      "profitFactor": 0.49,
+      "maxDrawdown": -13853
+    },
+    "2025-12": {
+      "trades": 28,
+      "winRatePct": 32.1,
+      "netPerLot": -7552,
+      "grossPerLot": -5288,
+      "expectancyPerTrade": -270,
+      "avgWin": 1860,
+      "avgLoss": -1279,
+      "profitFactor": 0.69,
+      "maxDrawdown": -16432
+    },
+    "2026-01": {
+      "trades": 22,
+      "winRatePct": 59.1,
+      "netPerLot": 8872,
+      "grossPerLot": 10857,
+      "expectancyPerTrade": 403,
+      "avgWin": 1761,
+      "avgLoss": -1558,
+      "profitFactor": 1.63,
+      "maxDrawdown": -3939
+    },
+    "2026-02": {
+      "trades": 22,
+      "winRatePct": 45.5,
+      "netPerLot": 6559,
+      "grossPerLot": 8707,
+      "expectancyPerTrade": 298,
+      "avgWin": 2909,
+      "avgLoss": -1877,
+      "profitFactor": 1.29,
+      "maxDrawdown": -14157
+    },
+    "2026-03": {
+      "trades": 17,
+      "winRatePct": 52.9,
+      "netPerLot": 6139,
+      "grossPerLot": 8323,
+      "expectancyPerTrade": 361,
+      "avgWin": 3450,
+      "avgLoss": -3114,
+      "profitFactor": 1.25,
+      "maxDrawdown": -8281
+    },
+    "2026-04": {
+      "trades": 20,
+      "winRatePct": 50,
+      "netPerLot": 2835,
+      "grossPerLot": 5080,
+      "expectancyPerTrade": 142,
+      "avgWin": 2239,
+      "avgLoss": -1955,
+      "profitFactor": 1.14,
+      "maxDrawdown": -9581
+    },
+    "2026-05": {
+      "trades": 23,
+      "winRatePct": 21.7,
+      "netPerLot": -32625,
+      "grossPerLot": -30403,
+      "expectancyPerTrade": -1418,
+      "avgWin": 1644,
+      "avgLoss": -2269,
+      "profitFactor": 0.2,
+      "maxDrawdown": -32625
+    },
+    "2026-06": {
+      "trades": 24,
+      "winRatePct": 58.3,
+      "netPerLot": -2229,
+      "grossPerLot": 36,
+      "expectancyPerTrade": -93,
+      "avgWin": 1250,
+      "avgLoss": -1973,
+      "profitFactor": 0.89,
+      "maxDrawdown": -9308
+    },
+    "2026-07": {
+      "trades": 20,
+      "winRatePct": 60,
+      "netPerLot": 9619,
+      "grossPerLot": 11460,
+      "expectancyPerTrade": 481,
+      "avgWin": 1771,
+      "avgLoss": -1454,
+      "profitFactor": 1.83,
+      "maxDrawdown": -4241
+    },
+    "2026-08": {
+      "trades": 18,
+      "winRatePct": 38.9,
+      "netPerLot": -3407,
+      "grossPerLot": -1949,
+      "expectancyPerTrade": -189,
+      "avgWin": 1841,
+      "avgLoss": -1481,
+      "profitFactor": 0.79,
+      "maxDrawdown": -8904
+    },
+    "2026-09": {
+      "trades": 18,
+      "winRatePct": 55.6,
+      "netPerLot": -3058,
+      "grossPerLot": -1540,
+      "expectancyPerTrade": -170,
+      "avgWin": 667,
+      "avgLoss": -1216,
+      "profitFactor": 0.69,
+      "maxDrawdown": -3994
+    },
+    "2026-10": {
+      "trades": 24,
+      "winRatePct": 41.7,
+      "netPerLot": 2892,
+      "grossPerLot": 5226,
+      "expectancyPerTrade": 121,
+      "avgWin": 2962,
+      "avgLoss": -1909,
+      "profitFactor": 1.11,
+      "maxDrawdown": -10599
+    }
+  },
+  "days": {
+    "traded": 223,
+    "green": 104
+  },
+  "signalsWithoutOptionPrice": 0
+}

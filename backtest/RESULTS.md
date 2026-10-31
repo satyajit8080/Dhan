@@ -51,3 +51,44 @@ Bid/ask fills, older trigger rules. Every variant lost: FIRST_TOUCH 120 trades,
 - No order-book history: liquidity grade and quoted spread not replayed.
 - OI/PCR from ATM±5 strikes, not the full chain.
 - Fills at 1-min bar prices; live fills will be somewhat worse.
+
+## 15-min opening-range breakout (run 31 Oct 2026)
+
+`server/scripts/backtest_orb.ts`. Rules fixed before any result: range =
+09:15–09:29 high/low; a 15-min close outside it buys ATM CE/PE (until 13:30,
+one per side per day); stop −25% of premium; at +25% the stop moves to
+breakeven and trails 15% below the highest close; exit 15:15. Same costs.
+Chosen on Apr–Oct 2026, then checked on Oct 2025 – Apr 2026 (unseen).
+
+### Choosing on Apr–Oct 2026
+
+| Variant | Trades | Win % | Gross | Net | PF |
+|---|---|---|---|---|---|
+| **15-min close, expiring contract on expiry day** | 139 | 46.8 | −₹11,289 | −₹24,207 | 0.82 |
+| 1-min close, expiring contract | 159 | 48.4 | −₹18,568 | −₹33,466 | 0.78 |
+| 15-min close, next weekly on expiry day | 138 | 47.1 | −₹41,261 | −₹55,724 | 0.67 |
+
+Only slice in profit: expiry days of the first variant, 34 trades, +₹3,701.
+
+### Unseen data, Oct 2025 – Apr 2026 (15-min, expiring)
+
+| | Trades | Win % | Gross | Net | PF |
+|---|---|---|---|---|---|
+| Overall | 125 | 44.0 | +₹8,763 | −₹3,290 | 0.97 |
+| Expiry days | 30 | 36.7 | −₹2,578 | **−₹4,665** | 0.73 |
+| Non-expiry days | 95 | 46.3 | +₹11,341 | +₹1,375 | 1.01 |
+
+The expiry-day edge did not hold on unseen months.
+
+### Full year (15-min, expiring)
+
+264 trades, 45.5% win, gross −₹2,526, **net −₹27,497**, PF 0.89, max DD
+−₹39,427. 104 of 223 traded days green.
+
+Expiry days alone: 52 days, 19 green, net −₹964 for the year — but
+**+₹15,229 of that came in October 2026**; the other 11 months lost
+₹16,193 together. The "expiry-day edge" is one high-volatility month, the same
+month the public experiments ran in.
+
+Verdict: closer to break-even than the 1-min scalper (PF 0.89 vs 0.58, far
+fewer trades so costs bite less), but no durable edge.
