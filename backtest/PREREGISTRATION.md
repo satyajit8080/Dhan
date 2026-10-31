@@ -194,3 +194,53 @@ max drawdown, and P&L by month.
 
 Passing earns only a NIFTY replication and the multi-year holdout, never
 capital.
+
+---
+
+# Pre-registration: H3T — iron fly with 30% profit target, multi-year (1 Nov 2026, before any run)
+
+The 30% target was chosen post hoc on SENSEX 27 Oct 2025 – 29 Oct 2026. This
+test freezes it and runs it on data that choice never saw.
+
+## Data
+
+- **NIFTY** weekly options, 1 Nov 2021 – 30 Oct 2026 (all new data).
+- **SENSEX** weekly options, 15 May 2023 – 30 Oct 2026. Only **15 May 2023 –
+  26 Oct 2025 counts as out-of-sample**; the last year is reported separately
+  as already seen.
+- Expiry days come from the data (cheaper ATM leg closes ≤ ₹1 at ≥ 15:25),
+  never from a weekday rule. Strikes ATM−10..ATM+10 on expiry days.
+
+## Rules (frozen)
+
+- Setup at the 09:44 close: ATM `K` = index rounded to the strike step (NIFTY
+  50, SENSEX 100); `W` = ATM CE + ATM PE closes; wings at `K ± W` rounded to
+  the step. Skip the day if a wing is beyond ±10 strikes or any leg lacks an
+  entry price.
+- Entry at the 09:45 open: sell ATM CE and PE, buy both wings, 1 lot each.
+- Exits, checked on each 1-min close, filled at the next minute's open:
+  - profit ≥ **30% of the credit** → close all;
+  - loss ≥ 1× the credit → close all;
+  - otherwise close at the 15:10 bar's close.
+- **Lot:** today's lot for all history (NIFTY 65, SENSEX 20), so years are
+  comparable; P&L is also reported in points.
+- **Fills:** half-spread per leg, base 1.0%, stress 1.5% (floor ₹0.10).
+  Sensitivity at 0.13% (the measured non-expiry spread), not a pass rule.
+- **Charges per order:**
+  - brokerage ₹20;
+  - exchange charge 0.03503% (NSE) or 0.0325% (BSE) at today's rates;
+  - SEBI fee ₹10 per crore;
+  - GST 18% on brokerage + exchange charge + SEBI fee;
+  - stamp duty 0.003% on buys;
+  - STT on sells by date: 0.0625% before 1 Oct 2024, 0.10% to 31 Mar 2026,
+    0.15% after.
+
+## Pass rules (per index, out-of-sample period only), all required
+
+1. Net > 0 at base fills, and ≥ 0 at stress fills.
+2. Win rate ≥ 60%.
+3. Net > 0 after removing the best calendar year.
+4. At least 60% of calendar years net positive.
+5. The top 5 days make up < 50% of net.
+
+Trial count: **11 of 20.**

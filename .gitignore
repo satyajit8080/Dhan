@@ -8,3 +8,4 @@ __pycache__/
 *.pyc
 server/paper-state.json
 server/logs/
+.btdata/
