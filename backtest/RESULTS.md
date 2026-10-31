@@ -199,3 +199,26 @@ Notes:
   result excludes the most volatile expiries; the bias direction is unknown.
 
 **Variant budget: 10 of 20 used.**
+
+## H3T out-of-sample: NIFTY, 5 years (31 Oct 2026)
+
+Frozen H3T (PREREGISTRATION.md, e6ea421): expiry-day iron fly, 30% target,
+`server/scripts/backtest_h3x.ts`, data from `backtest/fetch_expiry.py`.
+NIFTY lot 65, NSE charges, STT by date. 1 Nov 2021 – 30 Oct 2026.
+Results in `results/h3t_nifty/` (and `h3t_nifty_spread013/`, post-hoc 0.13%).
+
+| | Value |
+|---|---|
+| Expiry days / traded | 253 / 251 |
+| Win rate | 52.2% (target hit 121, flat 129, stop 1) |
+| Average win / loss | +₹1,188 / −₹2,170 |
+| Net (1% half-spread) | **−₹1,04,789** (−₹417 per expiry) |
+| Net (stress 1.5%) | −₹1,35,383 |
+| Net (0.13% measured spread, post-hoc) | −₹64,098 (55% win) |
+| Max drawdown | −₹1,06,761 |
+| Years positive | **0 of 6** |
+
+**Fails.** Every year lost money. The 84.8% SENSEX win rate does not
+replicate: days that miss the 30% target are held to 15:10 and lose
+twice what the winners make. Per COMPARISON.md step 5, the iron fly is
+stopped. SENSEX (May 2023 – Oct 2025) run follows when its download ends.

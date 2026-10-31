@@ -1,0 +1,93 @@
+{
+  "preregistration": "backtest/PREREGISTRATION.md, H3T (commit e6ea421)",
+  "index": "NIFTY",
+  "lot": 65,
+  "halfSpreadOverride": null,
+  "period": {
+    "from": "2021-11-01",
+    "to": "2026-10-30",
+    "expiryDays": 253,
+    "traded": 251,
+    "skipped": 2
+  },
+  "winRatePct": 52.2,
+  "avgWin": 1188,
+  "avgLoss": -2170,
+  "netBase": -104789,
+  "netPerExpiry": -417,
+  "netStress": -135383,
+  "worstDay": {
+    "day": "2026-03-30",
+    "K": 22650,
+    "W": 253.8,
+    "credit": 176.42,
+    "exitTime": "15:10",
+    "reason": "flat",
+    "points": -76.17,
+    "net": -5184
+  },
+  "maxDrawdown": -106761,
+  "top5DaysNet": 16151,
+  "byYear": {
+    "2021": {
+      "trades": 9,
+      "wins": 4,
+      "net": -4726
+    },
+    "2022": {
+      "trades": 52,
+      "wins": 28,
+      "net": -16028
+    },
+    "2023": {
+      "trades": 46,
+      "wins": 18,
+      "net": -32587
+    },
+    "2024": {
+      "trades": 50,
+      "wins": 30,
+      "net": -16113
+    },
+    "2025": {
+      "trades": 51,
+      "wins": 30,
+      "net": -16879
+    },
+    "2026": {
+      "trades": 43,
+      "wins": 21,
+      "net": -18456
+    }
+  },
+  "exits": {
+    "flat": {
+      "trades": 129,
+      "wins": 10,
+      "net": -252128
+    },
+    "stop": {
+      "trades": 1,
+      "wins": 0,
+      "net": -3190
+    },
+    "target": {
+      "trades": 121,
+      "wins": 121,
+      "net": 150529
+    }
+  },
+  "checks": {
+    "netPositiveBase": false,
+    "netNonNegativeStress": false,
+    "winRateAtLeast60": false,
+    "positiveWithoutBestYear": false,
+    "atLeast60PctYearsPositive": false,
+    "top5DaysUnderHalf": false
+  },
+  "passes": false,
+  "skippedDays": {
+    "2025-07-31": "leg missing at entry",
+    "2025-08-07": "leg missing at entry"
+  }
+}
