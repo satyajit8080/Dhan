@@ -47,7 +47,7 @@ export function loadData(dataDir: string): BacktestData {
   const opt: OptBook = new Map();
   for (const dir of dirs) for (const code of [1, 2]) {
     for (const [typ, side] of [['CALL', 'CE'], ['PUT', 'PE']] as const) {
-      for (let off = -5; off <= 5; off++) {
+      for (let off = -10; off <= 10; off++) {
         const f = `opt_${code}_${typ}_${off}.json`;
         if (!existsSync(join(dir, f))) continue;
         const d = load(dir, f);
