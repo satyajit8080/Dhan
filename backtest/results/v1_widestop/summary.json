@@ -1,0 +1,209 @@
+{
+  "configOverride": {
+    "stopBufferAtrMult": 0.5,
+    "stopBufferMinPts": 10,
+    "stopBufferMaxPts": 60
+  },
+  "period": {
+    "from": "2026-04-15",
+    "to": "2026-10-29",
+    "sessions": 137
+  },
+  "overall": {
+    "trades": 435,
+    "winRatePct": 36.8,
+    "netPerLot": -56613,
+    "grossPerLot": -10734,
+    "expectancyPerTrade": -130,
+    "avgWin": 517,
+    "avgLoss": -506,
+    "profitFactor": 0.59,
+    "maxDrawdown": -62517
+  },
+  "bySide": {
+    "CE": {
+      "trades": 214,
+      "winRatePct": 36,
+      "netPerLot": -29738,
+      "grossPerLot": -6137,
+      "expectancyPerTrade": -139,
+      "avgWin": 529,
+      "avgLoss": -515,
+      "profitFactor": 0.58,
+      "maxDrawdown": -36321
+    },
+    "PE": {
+      "trades": 221,
+      "winRatePct": 37.6,
+      "netPerLot": -26875,
+      "grossPerLot": -4597,
+      "expectancyPerTrade": -122,
+      "avgWin": 505,
+      "avgLoss": -498,
+      "profitFactor": 0.61,
+      "maxDrawdown": -32491
+    }
+  },
+  "bySetup": {
+    "breakout/retest": {
+      "trades": 55,
+      "winRatePct": 40,
+      "netPerLot": -7641,
+      "grossPerLot": -1656,
+      "expectancyPerTrade": -139,
+      "avgWin": 505,
+      "avgLoss": -568,
+      "profitFactor": 0.59,
+      "maxDrawdown": -8653
+    },
+    "breakout/second_bar": {
+      "trades": 174,
+      "winRatePct": 37.9,
+      "netPerLot": -17721,
+      "grossPerLot": 807,
+      "expectancyPerTrade": -102,
+      "avgWin": 697,
+      "avgLoss": -590,
+      "profitFactor": 0.72,
+      "maxDrawdown": -27347
+    },
+    "rejection/rejection": {
+      "trades": 206,
+      "winRatePct": 35,
+      "netPerLot": -31251,
+      "grossPerLot": -9885,
+      "expectancyPerTrade": -152,
+      "avgWin": 355,
+      "avgLoss": -424,
+      "profitFactor": 0.45,
+      "maxDrawdown": -31670
+    }
+  },
+  "byExit": {
+    "stop": {
+      "trades": 122,
+      "winRatePct": 0,
+      "netPerLot": -91721,
+      "grossPerLot": -79160,
+      "expectancyPerTrade": -752,
+      "avgWin": 0,
+      "avgLoss": -752,
+      "profitFactor": 0,
+      "maxDrawdown": -91721
+    },
+    "target": {
+      "trades": 81,
+      "winRatePct": 95.1,
+      "netPerLot": 52938,
+      "grossPerLot": 61716,
+      "expectancyPerTrade": 654,
+      "avgWin": 691,
+      "avgLoss": -71,
+      "profitFactor": 186.1,
+      "maxDrawdown": -185
+    },
+    "time": {
+      "trades": 232,
+      "winRatePct": 35.8,
+      "netPerLot": -17830,
+      "grossPerLot": 6710,
+      "expectancyPerTrade": -77,
+      "avgWin": 355,
+      "avgLoss": -317,
+      "profitFactor": 0.62,
+      "maxDrawdown": -21902
+    }
+  },
+  "byMonth": {
+    "2026-04": {
+      "trades": 44,
+      "winRatePct": 47.7,
+      "netPerLot": 4516,
+      "grossPerLot": 9797,
+      "expectancyPerTrade": 103,
+      "avgWin": 646,
+      "avgLoss": -394,
+      "profitFactor": 1.5,
+      "maxDrawdown": -1741
+    },
+    "2026-05": {
+      "trades": 63,
+      "winRatePct": 31.7,
+      "netPerLot": -15402,
+      "grossPerLot": -8173,
+      "expectancyPerTrade": -244,
+      "avgWin": 699,
+      "avgLoss": -683,
+      "profitFactor": 0.48,
+      "maxDrawdown": -16790
+    },
+    "2026-06": {
+      "trades": 73,
+      "winRatePct": 32.9,
+      "netPerLot": -15244,
+      "grossPerLot": -7576,
+      "expectancyPerTrade": -209,
+      "avgWin": 555,
+      "avgLoss": -583,
+      "profitFactor": 0.47,
+      "maxDrawdown": -16911
+    },
+    "2026-07": {
+      "trades": 63,
+      "winRatePct": 36.5,
+      "netPerLot": -7987,
+      "grossPerLot": -1648,
+      "expectancyPerTrade": -127,
+      "avgWin": 353,
+      "avgLoss": -403,
+      "profitFactor": 0.5,
+      "maxDrawdown": -9244
+    },
+    "2026-08": {
+      "trades": 64,
+      "winRatePct": 35.9,
+      "netPerLot": -5387,
+      "grossPerLot": 837,
+      "expectancyPerTrade": -84,
+      "avgWin": 296,
+      "avgLoss": -297,
+      "profitFactor": 0.56,
+      "maxDrawdown": -5616
+    },
+    "2026-09": {
+      "trades": 68,
+      "winRatePct": 42.6,
+      "netPerLot": -5485,
+      "grossPerLot": 991,
+      "expectancyPerTrade": -81,
+      "avgWin": 355,
+      "avgLoss": -405,
+      "profitFactor": 0.65,
+      "maxDrawdown": -7307
+    },
+    "2026-10": {
+      "trades": 60,
+      "winRatePct": 33.3,
+      "netPerLot": -11624,
+      "grossPerLot": -4962,
+      "expectancyPerTrade": -194,
+      "avgWin": 828,
+      "avgLoss": -704,
+      "profitFactor": 0.59,
+      "maxDrawdown": -11624
+    }
+  },
+  "blockedEvents": {
+    "A: volume not above 10-bar avg": 2022,
+    "A: closed back through after hold": 821,
+    "A: next bar did not hold": 688,
+    "B: rejection blocked, ADX ≥ 25": 404,
+    "A: 5-min trend filter (ADX/DI)": 222,
+    "A: OI/PCR did not confirm": 95,
+    "A: break bar not decisive (body < 40%)": 80,
+    "Entry within 3 pts of level": 49,
+    "CE and PE conflict": 1
+  },
+  "signalsWithoutOptionPrice": 0,
+  "runtimeSec": 1308
+}
