@@ -31,6 +31,8 @@ const optAt = (t: number, side: Side, k: number): OptRow | undefined => opt.get(
  * e.g. 0.0013 = the median measured in the 30 Oct 2026 live log (a non-expiry
  * day). It never changes the registered verdict.
  */
+/** POST-HOC SENSITIVITY ONLY (TARGET_PCT): book profit at this share of the credit. */
+const TARGET_PCT = process.env['TARGET_PCT'] ? Number(process.env['TARGET_PCT']) : null;
 const OVERRIDE = process.env['HALF_SPREAD_PCT'] ? Number(process.env['HALF_SPREAD_PCT']) : null;
 const halfSpread = (p: number, s: Scenario) =>
   Math.max((s === 'base' ? (OVERRIDE ?? 0.01) : 0.015) * p, 0.1);
@@ -121,6 +123,11 @@ function runFly(day: string, setupIdx: number, s: Scenario): DayResult | { skip:
     const time = istTimeOf(b.timestampMs);
     if (time >= '15:10' || i === bars.length - 1) return exitAt(last, b.timestampMs, 'flat');
     const markCost = legs.reduce((a, l, j) => a + (l.dir < 0 ? last[j]! : -last[j]!), 0);
+    if (TARGET_PCT !== null && credit - markCost >= TARGET_PCT * credit) {
+      const nb = bars[i + 1]!;
+      const px = legs.map((l, j) => optAt(nb.timestampMs, l.side, l.k)?.o ?? last[j]!);
+      return exitAt(px, nb.timestampMs, 'target');
+    }
     if (markCost - credit >= credit) {
       const nb = bars[i + 1]!;
       const px = legs.map((l, j) => optAt(nb.timestampMs, l.side, l.k)?.o ?? last[j]!);
