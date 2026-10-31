@@ -1,0 +1,83 @@
+{
+  "preregistration": "backtest/PREREGISTRATION.md, H3 (commit c65d51c)",
+  "period": {
+    "from": "2025-10-27",
+    "to": "2026-10-29",
+    "expiryDays": 53,
+    "traded": 46,
+    "skipped": {
+      "2026-01-22": "leg missing at entry",
+      "2026-03-12": "leg missing at entry",
+      "2026-03-19": "wing beyond data band",
+      "2026-03-25": "wing beyond data band",
+      "2026-04-02": "wing beyond data band",
+      "2026-08-06": "wing beyond data band",
+      "2026-10-22": "wing beyond data band"
+    }
+  },
+  "trades": 46,
+  "winRatePct": 52.2,
+  "avgWin": 1677,
+  "avgLoss": -1424,
+  "grossBase": 18454,
+  "netBase": 8928,
+  "netPerDay": 194,
+  "netStress": -1665,
+  "worstDay": {
+    "day": "2026-03-05",
+    "entryTime": "09:45",
+    "K": 79500,
+    "W": 512.3,
+    "credit": 338.26,
+    "exitTime": "15:10",
+    "reason": "flat",
+    "net": -3253,
+    "gross": -3042
+  },
+  "bestDay": {
+    "day": "2026-04-30",
+    "entryTime": "09:45",
+    "K": 76800,
+    "W": 377,
+    "credit": 264.55,
+    "exitTime": "15:10",
+    "reason": "flat",
+    "net": 3866,
+    "gross": 4071
+  },
+  "maxDrawdown": -6879,
+  "stops": 0,
+  "bestMonth": {
+    "month": "2026-02",
+    "net": 6741
+  },
+  "netWithoutBestMonth": 2187,
+  "top5DaysNet": 17437,
+  "byMonth": {
+    "2025-10": 663,
+    "2025-11": 2049,
+    "2025-12": 1234,
+    "2026-01": 167,
+    "2026-02": 6741,
+    "2026-03": -3253,
+    "2026-04": 1790,
+    "2026-05": -4498,
+    "2026-06": 2606,
+    "2026-07": -1230,
+    "2026-08": 2091,
+    "2026-09": -670,
+    "2026-10": 1238
+  },
+  "control": {
+    "p": 0.2767,
+    "meanRandomNet": 2963
+  },
+  "checks": {
+    "netPositiveBase": true,
+    "netNonNegativeStress": false,
+    "beatsRandomEntry": false,
+    "positiveWithoutBestMonth": true,
+    "top5DaysUnderHalf": false
+  },
+  "passes": false
+}

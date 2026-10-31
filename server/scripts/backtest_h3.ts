@@ -26,7 +26,14 @@ type Scenario = 'base' | 'stress';
 const { opt, byDay, days } = loadData(dataDir);
 const optAt = (t: number, side: Side, k: number): OptRow | undefined => opt.get(t)?.get(1)?.[side].get(k);
 
-const halfSpread = (p: number, s: Scenario) => Math.max((s === 'base' ? 0.01 : 0.015) * p, 0.1);
+/**
+ * POST-HOC SENSITIVITY ONLY (HALF_SPREAD_PCT): overrides the base half-spread,
+ * e.g. 0.0013 = the median measured in the 30 Oct 2026 live log (a non-expiry
+ * day). It never changes the registered verdict.
+ */
+const OVERRIDE = process.env['HALF_SPREAD_PCT'] ? Number(process.env['HALF_SPREAD_PCT']) : null;
+const halfSpread = (p: number, s: Scenario) =>
+  Math.max((s === 'base' ? (OVERRIDE ?? 0.01) : 0.015) * p, 0.1);
 
 function orderCharges(price: number, kind: 'buy' | 'sell', date: string): number {
   const turnover = Math.max(price, 0) * LOT;
