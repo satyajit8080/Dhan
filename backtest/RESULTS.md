@@ -115,3 +115,53 @@ Accepted from the audit: real costs are higher (₹114–166 per round trip at
 because its cost is ~5–9% of the risk per trade, not because it trades less;
 264 trades cannot separate break-even from a modest edge either way; the
 Thursday expiry rule misses the shifted expiries (e.g. 14 Jan 2026).
+
+## Pre-registered round: H1a and H2 (1 Nov 2026)
+
+Rules in `PREREGISTRATION.md`, committed (64fc218) before the code
+(`server/scripts/backtest_prereg.ts`) was written. Corrected costs: half-spread
+0.6% (1.0% on 0DTE) per fill, stress 1.0% (1.5%), real BSE charges with STT by
+date, flat 15:10 on expiry days. Full year, 27 Oct 2025 – 29 Oct 2026.
+Results in `results/prereg/`.
+
+| Test | Trades | Win % | Net (base) | Per trade | Net (stress) | Passes |
+|---|---|---|---|---|---|---|
+| Baseline naked ORB, corrected | 264 | 45.5 | −₹43,821 | −₹166 | −₹59,818 | — |
+| H1a: expiry-day ORB, only if Q ≤ 1.00 | 3 | 0 | −₹3,074 | −₹1,025 | −₹3,169 | **No** |
+| H1a control: ungated, same eligible days | 32 | 31.3 | +₹4,659 | +₹146 | +₹3,473 | No (fails best-month, top-5, random control) |
+| H2: same signals as a debit spread | 264 | 22.0 | −₹1,09,226 | −₹414 | −₹1,29,661 | **No** |
+
+- **H1a mechanism, wrong sign:** Spearman(Q, day P&L) = +0.37 over 27
+  eligible days (p one-sided 0.97). Cheap-straddle days did *worse*; the
+  most expensive tercile did best. Only 2 days met the gate.
+- **H2 paired:** the spread did worse than the naked buy on the same signal
+  by ₹248 per signal (t = −1.82); −₹86,276 even without its top 5 days.
+- **Stop rule triggered:** the baseline loses more than ₹50 per trade and
+  neither hypothesis passes. Per the pre-registration, intraday SENSEX option-
+  buying research stops here.
+
+### Flaw found in the registered expiry detector
+
+The registered rule (ATM straddle time value ≤ 50 pts at the last bar) found
+only 36 expiry days: on real expiry days the ITM leg is priced off the
+settlement price, not the last index print, so its "time value" reads 54–89
+pts. The verdicts above are as registered. A labelled post-hoc re-run
+(`EXPIRY_RULE=otm`: also an expiry day if the cheaper ATM leg closes at ≤ ₹1,
+`results/prereg_robustness/`) finds 53 expiry days, differing from Thursdays
+only on 24 Dec 2025, 14 Jan, 25 Mar and 27 May 2026 — the known shifts. It
+changes no verdict: baseline −₹168/trade; H1a 7 trades −₹4,105, mechanism
+r = +0.27 (p 0.96); H2 −₹1,09,630.
+
+### Flaw in the random-entry control
+
+The control draws entry minutes from the whole 09:44–13:29 window, including
+minutes *before* the real signal, while keeping the signal's side. It therefore
+knows which way the day broke, which is why random entries averaged +₹46,670
+against the baseline's −₹43,821. It is biased against every hypothesis; it did
+not decide any verdict here, since all of them already failed rule 1. A future
+control should draw only from minutes at or after the real signal.
+
+### Variant budget
+
+9 of 20 trials used (7 earlier + H1a + H2). The robustness re-run is a check
+of the data rule, not a new trial.

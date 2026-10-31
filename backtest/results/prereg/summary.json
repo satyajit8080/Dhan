@@ -1,0 +1,226 @@
+{
+  "preregistration": "backtest/PREREGISTRATION.md (commit 64fc218)",
+  "period": {
+    "from": "2025-10-27",
+    "to": "2026-10-29",
+    "sessions": 252
+  },
+  "expiryDays": {
+    "detected": 36,
+    "unknown": 2,
+    "differFromThursdayRule": [
+      "2025-10-30",
+      "2025-11-06",
+      "2025-11-27",
+      "2025-12-04",
+      "2025-12-24",
+      "2026-01-14",
+      "2026-01-22",
+      "2026-02-12",
+      "2026-02-19",
+      "2026-03-05",
+      "2026-03-19",
+      "2026-03-25",
+      "2026-04-23",
+      "2026-04-30",
+      "2026-05-14",
+      "2026-05-27",
+      "2026-06-04",
+      "2026-06-11",
+      "2026-07-02",
+      "2026-07-16",
+      "2026-07-30"
+    ]
+  },
+  "baseline": {
+    "name": "Baseline naked ORB (corrected)",
+    "trades": 264,
+    "skipped": 0,
+    "winRatePct": 45.5,
+    "grossBase": -27300,
+    "netBase": -43821,
+    "netPerTradeBase": -166,
+    "netStress": -59818,
+    "bestMonth": {
+      "month": "2026-07",
+      "net": 8437
+    },
+    "netWithoutBestMonth": -52258,
+    "top5DaysNet": 34540,
+    "control": {
+      "p": 0.999,
+      "meanRandomNet": 46670
+    },
+    "byMonth": {
+      "2025-10": -5734,
+      "2025-11": -11234,
+      "2025-12": -8694,
+      "2026-01": 7659,
+      "2026-02": 5208,
+      "2026-03": 4347,
+      "2026-04": 1045,
+      "2026-05": -34134,
+      "2026-06": -3698,
+      "2026-07": 8437,
+      "2026-08": -4220,
+      "2026-09": -3950,
+      "2026-10": 1147
+    },
+    "checks": {
+      "netPositiveBase": false,
+      "netNonNegativeStress": false,
+      "beatsRandomEntry": false,
+      "positiveWithoutBestMonth": false,
+      "top5DaysUnderHalf": false
+    },
+    "passes": false
+  },
+  "h1a": {
+    "name": "H1a gated expiry-day ORB (Q <= 1.00)",
+    "trades": 3,
+    "skipped": 0,
+    "winRatePct": 0,
+    "grossBase": -2913,
+    "netBase": -3074,
+    "netPerTradeBase": -1025,
+    "netStress": -3169,
+    "bestMonth": {
+      "month": "2026-05",
+      "net": -3074
+    },
+    "netWithoutBestMonth": 0,
+    "top5DaysNet": -3074,
+    "control": {
+      "p": 0.997,
+      "meanRandomNet": -727
+    },
+    "byMonth": {
+      "2026-05": -3074
+    },
+    "checks": {
+      "netPositiveBase": false,
+      "netNonNegativeStress": false,
+      "beatsRandomEntry": false,
+      "positiveWithoutBestMonth": false,
+      "top5DaysUnderHalf": false
+    },
+    "passes": false,
+    "eligibleExpiryDays": 27,
+    "gatedDays": 2,
+    "mechanism": {
+      "eligibleDays": 27,
+      "spearman": 0.373,
+      "pOneSided": 0.974
+    },
+    "terciles": [
+      {
+        "qFrom": 0.96,
+        "qTo": 1.2,
+        "days": 9,
+        "net": -6051
+      },
+      {
+        "qFrom": 1.28,
+        "qTo": 2.09,
+        "days": 9,
+        "net": 3302
+      },
+      {
+        "qFrom": 2.19,
+        "qTo": 3.62,
+        "days": 9,
+        "net": 7408
+      }
+    ]
+  },
+  "h1aControl": {
+    "name": "H1a control: ungated expiry-day ORB, eligible days",
+    "trades": 32,
+    "skipped": 0,
+    "winRatePct": 31.3,
+    "grossBase": 6437,
+    "netBase": 4659,
+    "netPerTradeBase": 146,
+    "netStress": 3473,
+    "bestMonth": {
+      "month": "2026-10",
+      "net": 14742
+    },
+    "netWithoutBestMonth": -10083,
+    "top5DaysNet": 21688,
+    "control": {
+      "p": 0.2028,
+      "meanRandomNet": -861
+    },
+    "byMonth": {
+      "2026-02": -1981,
+      "2026-03": 3310,
+      "2026-04": -5103,
+      "2026-05": -918,
+      "2026-06": 919,
+      "2026-07": -1543,
+      "2026-08": -2562,
+      "2026-09": -2205,
+      "2026-10": 14742
+    },
+    "checks": {
+      "netPositiveBase": true,
+      "netNonNegativeStress": true,
+      "beatsRandomEntry": false,
+      "positiveWithoutBestMonth": false,
+      "top5DaysUnderHalf": false
+    },
+    "passes": false
+  },
+  "h2": {
+    "name": "H2 debit spread on baseline signals",
+    "trades": 264,
+    "skipped": 0,
+    "winRatePct": 22,
+    "grossBase": -77085,
+    "netBase": -109226,
+    "netPerTradeBase": -414,
+    "netStress": -129661,
+    "bestMonth": {
+      "month": "2025-10",
+      "net": -3256
+    },
+    "netWithoutBestMonth": -105970,
+    "top5DaysNet": 7550,
+    "control": {
+      "p": 1,
+      "meanRandomNet": -78023
+    },
+    "byMonth": {
+      "2025-10": -3256,
+      "2025-11": -3526,
+      "2025-12": -8424,
+      "2026-01": -6606,
+      "2026-02": -8705,
+      "2026-03": -14989,
+      "2026-04": -11002,
+      "2026-05": -19777,
+      "2026-06": -7069,
+      "2026-07": -8974,
+      "2026-08": -5640,
+      "2026-09": -5711,
+      "2026-10": -5547
+    },
+    "checks": {
+      "netPositiveBase": false,
+      "netNonNegativeStress": false,
+      "beatsRandomEntry": false,
+      "positiveWithoutBestMonth": false,
+      "top5DaysUnderHalf": false
+    },
+    "passes": false,
+    "paired": {
+      "signals": 264,
+      "meanPerSignal": -248,
+      "tStat": -1.82,
+      "totalWithoutTop5Days": -86276
+    }
+  },
+  "stopRuleTriggered": true,
+  "runtimeSec": 88
+}
