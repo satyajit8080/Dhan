@@ -165,3 +165,37 @@ control should draw only from minutes at or after the real signal.
 
 9 of 20 trials used (7 earlier + H1a + H2). The robustness re-run is a check
 of the data rule, not a new trial.
+
+## Pre-registered H3: hedged expiry-day iron fly (1 Nov 2026)
+
+Rules in `PREREGISTRATION.md` (commit c65d51c, before the code,
+`server/scripts/backtest_h3.ts`). Sell ATM CE + PE at 09:45 on expiry days,
+buy wings at ATM ± the straddle price, exit 15:10 or at a loss of 1× credit.
+1.0% half-spread per leg (stress 1.5%), 8 orders of real charges. Results in
+`results/h3/`.
+
+| | Value |
+|---|---|
+| Expiry days / traded | 53 / 46 (5 skipped: wing beyond our ±500 data band; 2: leg missing) |
+| Win rate | **52.2%** |
+| Average win / loss | +₹1,547 / −₹1,586 |
+| Gross / net (base) | +₹11,760 / **+₹2,237** (₹49 per day) |
+| Net (stress fills) | −₹1,665 |
+| Worst day / best day | −₹3,477 (5 Mar 2026) / +₹3,770 (30 Apr 2026) |
+| Max drawdown | −₹8,305 |
+| Without best month (Feb 2026, +₹6,153) | −₹3,916 |
+| Top 5 days | +₹16,845 (7.5× the net) |
+| Random-entry control | p = 0.29 (random entry averaged −₹3,475) |
+
+**Fails 4 of the 5 checks** (passes only "net > 0 at base fills"). The win rate
+is about a coin flip, not the 65–80% often claimed for option selling: wings at
+ATM ± straddle give back much of the premium. Costs (₹9,523 over 46 days) take
+81% of the gross.
+
+Notes:
+- The stop never fired: with wings at ± the straddle, the maximum loss is
+  below 1× the credit, so the registered stop could not trigger.
+- The 5 skipped days are the highest-straddle days (wing > 500 pts), so the
+  result excludes the most volatile expiries; the bias direction is unknown.
+
+**Variant budget: 10 of 20 used.**
