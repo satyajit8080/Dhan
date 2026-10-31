@@ -92,3 +92,26 @@ month the public experiments ran in.
 
 Verdict: closer to break-even than the 1-min scalper (PF 0.89 vs 0.58, far
 fewer trades so costs bite less), but no durable edge.
+
+## Audit check: options are priced at the pinned strike (1 Nov 2026)
+
+An external audit flagged a possible bug: marking a held option to Dhan's
+ATM-relative series would stitch strikes together and strip out directional
+P&L. The replay indexes every option row by its absolute `strike` field and
+looks up the strike chosen at entry, so it should be pinned. Delta-slope test
+on the actual trades (option points gained vs index points moved in the
+trade's direction):
+
+| Run | Trades | Slope | R² |
+|---|---|---|---|
+| 1-min scalper, 1 year | 767 | 0.43 | 0.75 |
+| ORB, 1 year | 264 | 0.50 | 0.90 |
+
+Slopes near ATM delta (≈0.5) confirm the strike is pinned. A stitched series
+would show a slope well below 0.5. The "no gross edge" conclusion stands.
+
+Accepted from the audit: real costs are higher (₹114–166 per round trip at
+₹400, not ₹105), so every net figure above is optimistic; the ORB loses less
+because its cost is ~5–9% of the risk per trade, not because it trades less;
+264 trades cannot separate break-even from a modest edge either way; the
+Thursday expiry rule misses the shifted expiries (e.g. 14 Jan 2026).
