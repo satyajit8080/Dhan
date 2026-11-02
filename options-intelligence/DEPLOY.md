@@ -65,7 +65,7 @@ curl -H "Authorization: Bearer YOUR_KEY" http://127.0.0.1:8000/api/v1/system/sta
    docker compose exec api python /scripts/smoke_live.py
    ```
 
-2. Enable an index by setting `live_enabled: true` in `backend/doi/intelligence/strategy_configs/<index>.yaml`, then restart.
+2. Enable an index by setting `live_enabled: true` in `backend/doi/intelligence/strategy_configs/<index>.yaml`, then rebuild with `docker compose up -d --build`. The configs are baked into the image.
 
 3. Optionally test Grok, which spends at most ₹20:
 
