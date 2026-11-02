@@ -1,0 +1,32 @@
+# Research starting values only - calibrate per index on chronological data.
+key: BANKEX
+config_version: "0.1.0"
+exchange_family: BSE
+master_symbol: BANKEX
+live_enabled: false   # flip only after the activation gate passes
+activation_gate: "BSE live validation; history gate separate"
+freshness:
+  chain_max_age_s: 10
+  underlying_max_age_s: 5
+liquidity:
+  max_spread_pct: 2.0
+  min_oi: 200
+  min_volume: 20
+  max_quote_age_s: 15
+historical:
+  status: blocked
+  expiry_flags: [MONTH]
+  max_atm_offset: 3
+  max_atm_offset_near_expiry: 10
+weights:
+  trend: 20
+  momentum: 10
+  pcr_oi: 20
+  oi_walls: 15
+  volatility_greeks: 10
+  liquidity: 15
+  market_time: 10
+thresholds:   # uncalibrated -> engine returns WAIT
+  bull_min: null
+  bear_min: null
+  margin: null

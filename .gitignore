@@ -8,3 +8,8 @@ __pycache__/
 *.pyc
 server/paper-state.json
 server/logs/
+options-intelligence/secrets/
+.venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/

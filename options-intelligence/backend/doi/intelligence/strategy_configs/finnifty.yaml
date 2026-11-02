@@ -1,0 +1,32 @@
+# Research starting values only - calibrate per index on chronological data.
+key: FINNIFTY
+config_version: "0.1.0"
+exchange_family: NSE
+master_symbol: FINNIFTY
+live_enabled: false   # flip only after the activation gate passes
+activation_gate: "Expiry/strike mapping test"
+freshness:
+  chain_max_age_s: 10
+  underlying_max_age_s: 5
+liquidity:
+  max_spread_pct: 1.5
+  min_oi: 500
+  min_volume: 50
+  max_quote_age_s: 15
+historical:
+  status: pilot
+  expiry_flags: [MONTH]
+  max_atm_offset: 3
+  max_atm_offset_near_expiry: 10
+weights:
+  trend: 20
+  momentum: 10
+  pcr_oi: 20
+  oi_walls: 15
+  volatility_greeks: 10
+  liquidity: 15
+  market_time: 10
+thresholds:   # uncalibrated -> engine returns WAIT
+  bull_min: null
+  bear_min: null
+  margin: null

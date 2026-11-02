@@ -13,6 +13,7 @@ forward recovery and an internal Black-76 pricing core. Never places orders.
 | `server/` | TypeScript source of the MCP server + 204 tests |
 | `engine/` | Python `refresh_table.py` (option breakout premiums), `commodity_engine.py` (MCX), sample data |
 | `docs/` | Signal log |
+| `options-intelligence/` | Standalone paper-only five-index platform (Blueprint V2), Python/FastAPI. See its README |
 | `.claude-plugin/marketplace.json` | Lets Claude install the plugin straight from this repo |
 
 ## Install the plugin
