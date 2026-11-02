@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from pathlib import Path
+from typing import Any
 
 import httpx
 
@@ -53,6 +54,7 @@ class Runtime:
     auth: AuthStore | None = None  # None = in-memory development mode (no database)
     approvals: ApprovalLog | MemoryApprovalLog = field(default_factory=MemoryApprovalLog)
     controls: ControlStore | None = None
+    ai: Any = None  # doi.ai.service.AIComponents
     _paper_service: PaperService | None = field(default=None, repr=False)
 
     @property
@@ -157,6 +159,14 @@ async def build_runtime(settings: Settings) -> Runtime:
     configs = load_index_configs(settings.strategy_config_dir)
     rt = Runtime(configs=configs)
     await init_paper(rt, settings, datetime.now(UTC))
+    from doi.ai.service import build_ai
+
+    dsn = settings.database_url.get_secret_value() if settings.database_url else None
+    if dsn:
+        from doi.ai.agents import sync_registry
+
+        await asyncio.to_thread(sync_registry, dsn)
+    rt.ai = build_ai(settings, dsn, kill_switch=lambda: rt.kill_switch)
     if not settings.dhan_client_id:
         log.warning("DHAN_CLIENT_ID not set; market data disabled")
         return rt

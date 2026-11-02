@@ -84,5 +84,8 @@ def test_unknown_expiry_404_and_token_error_503():
 
 
 def test_no_order_routes():
-    paths = {r.path for r in create_app(runtime=Runtime(configs={})).routes}
+    # OpenAPI paths include routes from included routers (AI, research, dashboard)
+    paths = set(create_app(runtime=Runtime(configs={})).openapi()["paths"])
+    assert "/api/v1/ai/recommendations/{rec_id}/approve" in paths
     assert not any(("order" in p and "paper" not in p) for p in paths)
+    assert not any(w in p for p in paths for w in ("/live", "/broker", "/dhan/orders", "/execute"))

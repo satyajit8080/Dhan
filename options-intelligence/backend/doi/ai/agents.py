@@ -349,11 +349,12 @@ async def run_agent(
     meeting_id: str | None = None,
     now: datetime | None = None,
     schema: type[BaseModel] | None = None,
+    turns_visible: bool | None = None,
 ) -> AgentTurn:
     """One validated turn: a call, then validation, then at most one corrective retry, then ABSTAIN.
     Other agents' turns are visible only to agents with `sees_turns` (independence)."""
     view = pack.view(spec.sections)
-    visible_turns = turns if spec.sees_turns else None
+    visible_turns = turns if (spec.sees_turns if turns_visible is None else turns_visible) else None
     if visible_turns:  # cited numbers in turns become part of what this agent may reference
         view = {**view, "turns": {f"t{i}": t for i, t in enumerate(visible_turns)}}
     schema = schema or spec.schema

@@ -267,4 +267,7 @@ def create_app(settings: Settings | None = None, runtime: Runtime | None = None)
         recs = await asyncio.to_thread(rt.approvals.records, kind)
         return jsonable_encoder({"count": len(recs), "records": recs[-500:]})
 
+    from doi.app.ai_routes import router as ai_router
+
+    app.include_router(ai_router)
     return app

@@ -160,8 +160,10 @@ class PaperExecution:
                 total += min((o.limit_price - p.stop_loss) * gap, o.limit_price) * o.remaining
         return money(total)
 
-    def account_state(self, now: datetime) -> AccountRiskState:
-        self._roll_day(now)
+    def account_state(self, now: datetime, *, roll: bool = True) -> AccountRiskState:
+        """roll=False gives a side-effect-free preview (used by AI risk dry runs)."""
+        if roll:
+            self._roll_day(now)
         exposures = [OpenExposure(p.underlying_key, p.contract.security_id) for p in self._live()]
         exposures += [OpenExposure(p.underlying_key, p.contract.security_id) for p in self._planned.values()]
         return AccountRiskState(
