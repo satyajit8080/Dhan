@@ -28,7 +28,7 @@ class AlwaysOpen(SessionCalendar):
 
 
 def master() -> InstrumentMaster:
-    rows = [HEADER]
+    rows = [HEADER, "NSE,I,13,NA,INDEX,13,NIFTY,NIFTY,Nifty 50,INDEX,NA,1,,,,0.05,"]
     for i, k in enumerate((23900, 23950, 24000, 24050, 24100)):
         for j, ot in enumerate(("CE", "PE")):
             rows.append(f'NSE,D,{70000 + i * 2 + j},NA,OPTIDX,13,NIFTY,x,"x",OP,NA,75,{EXP} 14:30:00,{k},{ot},0.05,W')

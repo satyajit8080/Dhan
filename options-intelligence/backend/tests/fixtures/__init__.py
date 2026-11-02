@@ -16,7 +16,16 @@ def _opt(exch, sid, und_id, sym, exp, strike, ot, lot):
 
 
 def master_csv(extra: list[str] | None = None) -> str:
-    rows = [HEADER, "NSE,I,9013,NA,INDEX,,NIFTY,NIFTY,Nifty 50,INDEX,NA,1,,,,0.05,"]
+    rows = [HEADER] + [
+        f"{ex},I,{sid},NA,INDEX,{sid},{sym},{sym},{sym},INDEX,NA,1,,,,0.05,"
+        for ex, sid, sym in (
+            ("NSE", "9013", "NIFTY"),
+            ("NSE", "9025", "BANKNIFTY"),
+            ("NSE", "9027", "FINNIFTY"),
+            ("BSE", "9051", "SENSEX"),
+            ("BSE", "9069", "BANKEX"),
+        )
+    ]
     sid = 100000
     for sym, exch, uid, lot, step, mid in (
         ("NIFTY", "NSE", "9013", 75, 50, 24000),

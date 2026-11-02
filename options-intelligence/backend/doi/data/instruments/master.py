@@ -77,9 +77,12 @@ class InstrumentMaster:
     def __init__(self, instruments: list[Instrument], version: MasterVersion) -> None:
         self.version = version
         self._options: dict[tuple[str, str], list[Instrument]] = defaultdict(list)
+        self._indices: dict[tuple[str, str], list[Instrument]] = defaultdict(list)
         for ins in instruments:
             if ins.instrument == "OPTIDX" and ins.underlying_symbol:
                 self._options[(ins.exchange, ins.underlying_symbol.upper())].append(ins)
+            elif ins.instrument == "INDEX" and ins.exchange_segment == "IDX_I" and ins.underlying_symbol:
+                self._indices[(ins.exchange, ins.underlying_symbol.upper())].append(ins)
 
     @classmethod
     def parse(cls, raw: bytes | str, retrieved_at: datetime | None = None) -> InstrumentMaster:
@@ -138,6 +141,15 @@ class InstrumentMaster:
         opts = [o for o in self.options(exchange_family, master_symbol) if o.expiry and (today is None or o.expiry >= today)]
         if not opts:
             raise InstrumentError(f"{key}: no active OPTIDX contracts for {exchange_family}:{master_symbol}")
+        # The option-chain/quote APIs take the INDEX row's security id (IDX_I), e.g. NIFTY 13.
+        # The options' UNDERLYING_SECURITY_ID is a different code (NIFTY 26000 in the live master,
+        # verified 2 Nov 2026), so it is used only for the consistency check below.
+        idx = self._indices.get((exchange_family.upper(), master_symbol.upper()), [])
+        if len(idx) != 1:
+            raise InstrumentError(
+                f"{key}: {'no' if not idx else 'ambiguous'} IDX_I INDEX row for {exchange_family}:{master_symbol}"
+            )
+        index_id = idx[0].security_id
         uids = {o.underlying_security_id for o in opts if o.underlying_security_id}
         if len(uids) != 1:
             raise InstrumentError(
@@ -165,7 +177,7 @@ class InstrumentMaster:
         return UnderlyingRef(
             key=key,
             exchange_family=exchange_family.upper(),  # type: ignore[arg-type]
-            security_id=uids.pop(),  # type: ignore[arg-type]
+            security_id=index_id,
             segment="IDX_I",
             derivative_segment=segs.pop(),
             master_version=self.version.version,

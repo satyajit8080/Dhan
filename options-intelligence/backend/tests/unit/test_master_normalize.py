@@ -56,9 +56,12 @@ def test_legacy_column_names_supported():
     legacy = (
         "SEM_EXM_EXCH_ID,SEM_SEGMENT,SEM_SMST_SECURITY_ID,SEM_INSTRUMENT_NAME,UNDERLYING_SECURITY_ID,SM_SYMBOL_NAME,"
         "SEM_TRADING_SYMBOL,SEM_EXPIRY_DATE,SEM_STRIKE_PRICE,SEM_OPTION_TYPE,SEM_LOT_UNITS,SEM_TICK_SIZE\n"
-        "NSE,D,1,OPTIDX,13,NIFTY,a,2026-11-10,24000,CE,75,0.05\nNSE,D,2,OPTIDX,13,NIFTY,b,2026-11-10,24050,CE,75,0.05\n"
+        "NSE,I,13,INDEX,13,NIFTY,Nifty 50,,,,1,0.05\n"
+        "NSE,D,1,OPTIDX,26000,NIFTY,a,2026-11-10,24000,CE,75,0.05\nNSE,D,2,OPTIDX,26000,NIFTY,b,2026-11-10,24050,CE,75,0.05\n"
     )
-    assert InstrumentMaster.parse(legacy).resolve_underlying("NIFTY", "NSE", "NIFTY").expiries[0].strike_step == 50
+    ref = InstrumentMaster.parse(legacy).resolve_underlying("NIFTY", "NSE", "NIFTY")
+    assert ref.expiries[0].strike_step == 50
+    assert ref.security_id == "13"  # the IDX_I index id, not the options' underlying code 26000 (live master layout)
 
 
 def test_missing_columns_fail_loudly():
@@ -121,3 +124,9 @@ def test_rolling_option_and_candles():
         {"timestamp": ts, "open": [1, 2], "high": [2, 3], "low": [1, 1], "close": [2, 2], "volume": [5, 5]}
     )
     assert candles[1].close == 2 and candles[0].oi is None
+
+
+def test_missing_index_row_fails_loudly():
+    no_index = "\n".join(line for line in master_csv().splitlines() if ",I," not in line) + "\n"
+    with pytest.raises(InstrumentError, match="IDX_I INDEX row"):
+        InstrumentMaster.parse(no_index).resolve_underlying("NIFTY", "NSE", "NIFTY")
