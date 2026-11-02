@@ -187,7 +187,10 @@ def test_db_backed_runtime_restart_with_polling_and_feed(pg_dsn):
     rt.paper.gate.config = RiskConfig(last_entry_time=time(23, 59, 59))
     rt.paper.policy = ExecutionPolicy(square_off=None)
     c = TestClient(create_app(runtime=rt))
-    assert c.post("/api/v1/paper/orders", json=ORDER).status_code == 201
+    assert c.post("/api/v1/paper/orders", json=ORDER).status_code == 401  # DB deployments always enforce auth
+    _, token = rt.auth.create_key(rt.auth.create_user("approver@test"), "approver")
+    assert c.post("/api/v1/paper/orders", json=ORDER, headers={"Authorization": f"Bearer {token}"}).status_code == 201
+    assert [r.action for r in rt.approvals.records()] == ["PAPER_ORDER"]
 
     ce = rt.provider.ce
     ws = FakeWS([full_packet(sid=int(ce.security_id), bid=99.5, ask=100.0, bq=75, aq=75)])

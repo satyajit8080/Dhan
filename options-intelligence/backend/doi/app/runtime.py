@@ -11,6 +11,7 @@ from pathlib import Path
 
 import httpx
 
+from doi.core.auth import ApprovalLog, AuthStore, ControlStore, MemoryApprovalLog, Principal
 from doi.core.config import Settings
 from doi.core.errors import ConfigError, DoiError
 from doi.core.market import SessionCalendar, load_holidays
@@ -49,6 +50,9 @@ class Runtime:
     paper_store: PaperStore | None = None
     collector: MarketFeedCollector | None = None
     recorder: SafeRecorder = field(default_factory=lambda: SafeRecorder(None))
+    auth: AuthStore | None = None  # None = in-memory development mode (no database)
+    approvals: ApprovalLog | MemoryApprovalLog = field(default_factory=MemoryApprovalLog)
+    controls: ControlStore | None = None
     _paper_service: PaperService | None = field(default=None, repr=False)
 
     @property
@@ -101,6 +105,10 @@ async def init_paper(rt: Runtime, settings: Settings, now: datetime) -> None:
         log.info("applied migrations: %s", ", ".join(applied))
     rt.paper_store = PaperStore(dsn)
     rt.recorder = SafeRecorder(MarketRecorder(dsn))
+    rt.auth = AuthStore(dsn)
+    rt.approvals = ApprovalLog(dsn)
+    rt.controls = ControlStore(dsn, rt.approvals)
+    rt.kill_switch = await asyncio.to_thread(rt.controls.kill_switch)
     gate = build_gate(rt.configs, calendar=calendar)
     loaded = await asyncio.to_thread(rt.paper_store.load, PAPER_ACCOUNT, gate)
     if loaded is None:
@@ -111,6 +119,8 @@ async def init_paper(rt: Runtime, settings: Settings, now: datetime) -> None:
     else:
         rt.paper = loaded
         actions = await rt.paper_service.recover(now)
+    if rt.kill_switch:
+        await rt.paper_service.call(lambda e: e.set_kill_switch(True, now))
         log.info("paper state restored (%d events); recovery: %s", len(loaded.ledger.events), actions or "none")
 
 
@@ -177,3 +187,17 @@ async def build_runtime(settings: Settings) -> Runtime:
 
         rt.collector = MarketFeedCollector(settings.dhan_client_id, rt.token.get, on_quote)
     return rt
+
+
+async def set_kill_switch(rt: Runtime, on: bool, who: Principal, note: str | None = None, *, flatten: bool = False) -> None:
+    """Persist first (with an approval record), then apply to this process."""
+    if rt.controls is not None:
+        await asyncio.to_thread(rt.controls.set_kill_switch, on, who, note)
+    else:
+        await asyncio.to_thread(
+            rt.approvals.append, who, "KILL_SWITCH_ON" if on else "KILL_SWITCH_OFF", "system", "kill_switch", note, {"on": on}
+        )
+    rt.kill_switch = on
+    if rt.paper is not None:
+        now = datetime.now(UTC)
+        await rt.paper_service.call(lambda e: e.set_kill_switch(on, now, flatten=flatten))

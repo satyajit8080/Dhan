@@ -202,7 +202,10 @@ def test_cash_mismatch_aborts_transaction(pg_dsn):
 def test_tampered_ledger_or_cash_refused_on_load(pg_dsn):
     svc = make(pg_dsn)
     asyncio.run(scenario(svc))
-    with psycopg.connect(pg_dsn) as c:
+    with psycopg.connect(pg_dsn) as c, pytest.raises(psycopg.errors.InsufficientPrivilege):
+        c.execute("UPDATE paper_ledger_events SET kind = kind")  # append-only trigger (migration 004)
+    with psycopg.connect(pg_dsn) as c:  # a superuser can bypass triggers; the hash chain still catches it
+        c.execute("SET session_replication_role = replica")
         c.execute("UPDATE paper_ledger_events SET payload_json = replace(payload_json, '100.05', '90.05') WHERE kind = 'FILL'")
     with pytest.raises(LedgerCorrupt):
         load(pg_dsn, svc.engine)

@@ -7,6 +7,8 @@ import logging
 import re
 
 _JWT = re.compile(r"eyJ[\w-]{5,}\.[\w-]{5,}\.[\w-]{5,}")
+# platform API keys (doi_…), xAI keys (xai-…) and any bearer credential
+_TOKENS = re.compile(r"(doi_[\w-]{16,}|xai-[\w-]{16,}|(?i:bearer)\s+[\w.~+/=-]{8,})")
 _HEADER = re.compile(r"(?i)(access-token|authorization|client-secret|pin|totp)(['\"]?\s*[:=]\s*['\"]?)([^\s,'\"}]+)")
 
 
@@ -23,6 +25,7 @@ class RedactingFilter(logging.Filter):
         for s in self._secrets:
             text = text.replace(s, "***")
         text = _JWT.sub("***", text)
+        text = _TOKENS.sub("***", text)
         return _HEADER.sub(lambda m: f"{m.group(1)}{m.group(2)}***", text)
 
     def filter(self, record: logging.LogRecord) -> bool:
