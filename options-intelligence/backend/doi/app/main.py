@@ -270,4 +270,7 @@ def create_app(settings: Settings | None = None, runtime: Runtime | None = None)
     from doi.app.ai_routes import router as ai_router
 
     app.include_router(ai_router)
+    from doi.app.research_routes import router as research_router
+
+    app.include_router(research_router)
     return app

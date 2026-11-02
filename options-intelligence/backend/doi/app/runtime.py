@@ -55,6 +55,7 @@ class Runtime:
     approvals: ApprovalLog | MemoryApprovalLog = field(default_factory=MemoryApprovalLog)
     controls: ControlStore | None = None
     ai: Any = None  # doi.ai.service.AIComponents
+    lab: Any = None  # doi.research.lab.Lab (created on first use)
     _paper_service: PaperService | None = field(default=None, repr=False)
 
     @property
