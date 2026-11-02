@@ -260,6 +260,9 @@ class MeetingEngine:
     gateway: LLMGateway
     store: Any = field(default_factory=MemoryMeetingStore)
     disagreement_min_confidence: int = 3
+    specialists: tuple[str, ...] = SPECIALISTS  # team composition (Phase 8 team-size studies)
+    quorum: frozenset[str] = QUORUM
+    use_contrarian: bool = True
 
     async def _turn(self, mid, rnd, aid, pack, done, now, *, task, turns=None, schema=None, turns_visible=None) -> AgentTurn:
         # resume: a recorded successful turn is never re-run or re-billed; failed ones are retried
@@ -302,26 +305,30 @@ class MeetingEngine:
 
         # 2. Round 1: independent specialists (separate evidence views, no access to each other)
         task = f"Event {ctx.event.get('kind')} on {ctx.underlying_key}. Give your independent assessment."
-        r1 = await asyncio.gather(*(self._turn(mid, "R1", a, pack, done, now, task=task) for a in SPECIALISTS))
+        r1 = await asyncio.gather(*(self._turn(mid, "R1", a, pack, done, now, task=task) for a in self.specialists))
         turns += r1
         ok = {t.agent_id for t in r1 if t.status == "OK" and t.stance() != "ABSTAIN"}
-        if not QUORUM <= ok:
+        if not self.quorum <= ok:
             unavailable = any(t.status == "UNAVAILABLE" for t in r1)
             return await self._abort(mid, "AI_UNAVAILABLE" if unavailable else "QUORUM", turns, overrides, now, pack)
         summaries = [turn_summary(t, "R1") for t in r1]
 
         # 3. contrarian: independent challenge (sees the evidence and Round 1, never the CIO)
-        con = await self._turn(
-            mid,
-            "CONTRARIAN",
-            "contrarian",
-            pack,
-            done,
-            now,
-            task="Challenge the proposal and the specialists' consensus.",
-            turns=summaries,
-        )
-        turns.append(con)
+        if self.use_contrarian:
+            con = await self._turn(
+                mid,
+                "CONTRARIAN",
+                "contrarian",
+                pack,
+                done,
+                now,
+                task="Challenge the proposal and the specialists' consensus.",
+                turns=summaries,
+            )
+            turns.append(con)
+        else:  # study configuration without a contrarian: recorded as such, never silently
+            con = AgentTurn("contrarian", "disabled", "ABSTAIN", None, ("contrarian disabled for this team configuration",))
+        con_s = [turn_summary(con, "CONTRARIAN")] if self.use_contrarian else []
 
         # 4. disagreements, then a rebuttal round only when there is real conflict
         disagreements = []
@@ -338,7 +345,7 @@ class MeetingEngine:
             )
         r2: list[AgentTurn] = []
         if any(d["topic"] == "direction" for d in disagreements):
-            opp = summaries + [turn_summary(con, "CONTRARIAN")]
+            opp = summaries + con_s
             involved = disagreements[0]["agents"]
             r2 = await asyncio.gather(*(
                 self._turn(mid, "R2", a, pack, done, now, task="Respond to the opposing views. Maintain or revise your stance.", turns=opp,
@@ -348,7 +355,7 @@ class MeetingEngine:
             turns += r2
 
         # 5. risk officer: independent of the CIO; its veto is applied by Python
-        risk_turns = summaries + [turn_summary(con, "CONTRARIAN")]
+        risk_turns = summaries + con_s
         risk = await self._turn(
             mid,
             "RISK",
@@ -363,9 +370,7 @@ class MeetingEngine:
         turns.append(risk)
 
         # 6. CIO synthesis
-        cio_view = (
-            summaries + [turn_summary(con, "CONTRARIAN")] + [turn_summary(t, "R2") for t in r2] + [turn_summary(risk, "RISK")]
-        )
+        cio_view = summaries + con_s + [turn_summary(t, "R2") for t in r2] + [turn_summary(risk, "RISK")]
         cio = await self._turn(
             mid, "CIO", "cio", pack, done, now, task="Decide: RECOMMEND_PAPER, WATCH, NO_ACTION or ESCALATE.", turns=cio_view
         )
@@ -408,7 +413,7 @@ class MeetingEngine:
             mid,
             {"cio_action": cio.output.action, "final_action": action, "overrides": overrides,
              "rationale": [c.model_dump(mode="json") for c in cio.output.rationale],
-             "dissent": [turn_summary(con, "CONTRARIAN")] + [d for d in disagreements],
+             "dissent": con_s + [d for d in disagreements],
              "risk_dry_run": dry, "compliance": comp.output.model_dump(mode="json") if comp.output else None},
         )  # fmt: skip
         rec_id = None
