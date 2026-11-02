@@ -3,75 +3,469 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
 <title>Bull50 Research Desk</title>
 <style>
-  :root { --bg:#f7f7f5; --fg:#1d232a; --muted:#5b6670; --card:#fff; --line:#e3e3df; --accent:#1f6f5c; --warn:#a1580b; --bad:#b3261e; }
-  @media (prefers-color-scheme: dark) { :root { --bg:#14181c; --fg:#e7eaed; --muted:#9aa5ae; --card:#1c2227; --line:#2c343b; --accent:#5cc2a6; --warn:#e3a35b; --bad:#ef7d74; } }
-  * { box-sizing:border-box } body { margin:0; font:14px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif; background:var(--bg); color:var(--fg) }
-  header { display:flex; flex-wrap:wrap; gap:12px; align-items:center; padding:12px 16px; border-bottom:1px solid var(--line); background:var(--card) }
-  header h1 { font-size:16px; margin:0 12px 0 0 } .badge { padding:2px 8px; border-radius:10px; font-size:12px; border:1px solid var(--line) }
-  .on { color:var(--bad); border-color:var(--bad) } nav button, .btn { background:none; border:1px solid var(--line); color:var(--fg); padding:6px 10px; border-radius:6px; cursor:pointer }
-  nav button.active { border-color:var(--accent); color:var(--accent) } main { padding:16px; max-width:1200px; margin:0 auto }
-  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:12px } .card { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:12px }
-  .card h3 { margin:0 0 8px; font-size:13px; color:var(--muted); font-weight:600 } .big { font-size:22px; font-weight:600 }
-  table { width:100%; border-collapse:collapse; font-size:13px } th, td { text-align:left; padding:6px; border-bottom:1px solid var(--line); vertical-align:top }
-  th { color:var(--muted); font-weight:600 } .bar { height:8px; background:var(--line); border-radius:4px; overflow:hidden } .bar > div { height:100%; background:var(--accent) }
-  .muted { color:var(--muted) } input { padding:6px; border:1px solid var(--line); border-radius:6px; background:var(--bg); color:var(--fg); min-width:220px }
-  pre { white-space:pre-wrap; word-break:break-word; background:var(--bg); padding:8px; border-radius:6px; max-height:420px; overflow:auto }
-  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center } .err { color:var(--bad) }
+:root{--bg:#06090F;--pn:#0E131C;--pn2:#0A0F17;--ln:#1A2332;--ln2:#243046;--tx:#E8EEF7;--t2:#8B9BB4;--t3:#5A6A84;--am:#FFB300;--amd:rgba(255,179,0,.12);--up:#1FC77E;--dn:#F0444F;--bar:#2B4A72;--bar2:#5B3B6E;
+--mono:"JetBrains Mono","IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;--sans:"Inter","IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif}
+*{box-sizing:border-box;border-radius:0!important}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--tx);font:12px/1.35 var(--sans);overflow:hidden}
+button,input,select,textarea{font:inherit;color:var(--tx);background:var(--pn2);border:1px solid var(--ln2);padding:3px 7px}
+button{cursor:pointer;text-transform:uppercase;letter-spacing:.06em;font-size:10.5px;font-weight:600}
+button:hover:not(:disabled){border-color:var(--t2)}button:disabled{opacity:.35;cursor:not-allowed}
+button.pri{border-color:var(--am);color:var(--am)}button.dng{border-color:var(--dn);color:var(--dn)}
+input:focus,select:focus,textarea:focus,button:focus-visible{outline:1px solid var(--am);outline-offset:-1px}
+.n,td,.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+#app{display:grid;grid-template-rows:40px auto 1fr 20px;grid-template-columns:auto 1fr;height:100vh}
+header{grid-column:1/3;display:flex;align-items:stretch;border-bottom:1px solid var(--ln);background:var(--pn2);white-space:nowrap;overflow:hidden}
+header>*{display:flex;align-items:center;padding:0 9px;border-right:1px solid var(--ln);gap:6px;flex-shrink:0}
+.logo{font:700 14px var(--mono);letter-spacing:.08em}.logo b{color:var(--am)}
+.lbl{color:var(--t3);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase}
+.tk .n{font-size:12.5px;font-weight:600}
+.dot{width:7px;height:7px;display:inline-block;background:var(--t3)}.dot.ok{background:var(--up)}.dot.bad{background:var(--dn)}.dot.ai{background:var(--am)}
+.tag{font:600 9.5px var(--mono);letter-spacing:.08em;padding:1px 5px;border:1px solid var(--ln2);color:var(--t2);text-transform:uppercase}
+.tag.am{border-color:var(--am);color:var(--am)}.tag.up{border-color:var(--up);color:var(--up)}.tag.dn{border-color:var(--dn);color:var(--dn)}.tag.fill{background:var(--am);color:#000;border-color:var(--am)}
+.paper{color:#000;background:var(--t2);font:700 10px var(--mono);letter-spacing:.12em;padding:2px 6px}
+.meter{width:80px;height:5px;background:var(--ln);position:relative}.meter>i{position:absolute;left:0;top:0;bottom:0;background:var(--am)}.meter.stop>i{background:var(--dn)}
+.sp{flex:1 1 0;min-width:0;border-right:0;padding:0}
+header>div:last-of-type{border-right:0}
+#h-user{max-width:150px;overflow:hidden;text-overflow:ellipsis}
+@media(max-width:1750px){.hx{display:none}}
+#ks{flex-shrink:0;font:700 10.5px var(--mono);padding:0 14px;border:0;border-left:1px solid var(--ln);background:transparent;letter-spacing:.1em}
+#ks.on{background:var(--dn);color:#fff}#ks.off{color:var(--dn)}
+#bnr{grid-column:1/3}
+.bn{padding:4px 12px;font:600 11px var(--mono);letter-spacing:.04em;border-bottom:1px solid var(--ln)}.bn.dn{background:rgba(240,68,79,.14);color:var(--dn)}.bn.am{background:var(--amd);color:var(--am)}
+nav{border-right:1px solid var(--ln);background:var(--pn2);width:208px;overflow-y:auto;display:flex;flex-direction:column}
+nav.c{width:44px}nav.c .nl{display:none}
+nav a{display:flex;gap:9px;padding:6px 12px;color:var(--t2);text-decoration:none;border-left:2px solid transparent;font-size:11.5px}
+nav a .nn{font:600 10.5px var(--mono);color:var(--t3);min-width:18px}
+nav a:hover{color:var(--tx);background:var(--pn)}nav a.act{color:var(--tx);background:var(--pn);border-left-color:var(--am)}nav a.act .nn{color:var(--am)}
+#rail{border:0;border-bottom:1px solid var(--ln);text-align:left;padding:7px 14px;color:var(--t3);background:transparent}
+main{overflow:auto;position:relative}
+.sh{display:flex;align-items:center;gap:10px;padding:7px 10px;border-bottom:1px solid var(--ln);background:var(--pn2);position:sticky;top:0;z-index:3}
+.sh h1{margin:0;font:700 12px var(--mono);letter-spacing:.12em;text-transform:uppercase}.sh h1 span{color:var(--am);margin-right:8px}
+.sh .ctl{margin-left:auto;display:flex;gap:6px;align-items:center}
+.g{display:grid;gap:1px;background:var(--ln);border-bottom:1px solid var(--ln)}
+.c2{grid-template-columns:repeat(2,minmax(0,1fr))}.c3{grid-template-columns:repeat(3,minmax(0,1fr))}.c4{grid-template-columns:repeat(4,minmax(0,1fr))}.c6{grid-template-columns:repeat(6,minmax(0,1fr))}
+.s2{grid-column:span 2}.s3{grid-column:span 3}.sall{grid-column:1/-1}
+@media(max-width:1100px){.c3,.c4,.c6{grid-template-columns:repeat(2,minmax(0,1fr))}.s3{grid-column:1/-1}}
+@media(max-width:700px){.c2,.c3,.c4,.c6{grid-template-columns:minmax(0,1fr)}.s2,.s3{grid-column:auto}nav{width:44px}nav .nl{display:none}header .hm{display:none}}
+.pn{background:var(--pn);min-width:0;display:flex;flex-direction:column}
+.ph{display:flex;align-items:center;gap:8px;padding:5px 9px;border-bottom:1px solid var(--ln);min-height:26px}
+.pt{font:700 10.5px var(--mono);letter-spacing:.1em;text-transform:uppercase}.ps{color:var(--t3);font:10px var(--mono);margin-left:auto;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pb{padding:6px 9px;overflow:auto;flex:1}.pb.tight{padding:0}.pb.tight>.st{padding:10px 9px}
+.st{font:600 10.5px var(--mono);letter-spacing:.08em;padding:10px 2px;color:var(--t3)}.st.err{color:var(--dn)}.st.dis{color:var(--t2)}.st.ld::after{content:"";display:inline-block;width:24px;height:2px;margin-left:8px;vertical-align:middle;background:linear-gradient(90deg,var(--am) 30%,transparent 30%);background-size:12px 2px;animation:ld .8s linear infinite}
+@keyframes ld{to{background-position:12px 0}}
+.kv{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));border-top:1px solid var(--ln);border-left:1px solid var(--ln)}
+.kv>div{padding:5px 7px;border-right:1px solid var(--ln);border-bottom:1px solid var(--ln)}.kv .v{font:600 15px var(--mono);font-variant-numeric:tabular-nums;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.kv .v.sm{font-size:12px}
+table{width:100%;border-collapse:collapse}th{font:600 9.5px var(--mono);color:var(--t3);letter-spacing:.06em;text-transform:uppercase;text-align:right;padding:4px 6px;border-bottom:1px solid var(--ln2);position:sticky;top:0;background:var(--pn);z-index:1;white-space:nowrap}
+td{padding:2px 6px;border-bottom:1px solid var(--ln);text-align:right;white-space:nowrap;font-size:11.5px}th.l,td.l{text-align:left}td.w{white-space:normal;font-family:var(--sans);min-width:220px}
+tr:hover td{background:rgba(255,255,255,.025)}
+.up{color:var(--up)}.dn{color:var(--dn)}.am{color:var(--am)}.mu{color:var(--t2)}.mu3{color:var(--t3)}
+.oc td{padding:1px 5px;font-size:11px}.oc td.k{background:var(--pn2);color:var(--tx);font-weight:700;text-align:center;border-left:1px solid var(--ln2);border-right:1px solid var(--ln2)}
+.oc tr.atm td{background:var(--amd)}.oc tr.atm td.k{color:var(--am);background:rgba(255,179,0,.2)}
+.oc td.wall{box-shadow:inset 0 -2px 0 var(--am)}
+.oc .ob{position:relative}.oc .ob>i{position:absolute;top:2px;bottom:2px;background:var(--bar);opacity:.45}.oc .ce>i{right:0}.oc .pe>i{left:0;background:var(--bar2)}.oc .ob>span{position:relative}
+.oc th.ceh{color:#7FA6D6}.oc th.peh{color:#B58BCB}
+.ag{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:1px;background:var(--ln);border:1px solid var(--ln)}
+@media(max-width:900px){.ag{grid-template-columns:repeat(3,minmax(0,1fr))}}
+.ag>div{background:var(--pn);padding:5px 7px;min-height:52px;border-top:2px solid transparent}.ag .nm{font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.ag .x{display:flex;gap:4px;margin-top:4px;flex-wrap:wrap}
+.ag>div.hl{border-top-color:var(--am)}.ag>div.dis{background:#141218}
+.dec{display:grid;grid-template-columns:200px 1fr;gap:1px;background:var(--ln)}.dec>div{background:var(--pn);padding:8px 10px}
+.dl{font:700 20px var(--mono);color:var(--am);letter-spacing:.04em}
+.tr{border-bottom:1px solid var(--ln);padding:5px 0;display:grid;grid-template-columns:30px 80px 230px 1fr;gap:8px}.tr .m{font:10.5px var(--mono);color:var(--t3)}
+.cl{margin:1px 0}.cl .ev{font:10px var(--mono);color:var(--am);margin-left:6px}
+pre{margin:0;white-space:pre-wrap;word-break:break-word;font:11px/1.45 var(--mono);color:var(--t2)}
+.frm{display:flex;flex-wrap:wrap;gap:6px;align-items:center}.frm label{display:flex;gap:5px;align-items:center;color:var(--t2);font-size:11px}
+textarea{width:100%;min-height:120px;font:11px var(--mono)}
+#wm{position:fixed;inset:0;pointer-events:none;display:none;align-items:center;justify-content:center;z-index:2}
+#wm span{transform:rotate(-24deg);font:800 56px var(--mono);letter-spacing:.08em;color:rgba(139,155,180,.07);white-space:nowrap}
+footer{grid-column:1/3;border-top:1px solid var(--ln);background:var(--pn2);display:flex;gap:14px;align-items:center;padding:0 10px;font:10px var(--mono);color:var(--t3);white-space:nowrap;overflow:hidden}
+#dlg{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:50}
+#dlg .box{background:var(--pn);border:1px solid var(--ln2);width:min(460px,92vw);padding:0}
+#dlg .bb{padding:10px;display:flex;flex-direction:column;gap:8px}#dlg .bf{display:flex;gap:6px;justify-content:flex-end;padding:8px 10px;border-top:1px solid var(--ln)}
+#ntf{position:fixed;top:40px;right:120px;width:340px;max-height:60vh;overflow:auto;background:var(--pn);border:1px solid var(--ln2);display:none;z-index:40}
+#ntf div{padding:6px 9px;border-bottom:1px solid var(--ln);font-size:11px}
+#toast{position:fixed;bottom:28px;right:12px;z-index:60;display:flex;flex-direction:column;gap:4px}
+#toast div{background:var(--pn);border:1px solid var(--ln2);border-left:2px solid var(--am);padding:6px 10px;font:11px var(--mono);max-width:420px}
+#toast div.e{border-left-color:var(--dn)}
+.spark{width:100%;height:150px;display:block}
+.hbar{height:4px;background:var(--ln);margin-top:3px}.hbar>i{display:block;height:100%;background:var(--am)}
 </style>
 </head>
 <body>
+<div id="app">
 <header>
-  <h1>Bull50 Research Desk</h1>
-  <span class="badge">research &amp; paper only</span>
-  <span id="ks" class="badge">kill switch: ?</span>
-  <span class="row"><input id="tok" type="password" placeholder="API key (kept in this tab only)" autocomplete="off"><button class="btn" id="save">Use key</button></span>
-  <nav class="row" id="tabs"></nav>
+  <div class="logo">BULL<b>50</b><span class="lbl hx" style="margin-left:6px">Research Desk</span></div>
+  <div><span class="lbl">Session</span><span id="h-ses" class="tag">—</span><span id="h-ist" class="n mu hx"></span></div>
+  <div class="tk" id="h-NIFTY"><span class="lbl">NIFTY</span><span class="n">—</span><span class="n mu3" title="previous close is not exposed by the API">CHG —</span></div>
+  <div class="tk" id="h-BANKNIFTY"><span class="lbl">BANKNIFTY</span><span class="n">—</span><span class="n mu3" title="previous close is not exposed by the API">CHG —</span></div>
+  <div class="hm"><span class="lbl">Dhan</span><span id="h-dhan" class="dot"></span><span id="h-dhant" class="n mu">—</span></div>
+  <div class="hm"><span class="lbl">Grok</span><span id="h-grok" class="dot"></span><span id="h-grokt" class="n mu">—</span></div>
+  <div><span class="paper">PAPER MODE</span></div>
+  <div title="Grok spend this month vs hard cap (enforced server-side)"><span class="lbl">AI Budget</span><span id="h-bud" class="n">—</span><span id="h-meter" class="meter"><i style="width:0"></i></span></div>
+  <div class="sp"></div>
+  <div><button id="h-ntf" title="Notifications">ALERTS <span id="h-ntfn" class="n">0</span></button></div>
+  <div><button id="h-user" title="API key and identity">KEY</button></div>
+  <button id="ks" class="off" title="Kill switch (admin)">KILL SWITCH —</button>
 </header>
-<main><div id="msg" class="err"></div><div id="view"></div></main>
+<div id="bnr"></div>
+<nav id="nav"><button id="rail" title="Collapse navigation">◂ <span class="nl">Collapse</span></button></nav>
+<main id="main"></main>
+<footer><span>RESEARCH &amp; PAPER ONLY · NO LIVE BROKER EXECUTION · AI CANNOT PLACE ORDERS · HUMAN APPROVAL + RISK GATE REQUIRED</span><span class="sp"></span><span id="f-upd">—</span></footer>
+</div>
+<div id="wm"><span>PAPER MODE — NO LIVE EXECUTION</span></div>
+<div id="ntf"></div>
+<div id="dlg"><div class="box"><div class="ph"><span class="pt" id="dlg-t"></span></div><div class="bb" id="dlg-b"></div><div class="bf" id="dlg-f"></div></div></div>
+<div id="toast"></div>
 <script>
 "use strict";
-// Every value from the API, including agent text, is untrusted. This page builds DOM nodes with textContent and never uses innerHTML.
-const tabs = ["Status","Budget","Recommendations","Meetings","Leaderboard","Paper","Report"];
-let key = sessionStorage.getItem("doi_key") || "";
+// Security: every API value (including agent text) is untrusted. DOM is built with createElement/textContent only;
+// this page never uses innerHTML. The API key lives in sessionStorage for this tab only. No secrets are embedded here.
+// All analytics (Greeks, PCR, Max Pain, P&L, risk, committee labels) are computed by the backend; this page only displays.
 const $ = (id) => document.getElementById(id);
-function el(tag, props = {}, ...kids) { const n = document.createElement(tag); for (const [k,v] of Object.entries(props)) { if (k === "class") n.className = v; else if (k.startsWith("on")) n.addEventListener(k.slice(2), v); else n.setAttribute(k, v); } for (const c of kids) n.append(c instanceof Node ? c : document.createTextNode(c === null || c === undefined ? "-" : String(c))); return n; }
+const SECTIONS = [["01","Command Center"],["02","Market Intelligence"],["03","Options Intelligence"],["04","AI Investment Committee"],["05","AI Agent Control Room"],["06","Strategy Research Lab"],["07","Backtesting"],["08","AI Predictions"],["09","Paper Trading"],["10","Portfolio Analytics"],["11","Agent Leaderboard"],["12","Historical Data & Replay"],["13","Reports & Analytics"],["14","System Monitoring"],["15","Administration"]];
+const HARD_CAP = 3000;
+let key = sessionStorage.getItem("doi_key") || "";
+const S = { status:null, budget:null, budgetErr:null, who:null, recs:[], tick:{}, und:null };
+
+function el(tag, props, ...kids) {
+  const n = document.createElement(tag);
+  for (const [k, v] of Object.entries(props || {})) {
+    if (v === undefined || v === null || v === false) continue;
+    if (k === "class") n.className = v; else if (k.startsWith("on")) n.addEventListener(k.slice(2), v);
+    else if (k === "text") n.textContent = v; else n.setAttribute(k, v === true ? "" : v);
+  }
+  for (const c of kids.flat()) if (c !== undefined && c !== null && c !== false) n.append(c instanceof Node ? c : document.createTextNode(String(c)));
+  return n;
+}
+const svg = (tag, attrs) => { const n = document.createElementNS("http://www.w3.org/2000/svg", tag); for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v); return n; };
+class ApiError extends Error { constructor(status, msg) { super(msg); this.status = status; } }
 async function api(path, opts = {}) {
-  const r = await fetch(path, { ...opts, headers: { "Content-Type":"application/json", ...(key ? { Authorization: "Bearer " + key } : {}) } });
+  const r = await fetch(path, { ...opts, cache: "no-store", headers: { "Content-Type": "application/json", ...(key ? { Authorization: "Bearer " + key } : {}) } });
   const t = await r.text(); let b; try { b = JSON.parse(t); } catch { b = t; }
-  if (!r.ok) throw new Error((b && b.detail ? JSON.stringify(b.detail) : t).slice(0, 400));
+  if (!r.ok) throw new ApiError(r.status, (b && b.detail ? (typeof b.detail === "string" ? b.detail : JSON.stringify(b.detail)) : String(t)).slice(0, 300));
   return b;
 }
-function table(rows, cols) { const t = el("table"); t.append(el("tr", {}, ...cols.map(c => el("th", {}, c[0])))); for (const r of rows) t.append(el("tr", {}, ...cols.map(c => el("td", {}, typeof c[1] === "function" ? c[1](r) : r[c[1]])))); return t; }
-function card(title, ...body) { return el("div", {class:"card"}, el("h3", {}, title), ...body); }
-const views = {
-  async Status() { const s = await api("/api/v1/system/status"); $("ks").textContent = "kill switch: " + (s.kill_switch ? "ON" : "off"); $("ks").className = "badge" + (s.kill_switch ? " on" : "");
-    const p = s.paper || {}; const ai = s.ai || {}; const b = ai.budget || {};
-    return el("div", {}, el("div", {class:"grid"},
-      card("Mode", el("div", {class:"big"}, s.mode), el("div", {class:"muted"}, "Live broker execution: " + s.live_broker_execution)),
-      card("Paper equity", el("div", {class:"big"}, "₹" + (p.equity ?? "-")), el("div", {class:"muted"}, `${p.open_positions ?? 0} open · risk ₹${p.open_risk ?? 0}`)),
-      card("Grok budget", el("div", {class:"big"}, `₹${Number(b.spent_inr||0).toFixed(2)} / ₹${b.usable_inr ?? "-"}`), el("div", {class:"bar"}, el("div", {style:`width:${Math.min(100,(b.utilisation||0)*100)}%`})), el("div", {class:"muted"}, "provider live: " + ai.provider_live)),
-      card("Data", el("div", {}, "recorded snapshots: " + ((s.database||{}).recorded_snapshots ?? "-")), el("div", {class:"muted"}, "recorder failures: " + s.market_data.recorder.failures))),
-      card("Unverified integrations", el("ul", {}, ...s.unverified_integrations.map(u => el("li", {}, u))))); },
-  async Budget() { const b = await api("/api/v1/ai/budget"); return el("div", {class:"grid"}, ...Object.entries(b).map(([k,v]) => card(k, el("pre", {}, typeof v === "object" ? JSON.stringify(v, null, 1) : String(v))))); },
-  async Recommendations() { const rs = await api("/api/v1/ai/recommendations");
-    const act = (r, verb) => el("button", {class:"btn", onclick: async () => { try { const note = prompt(verb + " note (optional)") || null; await api(`/api/v1/ai/recommendations/${encodeURIComponent(r.id)}/${verb}`, {method:"POST", body: JSON.stringify({note})}); show("Recommendations"); } catch (e) { $("msg").textContent = e.message; } }}, verb);
-    return card("Recommendations (human approval required; the RiskGate re-checks on approval)", table(rs, [["id","id"],["underlying","underlying_key"],["contract", r => `${r.expiry} ${r.strike} ${r.option_type}`],["stop","stop_loss"],["status","status"],["valid until","valid_until"],["", r => r.status === "PENDING_HUMAN" ? el("span", {class:"row"}, act(r,"approve"), act(r,"reject")) : ""]])); },
-  async Meetings() { const ms = await api("/api/v1/ai/meetings?limit=50"); const detail = el("div");
-    const open = async (id) => { const d = await api("/api/v1/ai/meetings/" + encodeURIComponent(id)); detail.replaceChildren(card("Meeting " + id,
-      table(d.turns, [["#", "seq"],["round","round"],["agent","agent_id"],["status","status"],["stance","stance"],["conf","confidence"],["output", t => el("pre", {}, JSON.stringify(t.output, null, 1))]]),
-      el("h3", {}, "Disagreements"), el("pre", {}, JSON.stringify(d.disagreements, null, 1)), el("h3", {}, "Decision"), el("pre", {}, JSON.stringify(d.decision, null, 1)))); };
-    return el("div", {}, card("Meetings", table(ms, [["id", m => el("button", {class:"btn", onclick: () => open(m.id)}, m.id)],["kind","kind"],["status","status"],["final","final_action"],["abort","abort_reason"],["cost ₹","cost_inr"],["started","started_at"]])), detail); },
-  async Leaderboard() { const lb = await api("/api/v1/ai/leaderboard"); return card(`Leaderboard (${lb.mode}; ranked only with n ≥ ${lb.min_n_for_rank})`, table(lb.agents, [["rank","rank"],["agent","name"],["n","n"],["hit","hit_rate"],["Wilson LB","hit_rate_wilson_lb"],["Brier","brier"],["IC","ic_spearman"],["follow ratio","follow_ratio"],["provisional","provisional"]]), el("div", {class:"muted"}, "Unscored: " + lb.unscored_agents.join(", "))); },
-  async Paper() { const p = await api("/api/v1/paper/portfolio"); return el("div", {}, card("Positions", table(p.positions, [["id","id"],["contract","symbol"],["state","state"],["qty","qty_open"],["avg","avg_entry"],["mark","mark"],["stop","stop_loss"]])), card("Working orders", table(p.working_orders, [["id","id"],["side","side"],["qty","quantity"],["filled","filled_qty"],["status","status"],["reason","reason"]]))); },
-  async Report() { return card("Daily report", el("pre", {}, await api("/api/v1/reports/daily"))); },
+const post = (path, body) => api(path, { method: "POST", body: JSON.stringify(body ?? {}) });
+
+// ---------- formatting (display only)
+const nil = (v) => v === null || v === undefined || v === "" || (typeof v === "number" && !isFinite(v));
+const num = (v) => nil(v) ? null : Number(v);
+function f(v, d = 2) { const x = num(v); return x === null || isNaN(x) ? "—" : x.toLocaleString("en-IN", { minimumFractionDigits: d, maximumFractionDigits: d }); }
+const inr = (v, d = 2) => nil(v) ? "—" : "₹" + f(v, d);
+const pct = (v, d = 2) => nil(v) ? "—" : f(Number(v) * 100, d) + "%";
+const int = (v) => f(v, 0);
+function big(v) { const x = num(v); if (x === null) return "—"; const a = Math.abs(x); return a >= 1e7 ? f(x / 1e7, 2) + "Cr" : a >= 1e5 ? f(x / 1e5, 2) + "L" : f(x, 0); }
+const sgn = (v) => { const x = num(v); return x === null ? "mu" : x > 0 ? "up" : x < 0 ? "dn" : "mu"; };
+const pnl = (v) => el("span", { class: sgn(v) }, inr(v));
+function ts(v) { if (nil(v)) return "—"; const d = new Date(v); return isNaN(d) ? String(v) : d.toLocaleString("en-IN", { timeZone: "Asia/Kolkata", hour12: false, day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", second: "2-digit" }); }
+const short = (s, n = 10) => nil(s) ? "—" : String(s).length > n ? String(s).slice(0, n) + "…" : String(s);
+const compact = (v) => nil(v) ? "—" : typeof v === "object" ? JSON.stringify(v) : String(v);
+const tag = (t, c = "") => el("span", { class: "tag " + c }, t);
+
+// ---------- panels with loading / empty / error / disconnected states
+let LIVE = [];
+function state(kind, msg) { const cls = { LOADING: "st ld", EMPTY: "st", ERROR: "st err", DISCONNECTED: "st dis", AUTH: "st err" }[kind]; return el("div", { class: cls }, kind + (msg ? " · " + msg : "")); }
+function errState(e) {
+  if (e instanceof ApiError) {
+    if (e.status === 401) return state("AUTH", "API key required — set it with KEY");
+    if (e.status === 403) return state("AUTH", "your role cannot view this");
+    if (e.status === 503) return state("DISCONNECTED", e.message);
+  }
+  if (e instanceof TypeError) return state("DISCONNECTED", "backend unreachable");
+  return state("ERROR", e.message || String(e));
+}
+function panel(title, src, load, o = {}) {
+  const body = el("div", { class: "pb" + (o.tight ? " tight" : "") }, state("LOADING"));
+  const ctl = el("span", { class: "ps" }, src || "");
+  const p = el("section", { class: "pn " + (o.cls || "") }, el("div", { class: "ph" }, el("span", { class: "pt" }, title), ...(o.tools || []), ctl), body);
+  let busy = false;
+  p.refresh = async () => {
+    if (busy) return; busy = true;
+    try { const out = await load(); body.replaceChildren(out === null || out === undefined || (Array.isArray(out) && !out.length) ? state("EMPTY", o.empty || "no records") : out); }
+    catch (e) { body.replaceChildren(errState(e)); }
+    finally { busy = false; }
+  };
+  if (o.live !== false) LIVE.push(p);
+  p.refresh();
+  return p;
+}
+function table(rows, cols, o = {}) {
+  if (!rows || !rows.length) return null;
+  const t = el("table", { class: o.cls });
+  t.append(el("thead", {}, el("tr", {}, cols.map((c) => el("th", { class: c.l ? "l" : "" }, c.h)))));
+  const tb = el("tbody");
+  for (const r of rows) tb.append(el("tr", { class: o.rowCls ? o.rowCls(r) : "" }, cols.map((c) => { const v = typeof c.v === "function" ? c.v(r) : r[c.v]; return el("td", { class: (c.l ? "l " : "") + (c.w ? "w " : "") + (c.c ? c.c(r) : "") }, v instanceof Node ? v : (nil(v) ? "—" : v)); })));
+  t.append(tb);
+  return t;
+}
+function autoTable(rows, skip = []) {
+  if (!rows || !rows.length) return null;
+  const keys = [...new Set(rows.flatMap((r) => Object.keys(r)))].filter((k) => !skip.includes(k));
+  return table(rows, keys.map((k) => ({ h: k.replace(/_/g, " "), v: (r) => compact(r[k]), l: true })));
+}
+const kv = (pairs) => el("div", { class: "kv" }, pairs.filter(Boolean).map(([k, v, cls]) => el("div", {}, el("div", { class: "lbl" }, k), el("div", { class: "v " + (cls || "") }, v instanceof Node ? v : (nil(v) ? "—" : v)))));
+const grid = (cls, ...kids) => el("div", { class: "g " + cls }, ...kids);
+function toast(msg, err) { const d = el("div", { class: err ? "e" : "" }, msg); $("toast").append(d); setTimeout(() => d.remove(), 6000); }
+function dialog(title, fields, actions) {
+  $("dlg-t").textContent = title; $("dlg-b").replaceChildren(...fields.filter(Boolean)); $("dlg-f").replaceChildren(...actions, el("button", { onclick: closeDlg }, "Cancel")); $("dlg").style.display = "flex";
+}
+const closeDlg = () => { $("dlg").style.display = "none"; };
+async function act(fn, ok) { try { const r = await fn(); toast(ok || "done"); refreshAll(); return r; } catch (e) { toast((e.status ? e.status + " · " : "") + e.message, true); } }
+
+// ---------- global shell state
+const aiStop = () => { const b = S.budget; if (!b) return true; return b.frozen || Number(b.spent_inr) >= Number(b.hard_limit_inr || HARD_CAP) || Number(b.spent_inr) + Number(b.reserved_inr) >= Number(b.usable_inr) || b.utilisation >= ((b.routing || {}).stop_at ?? 0.97); };
+const killOn = () => !!(S.status && S.status.kill_switch);
+const pending = () => S.recs.filter((r) => r.status === "PENDING_HUMAN");
+function alerts() {
+  const a = [], s = S.status;
+  if (!key) a.push(["AUTH", "No API key set for this tab"]);
+  if (!s) return a;
+  if (s.kill_switch) a.push(["KILL", "Kill switch engaged — chain polling and new orders stopped"]);
+  const tk = (s.market_data || {}).token; if (tk && tk.state !== "VALID") a.push(["DHAN", "Dhan token state: " + tk.state]);
+  if (!(s.market_data || {}).provider_configured) a.push(["DHAN", "Market data provider not configured"]);
+  const rec = (s.market_data || {}).recorder || {}; if (rec.failures) a.push(["DATA", rec.failures + " recorder write failures"]);
+  if (s.database && s.database.reachable === false) a.push(["DB", "PostgreSQL unreachable: " + s.database.error]);
+  if (S.budget && aiStop()) a.push(["AI", "Grok budget hard stop — new AI meetings disabled"]);
+  else if (S.budget && S.budget.utilisation >= 0.8) a.push(["AI", "Grok budget above 80% — specialists on fast tier"]);
+  if (S.budgetErr) a.push(["AI", "AI budget: " + S.budgetErr]);
+  for (const [k, t] of Object.entries(S.tick)) if (t.stale) a.push(["DATA", k + " chain stale (" + f(t.age, 1) + "s)"]);
+  if (pending().length) a.push(["APPROVAL", pending().length + " recommendation(s) awaiting human approval"]);
+  return a;
+}
+async function nearestExpiry(u) { if (!S.und) S.und = await api("/api/v1/market/underlyings"); const r = S.und.find((x) => x.key === u); return r && r.live_enabled && r.resolved && r.expiries.length ? r.expiries[0].expiry : null; }
+async function chain(u, exp) { const c = await api(`/api/v1/market/option-chain?underlying=${encodeURIComponent(u)}&expiry=${encodeURIComponent(exp)}`); S.tick[u] = { ltp: c.underlying_ltp, age: c.quality.age_s, stale: c.quality.is_stale, at: c.received_at }; return c; }
+async function headerTick(u) {
+  const box = $("h-" + u).children[1];
+  try { const e = await nearestExpiry(u); if (!e) { box.textContent = "OFF"; box.className = "n mu3"; box.title = "not live-enabled"; return; } await chain(u, e); box.textContent = f(S.tick[u].ltp, 2); box.className = "n" + (S.tick[u].stale ? " mu3" : ""); box.title = "age " + f(S.tick[u].age, 1) + "s"; }
+  catch (e) { box.textContent = e.status === 503 ? "DISC" : "ERR"; box.className = "n dn"; box.title = e.message; }
+}
+async function refreshShell() {
+  const [st, bu, wh, rc] = await Promise.allSettled([api("/api/v1/system/status"), api("/api/v1/ai/budget"), api("/api/v1/auth/whoami"), api("/api/v1/ai/recommendations?status=PENDING_HUMAN")]);
+  S.status = st.status === "fulfilled" ? st.value : null; S.budget = bu.status === "fulfilled" ? bu.value : null; S.budgetErr = bu.status === "rejected" ? bu.reason.message : null;
+  S.who = wh.status === "fulfilled" ? wh.value : null; S.recs = rc.status === "fulfilled" ? rc.value : [];
+  const s = S.status;
+  const ses = s && s.session ? s.session.state : "—"; $("h-ses").textContent = ses; $("h-ses").className = "tag " + (ses === "OPEN" ? "up" : ses === "PRE-OPEN" ? "am" : "");
+  $("h-ist").textContent = s && s.session ? s.session.ist.slice(11, 19) + " IST" : "";
+  const tk = s && s.market_data && s.market_data.token;
+  $("h-dhan").className = "dot " + (!s ? "bad" : tk && tk.state === "VALID" ? "ok" : "bad"); $("h-dhant").textContent = !s ? "DISC" : tk ? tk.state : (s.market_data.provider_configured ? "NO TOKEN" : "OFF");
+  const b = S.budget;
+  $("h-grok").className = "dot " + (b ? (aiStop() ? "bad" : b.provider_live ? "ai" : "") : "bad");
+  $("h-grokt").textContent = b ? (aiStop() ? "HARD STOP" : b.provider_live ? "LIVE · " + String(b.routing.current_tier_for_specialists).toUpperCase() : "OFFLINE") : "OFF";
+  const cap = b ? Number(b.hard_limit_inr) : HARD_CAP;
+  $("h-bud").textContent = b ? `₹${f(b.spent_inr)} / ₹${f(cap, 0)}` : `— / ₹${f(HARD_CAP, 0)}`;
+  $("h-meter").className = "meter" + (b && aiStop() ? " stop" : ""); $("h-meter").firstChild.style.width = (b ? Math.min(100, (Number(b.spent_inr) + Number(b.reserved_inr)) / cap * 100) : 0) + "%";
+  $("h-meter").title = b ? `spent ₹${f(b.spent_inr)} + reserved ₹${f(b.reserved_inr)} · usable ₹${f(b.usable_inr)} · cap ₹${f(cap, 0)}` : "AI budget unavailable";
+  const ks = $("ks"); ks.textContent = "KILL SWITCH " + (s ? (s.kill_switch ? "ON" : "OFF") : "—"); ks.className = s && s.kill_switch ? "on" : "off";
+  $("h-user").textContent = S.who ? `${S.who.actor} · ${S.who.role}` : key ? "KEY ✕" : "SET KEY";
+  const al = alerts(); $("h-ntfn").textContent = al.length; $("h-ntf").className = al.length ? "pri" : "";
+  $("ntf").replaceChildren(...(al.length ? al.map(([k, m]) => el("div", {}, tag(k, k === "KILL" || k === "DB" ? "dn" : "am"), " ", m)) : [el("div", { class: "mu" }, "No alerts")]));
+  const bn = [];
+  if (killOn()) bn.push(el("div", { class: "bn dn" }, "■ KILL SWITCH ENGAGED — market polling, AI meetings and new paper orders are halted."));
+  if (b && aiStop()) bn.push(el("div", { class: "bn dn" }, `■ AI HARD STOP — Grok budget ₹${f(b.spent_inr)} of ₹${f(cap, 0)} committed${b.frozen ? " (month frozen: " + (b.frozen_reason || "") + ")" : ""}. New AI meetings disabled. Deterministic data and paper engine continue.`));
+  $("bnr").replaceChildren(...bn);
+  $("f-upd").textContent = "updated " + new Date().toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour12: false }) + " IST";
+  headerTick("NIFTY"); headerTick("BANKNIFTY");
+}
+function refreshAll() { refreshShell(); for (const p of LIVE) if (p.isConnected) p.refresh(); }
+
+// ---------- shared blocks
+function chainMetrics(c) {
+  const a = c.analytics, q = c.quality;
+  return kv([["Spot", f(c.underlying_ltp)], ["Forward (parity)", f(a.forward)], ["ATM", f(a.atm_strike, 0), "am"], ["ATM IV", pct(a.atm_iv)], ["PCR OI", nil(a.pcr_oi) ? "N/A" : f(a.pcr_oi, 3)], ["PCR Vol", nil(a.pcr_volume) ? "N/A" : f(a.pcr_volume, 3)],
+    ["Max Pain", f(a.max_pain, 0)], ["Total CE OI", big(a.total_ce_oi)], ["Total PE OI", big(a.total_pe_oi)], ["DTE", f(a.days_to_expiry, 2)], ["Lot", int(c.contract.lot_size)], ["Data age", f(q.age_s, 1) + "s", q.is_stale ? "dn" : ""]]);
+}
+const claimsOf = (o) => !o ? [] : ["claims", "rationale", "risks", "flaws", "kill_criteria", "dissent_addressed"].flatMap((k) => (o[k] || []).map((c) => [k, c])).concat(o.rebuttal_to_contrarian ? [["rebuttal", o.rebuttal_to_contrarian]] : []);
+const claimNode = ([k, c]) => el("div", { class: "cl" }, el("span", { class: "mu3 mono" }, k.toUpperCase() + " "), c.text, ...(c.evidence_refs || []).map((r) => el("span", { class: "ev" }, "[" + r + "]")));
+const meetingBtn = () => el("button", { class: "pri", disabled: killOn() || aiStop() || !S.budget, title: killOn() ? "kill switch engaged" : aiStop() ? "AI budget hard stop" : "queue a real committee meeting", onclick: startMeeting }, "▶ Start Meeting");
+function startMeeting() {
+  const u = el("select", {}, ["NIFTY", "BANKNIFTY", "FINNIFTY", "SENSEX", "BANKEX"].map((x) => el("option", { value: x }, x)));
+  const now = el("input", { type: "checkbox", checked: true });
+  dialog("Start AI Investment Committee", [el("div", { class: "mu" }, "Triggers backend orchestration. The committee cannot place orders; any recommendation needs human approval and passes the deterministic risk gate."), el("label", { class: "frm" }, "Underlying ", u), el("label", { class: "frm" }, now, " run now (otherwise queued for the AI worker)")],
+    [el("button", { class: "pri", onclick: async () => { closeDlg(); const r = await act(() => post("/api/v1/ai/meetings", { underlying: u.value, run_now: now.checked }), "meeting requested"); if (r && r.meeting) { location.hash = "#/04/" + r.meeting.id; } } }, "Start")]);
+}
+function decide(r, verb) {
+  const note = el("input", { placeholder: "note (optional, audited)", maxlength: 500 });
+  dialog(`${verb.toUpperCase()} ${r.underlying_key} ${r.expiry} ${f(r.strike, 0)} ${r.option_type}`, [el("div", { class: "mu" }, verb === "approve" ? "Approval sends the recommendation to the deterministic RiskGate, then to the PAPER engine only." : "Rejection is recorded in the hash-chained approval log."), note],
+    [el("button", { class: verb === "approve" ? "pri" : "dng", onclick: () => { closeDlg(); act(() => post(`/api/v1/ai/recommendations/${encodeURIComponent(r.id)}/${verb}`, { note: note.value || null }), verb + "d"); } }, verb)]);
+}
+function recTable(rs) {
+  return table(rs, [{ h: "id", v: (r) => short(r.id, 12), l: true }, { h: "und", v: "underlying_key", l: true }, { h: "contract", v: (r) => `${r.expiry} ${f(r.strike, 0)} ${r.option_type}`, l: true }, { h: "stop", v: (r) => f(r.stop_loss) },
+    { h: "targets", v: (r) => (r.targets || []).map((t) => Array.isArray(t) ? `${f(t[0])}×${t[1]}` : compact(t)).join(" ") }, { h: "valid until", v: (r) => ts(r.valid_until) }, { h: "status", v: (r) => tag(r.status, r.status === "PENDING_HUMAN" ? "am" : "") },
+    { h: "decided", v: (r) => r.decided_by || "—", l: true }, { h: "", v: (r) => r.status === "PENDING_HUMAN" ? el("span", { class: "frm" }, el("button", { class: "pri", onclick: () => decide(r, "approve") }, "Approve"), el("button", { class: "dng", onclick: () => decide(r, "reject") }, "Reject")) : "" }]);
+}
+function equitySvg(pts, start) {
+  const ys = [Number(start), ...pts.map((p) => Number(p.equity))]; const W = 600, H = 150, lo = Math.min(...ys), hi = Math.max(...ys), sp = hi - lo || 1;
+  const s = svg("svg", { viewBox: `0 0 ${W} ${H}`, preserveAspectRatio: "none", class: "spark" });
+  const y = (v) => H - 8 - (v - lo) / sp * (H - 16), x = (i) => i / Math.max(1, ys.length - 1) * W;
+  s.append(svg("line", { x1: 0, x2: W, y1: y(Number(start)), y2: y(Number(start)), stroke: "#243046", "stroke-dasharray": "3 3" }));
+  s.append(svg("polyline", { points: ys.map((v, i) => `${x(i)},${y(v)}`).join(" "), fill: "none", stroke: ys[ys.length - 1] >= ys[0] ? "#1FC77E" : "#F0444F", "stroke-width": 1.5, "vector-effect": "non-scaling-stroke" }));
+  return s;
+}
+
+// ---------- sections
+const V = {};
+V["01"] = () => {
+  const tickers = ["NIFTY", "BANKNIFTY"].map((u) => panel(u, "option-chain · nearest expiry", async () => { const e = await nearestExpiry(u); if (!e) return state("DISCONNECTED", u + " not live-enabled"); const c = await chain(u, e); return el("div", {}, el("div", { class: "kv" }, el("div", {}, el("div", { class: "lbl" }, "Spot · " + e), el("div", { class: "v", style: "font-size:22px" }, f(c.underlying_ltp)), el("div", { class: "mu3 mono", title: "previous close is not exposed by the API" }, "CHG —"))), chainMetrics(c)); }, { cls: "s2" }));
+  return [grid("c4", ...tickers,
+    panel("Paper Portfolio", "/paper/portfolio", async () => { const p = await api("/api/v1/paper/portfolio"); return kv([["Equity", inr(p.equity)], ["Day P&L", pnl(p.day_pnl)], ["Unrealized", pnl(p.unrealized)], ["Realized net", pnl(p.realized_net)], ["Open risk", inr(p.open_risk)], ["Positions", int(p.positions.length)], ["Working", int(p.working_orders.length)], ["Cash", inr(p.cash)]]); }, { cls: "s2" }),
+    panel("Latest Committee Decision", "/ai/meetings", async () => { const ms = await api("/api/v1/ai/meetings?limit=1"); if (!ms.length) return null; const d = await api("/api/v1/ai/meetings/" + encodeURIComponent(ms[0].id)); const s = d.summary;
+      return el("div", {}, el("div", { class: "frm" }, el("span", { class: "dl" }, s.label), tag(s.final_action || d.meeting.status, "am"), tag(`CONSENSUS ${s.consensus}/${s.panel_size}`), s.vetoes.risk_officer ? tag("RISK VETO", "dn") : null, s.vetoes.contrarian ? tag("CONTRARIAN VETO", "dn") : null),
+        el("div", { class: "mu mono", style: "margin:4px 0" }, `${ts(d.meeting.started_at)} · conf ${s.cio_confidence ?? "—"}/5 · ₹${f(d.meeting.cost_inr)} · ${d.meeting.abort_reason || ""}`), ...claimsOf((d.turns.find((t) => t.agent_id === "cio") || {}).output).slice(0, 3).map(claimNode), el("a", { href: "#/04/" + ms[0].id, class: "am" }, "open committee →")); }, { cls: "s2", empty: "no meetings yet", tools: [meetingBtn()] })),
+    grid("c3", panel("Market Regime · India VIX", "feature engine", async () => state("DISCONNECTED", "regime/VIX are computed inside the feature engine but not exposed by a REST endpoint yet; see committee evidence (04)"), { live: false }),
+      panel("Market Alerts", "derived from system status", async () => { const a = alerts(); return a.length ? table(a, [{ h: "type", v: (r) => tag(r[0], r[0] === "KILL" || r[0] === "DB" ? "dn" : "am"), l: true }, { h: "alert", v: (r) => r[1], l: true, w: true }]) : state("EMPTY", "no active alerts"); }),
+      panel("System Health", "/system/status", async () => { const s = await api("/api/v1/system/status"); const d = s.database || {}; const fc = s.market_data.feed_collector;
+        return kv([["Mode", s.mode, "sm"], ["Live broker exec", s.live_broker_execution, "sm dn"], ["Auth", s.auth, "sm"], ["PostgreSQL", d.reachable ? "UP" : "DOWN", d.reachable ? "up sm" : "dn sm"], ["Feed", fc ? fc.state : "DISABLED", "sm"], ["Recorder fails", int(s.market_data.recorder.failures)], ["Snapshots", int(d.recorded_snapshots)], ["Migrations", d.migration_version || "—", "sm"]]); }))];
 };
-async function show(name) { for (const b of $("tabs").children) b.classList.toggle("active", b.textContent === name); $("msg").textContent = "";
-  try { $("view").replaceChildren(await views[name]()); } catch (e) { $("view").replaceChildren(); $("msg").textContent = e.message; } }
-for (const t of tabs) $("tabs").append(el("button", {onclick: () => show(t)}, t));
-$("save").addEventListener("click", () => { key = $("tok").value.trim(); sessionStorage.setItem("doi_key", key); $("tok").value = ""; show("Status"); });
-show("Status");
+V["02"] = () => [panel("Underlying Universe", "/market/underlyings · instrument master", async () => { S.und = await api("/api/v1/market/underlyings"); return table(S.und, [{ h: "index", v: "key", l: true }, { h: "exch", v: "exchange_family", l: true }, { h: "sec id", v: "security_id" }, { h: "segment", v: "derivative_segment", l: true }, { h: "resolved", v: (r) => tag(r.resolved ? "YES" : "NO", r.resolved ? "up" : "dn") }, { h: "live", v: (r) => tag(r.live_enabled ? "ENABLED" : "DISABLED", r.live_enabled ? "am" : "") }, { h: "history", v: "historical_status", l: true }, { h: "next expiries · lot", v: (r) => r.expiries.map((e) => `${e.expiry}·${e.lot_size}`).join("  "), l: true }, { h: "error", v: (r) => r.error || "", l: true }]); }, { tight: true }),
+  el("div", { id: "mi" })];
+V["02"].after = async () => { const box = $("mi"); try { if (!S.und) S.und = await api("/api/v1/market/underlyings"); } catch (e) { box.replaceChildren(errState(e)); return; }
+  const live = S.und.filter((u) => u.live_enabled && u.resolved && u.expiries.length); if (!live.length) { box.replaceChildren(el("div", { class: "pn" }, el("div", { class: "pb" }, state("EMPTY", "no live-enabled underlyings")))); return; }
+  box.replaceChildren(grid("c2", ...live.map((u) => panel(u.key + " · " + u.expiries[0].expiry, "option-chain analytics (Black-76, backend)", async () => { const c = await chain(u.key, u.expiries[0].expiry); const a = c.analytics;
+    return el("div", {}, chainMetrics(c), table([...a.ce_walls.map((w) => ["CALL WALL", w]), ...a.pe_walls.map((w) => ["PUT WALL", w])], [{ h: "wall", v: (r) => r[0], l: true }, { h: "strike", v: (r) => f(r[1].strike, 0) }, { h: "oi", v: (r) => big(r[1].oi) }])); })))); };
+V["03"] = () => {
+  const us = el("select"), ex = el("select"), win = el("select", {}, [["10", "ATM ±10"], ["5", "ATM ±5"], ["15", "ATM ±15"], ["25", "ATM ±25"], ["0", "ALL"]].map(([v, t]) => el("option", { value: v }, t)));
+  const from = el("input", { placeholder: "strike ≥", size: 8 }), to = el("input", { placeholder: "strike ≤", size: 8 });
+  const head = el("div"), body = el("div");
+  const fillEx = () => { const u = (S.und || []).find((x) => x.key === us.value); ex.replaceChildren(...(u ? u.expiries : []).map((e) => el("option", { value: e.expiry }, `${e.expiry} · lot ${e.lot_size}`))); };
+  const p = panel("Option Chain", "Dhan chain · Greeks/IV = backend Black-76 on two-sided mids", async () => {
+    if (!S.und) S.und = await api("/api/v1/market/underlyings");
+    if (!us.options.length) { const live = S.und.filter((u) => u.live_enabled && u.resolved); if (!live.length) return state("DISCONNECTED", "no live-enabled underlying"); us.replaceChildren(...live.map((u) => el("option", { value: u.key }, u.key))); fillEx(); }
+    if (!ex.value) return state("EMPTY", "no expiries");
+    const c = await chain(us.value, ex.value), a = c.analytics;
+    head.replaceChildren(chainMetrics(c), c.quality.is_stale ? el("div", { class: "bn dn" }, `STALE DATA · age ${f(c.quality.age_s, 1)}s > ${c.quality.max_age_s}s`) : "");
+    const g = new Map(a.rows.map((r) => [r.strike, r])), walls = new Set([...a.ce_walls.map((w) => "ce" + w.strike), ...a.pe_walls.map((w) => "pe" + w.strike)]);
+    let rows = [...c.rows].sort((x, y) => x.strike - y.strike);
+    const n = Number(win.value); if (n && a.atm_strike !== null) { const i = rows.findIndex((r) => r.strike === a.atm_strike); if (i >= 0) rows = rows.slice(Math.max(0, i - n), i + n + 1); }
+    const lo = num(from.value), hi = num(to.value); rows = rows.filter((r) => (lo === null || r.strike >= lo) && (hi === null || r.strike <= hi));
+    const maxOi = Math.max(1, ...rows.flatMap((r) => [(r.ce || {}).oi || 0, (r.pe || {}).oi || 0]));
+    const leg = (r, s) => { const L = r[s] || {}, B = (g.get(r.strike) || {})[s] || {}; const chg = L.oi === null || L.oi === undefined || L.prev_oi === null || L.prev_oi === undefined ? null : L.oi - L.prev_oi;
+      const oi = el("td", { class: "ob " + s + (walls.has(s + r.strike) ? " wall" : "") }, el("i", { style: `width:${((L.oi || 0) / maxOi * 100).toFixed(1)}%` }), el("span", {}, big(L.oi)));
+      const cells = [oi, el("td", {}, nil(chg) ? "—" : (chg > 0 ? "+" : "") + big(chg)), el("td", {}, pct(B.iv)), el("td", {}, big(L.volume)), el("td", {}, f(B.delta, 3)), el("td", {}, f(B.gamma, 5)), el("td", {}, f(B.theta, 2)), el("td", {}, f(B.vega, 2)), el("td", { class: "mu", title: `bid ${f(L.bid)} / ask ${f(L.ask)}` }, f(L.ltp))];
+      return s === "ce" ? cells : cells.reverse(); };
+    const H = ["OI", "OI CHG", "IV", "VOL", "Δ", "Γ", "Θ/day", "VEGA", "LTP"];
+    const t = el("table", { class: "oc" }, el("thead", {}, el("tr", {}, H.map((h) => el("th", { class: "ceh" }, "CE " + h)), el("th", { style: "text-align:center" }, "STRIKE"), [...H].reverse().map((h) => el("th", { class: "peh" }, "PE " + h)))),
+      el("tbody", {}, rows.map((r) => el("tr", { class: r.strike === a.atm_strike ? "atm" : "" }, leg(r, "ce"), el("td", { class: "k" }, f(r.strike, 0)), leg(r, "pe")))));
+    body.replaceChildren(rows.length ? t : state("EMPTY", "no strikes in filter")); return el("div", {}, head, body);
+  }, { tight: true, tools: [us, ex, win, from, to] });
+  us.addEventListener("change", () => { fillEx(); p.refresh(); }); for (const x of [ex, win]) x.addEventListener("change", () => p.refresh()); for (const x of [from, to]) x.addEventListener("change", () => p.refresh());
+  return [p, el("div", { class: "pn" }, el("div", { class: "pb mu" }, "ATM row highlighted · amber underline = top-3 OI walls · PCR = Total Put OI / Total Call OI (N/A when call OI is zero) · OI in units · Max Pain/OI/PCR are explanatory features, never triggers."))];
+};
+V["04"] = (id) => {
+  const detail = el("div");
+  const list = panel("Meetings", "/ai/meetings", async () => { const ms = await api("/api/v1/ai/meetings?limit=40"); if (!id && ms.length) id = ms[0].id; showMeeting(); return table(ms, [{ h: "started", v: (m) => ts(m.started_at), l: true }, { h: "kind", v: "kind", l: true }, { h: "status", v: (m) => tag(m.status, m.status === "OPEN" ? "am" : "") }, { h: "action", v: (m) => m.final_action ? tag(m.final_action, "am") : "—" }, { h: "abort", v: (m) => m.abort_reason || "", l: true }, { h: "₹", v: (m) => f(m.cost_inr) }, { h: "", v: (m) => el("button", { class: m.id === id ? "pri" : "", onclick: () => { location.hash = "#/04/" + m.id; } }, "open") }]); }, { tight: true, empty: "no meetings yet", tools: [meetingBtn()] });
+  async function showMeeting() {
+    if (!id) return; const cur = id;
+    detail.replaceChildren(panel("Committee " + short(cur, 14), "/ai/meetings/{id} · summary computed by backend", async () => {
+      const d = await api("/api/v1/ai/meetings/" + encodeURIComponent(cur)), s = d.summary, open = d.meeting.status === "OPEN";
+      const tiles = el("div", { class: "ag" }, s.agents.map((a) => { const stt = a.status === "IDLE" ? (open ? "ANALYZING" : "IDLE") : a.status === "OK" ? "COMPLETE" : a.status;
+        return el("div", { class: (["contrarian", "risk_officer", "cio"].includes(a.id) ? "hl " : "") + (a.disagrees ? "dis" : "") }, el("div", { class: "nm", title: a.id }, a.name), el("div", { class: "x" }, tag(stt, stt === "ANALYZING" ? "fill" : stt === "COMPLETE" ? "am" : stt === "UNAVAILABLE" ? "dn" : ""), a.stance ? tag(a.stance) : null, a.confidence ? tag("C" + a.confidence) : null, a.disagrees ? tag("DISAGREES", "dn") : null)); }));
+      const cio = (d.turns.find((t) => t.agent_id === "cio") || {}).output;
+      const dec = el("div", { class: "dec" }, el("div", {}, el("div", { class: "lbl" }, "CIO decision"), el("div", { class: "dl" }, s.label), el("div", { class: "mono mu", style: "margin-top:6px" }, `action ${s.final_action || "—"}`), el("div", { class: "mono mu" }, `confidence ${s.cio_confidence ?? "—"}/5`), el("div", { class: "mono mu" }, `size ${s.size.lots ?? "—"} lots · ${s.size.quantity ?? "—"} qty`), el("div", { class: "mono mu" }, `risk gate ${s.size.risk_gate_approved === undefined || s.size.risk_gate_approved === null ? "—" : s.size.risk_gate_approved ? "APPROVED" : "REJECTED"}`),
+        el("div", { class: "frm", style: "margin-top:8px" }, tag(`CONSENSUS ${s.consensus}/${s.panel_size}`, "am"), tag(s.vetoes.risk_officer ? "RISK OFFICER VETO" : "RISK OFFICER: NO VETO", s.vetoes.risk_officer ? "dn" : ""), tag(s.vetoes.contrarian ? "CONTRARIAN VETO" : "CONTRARIAN: NO VETO", s.vetoes.contrarian ? "dn" : ""), s.vetoes.compliance_failed ? tag("COMPLIANCE FAIL", "dn") : null)),
+        el("div", {}, el("div", { class: "lbl" }, "Rationale (evidence-cited)"), ...(claimsOf(cio).length ? claimsOf(cio).map(claimNode) : [state("EMPTY", d.meeting.abort_reason || "no CIO turn")]), d.decision && (d.decision.overrides || []).length ? el("div", { style: "margin-top:6px" }, el("div", { class: "lbl" }, "Python authority overrides"), el("pre", {}, compact(d.decision.overrides))) : null));
+      const rec = d.recommendation ? recTable([d.recommendation]) : null;
+      const tr = el("div", {}, d.turns.map((t) => el("div", { class: "tr" }, el("span", { class: "m" }, "#" + (t.seq ?? "")), el("span", { class: "m" }, t.round), el("span", {}, el("div", { class: ["contrarian", "risk_officer", "cio"].includes(t.agent_id) ? "am" : "" }, t.agent_id), el("div", { class: "m" }, `${t.status}${t.stance ? " · " + t.stance : ""}${t.confidence ? " · C" + t.confidence : ""} · ${String(t.model || "—").replace("grok-", "")} · ₹${f(t.cost_inr, 3)}`)),
+        el("div", {}, ...claimsOf(t.output).map(claimNode), (t.errors || []).length ? el("div", { class: "dn mono" }, compact(t.errors)) : null))));
+      return el("div", {}, tiles, el("div", { style: "height:1px;background:var(--ln)" }), dec,
+        rec ? el("div", { style: "border-top:1px solid var(--ln)" }, el("div", { class: "ph" }, el("span", { class: "pt" }, "Human Approval"), el("span", { class: "ps" }, "approve → RiskGate → paper engine only")), rec) : null,
+        (d.disagreements || []).length ? el("div", { style: "padding:6px 0" }, el("div", { class: "lbl" }, "Disagreements"), table(d.disagreements, [{ h: "topic", v: "topic", l: true }, { h: "agents", v: (x) => (x.agents || []).join(", "), l: true }, { h: "resolution", v: (x) => x.resolution || "—", l: true, w: true }])) : null,
+        el("div", { class: "ph", style: "border-top:1px solid var(--ln)" }, el("span", { class: "pt" }, "Transcript"), el("span", { class: "ps" }, `meeting ${ts(d.meeting.started_at)} → ${ts(d.meeting.ended_at)} · ${d.meeting.llm_calls ?? "—"} calls · ₹${f(d.meeting.cost_inr)}`)), el("div", { style: "padding:0 9px" }, tr));
+    }));
+  }
+  return [grid("c3", el("div", { class: "pn" }, list), el("div", { class: "pn s2" }, detail)), panel("Pending Human Approvals", "/ai/recommendations", async () => recTable(await api("/api/v1/ai/recommendations?status=PENDING_HUMAN")), { tight: true, empty: "nothing awaiting approval" })];
+};
+V["05"] = () => [grid("c4",
+  panel("Model Routing", "/ai/budget", async () => { const b = await api("/api/v1/ai/budget"), r = b.routing; return kv([["Provider", b.provider_live ? "LIVE" : "OFFLINE", "am sm"], ["CIO tier", r.current_tier_for_cio, "am sm"], ["Specialist tier", r.current_tier_for_specialists, "am sm"], ["Downgrade at", pct(r.specialists_downgrade_at, 0)], ["All fast at", pct(r.all_fast_at, 0)], ["Hard stop at", pct(r.stop_at, 0)]]); }, { cls: "s4 sall" })),
+  panel("15-Agent Registry", "/ai/agents + /ai/usage (month to date)", async () => { const [ag, us] = await Promise.all([api("/api/v1/ai/agents"), api("/api/v1/ai/usage").catch(() => ({ by_agent: [] }))]); const u = new Map(us.by_agent.map((x) => [x.agent_id, x]));
+    return table(ag, [{ h: "id", v: (a) => el("span", { class: ["contrarian", "risk_officer", "cio"].includes(a.id) ? "am" : "" }, a.id), l: true }, { h: "name", v: "name", l: true }, { h: "responsibility", v: "responsibility", l: true, w: true }, { h: "tier", v: (a) => tag(a.tier, a.tier === "reasoning" ? "am" : "") }, { h: "version", v: (a) => short(a.version, 8) }, { h: "sees turns", v: (a) => a.sees_other_turns ? "YES" : "—" }, { h: "evidence", v: (a) => a.evidence_sections.join(","), l: true, w: true },
+      { h: "calls", v: (a) => int((u.get(a.id) || {}).calls) }, { h: "prompt tok", v: (a) => big((u.get(a.id) || {}).prompt_tokens) }, { h: "out tok", v: (a) => big((u.get(a.id) || {}).completion_tokens) }, { h: "reason tok", v: (a) => big((u.get(a.id) || {}).reasoning_tokens) }, { h: "₹ mtd", v: (a) => f((u.get(a.id) || {}).cost_inr, 3) }]); }, { tight: true })];
+V["06"] = () => {
+  const spec = el("textarea", { placeholder: '{"name": "...", ...}  StrategySpec JSON (validated server-side)' }), parent = el("input", { placeholder: "parent version id (optional)" });
+  const sid = el("input", { placeholder: "strategy id" }), hist = el("div");
+  const exp = el("input", { placeholder: "experiment id" }), note = el("input", { placeholder: "note" }), rbS = el("input", { placeholder: "strategy id" }), rbV = el("input", { placeholder: "to version id" });
+  return [grid("c2",
+    panel("Strategies", "/research/strategies", async () => table(await api("/api/v1/research/strategies"), [{ h: "id", v: (s) => el("button", { onclick: () => { sid.value = s.id; loadHist(); } }, short(s.id, 12)), l: true }, { h: "name", v: "name", l: true }, { h: "versions", v: "versions" }, { h: "latest", v: "latest_version" }, { h: "active", v: (s) => s.active_version_id ? tag(short(s.active_version_id, 10), "am") : "—" }, { h: "created", v: (s) => ts(s.created_at), l: true }]), { tight: true, empty: "no strategies" }),
+    panel("Version History", "/research/strategies/{id}", async () => hist.childNodes.length ? hist : state("EMPTY", "pick a strategy"), { live: false, tools: [sid, el("button", { onclick: () => loadHist() }, "Load")] }),
+    panel("New Strategy Version", "POST /research/strategies · approver", async () => el("div", { class: "frm" }, spec, parent, el("button", { class: "pri", onclick: () => { let j; try { j = JSON.parse(spec.value); } catch { toast("spec is not valid JSON", true); return; } act(() => post("/api/v1/research/strategies", { spec: j, parent_version_id: parent.value || null }), "version created"); } }, "Create version")), { live: false }),
+    panel("Promote / Rollback", "admin · audited", async () => el("div", {}, el("div", { class: "frm" }, exp, note, el("button", { class: "pri", onclick: () => act(() => post(`/api/v1/research/experiments/${encodeURIComponent(exp.value)}/promote`, { note: note.value || null }), "promoted") }, "Promote")), el("div", { class: "frm", style: "margin-top:6px" }, rbS, rbV, el("button", { class: "dng", onclick: () => act(() => post(`/api/v1/research/strategies/${encodeURIComponent(rbS.value)}/rollback`, { to_version_id: rbV.value, note: note.value || null }), "rolled back") }, "Rollback")), el("div", { class: "mu", style: "margin-top:6px" }, "Promotion requires passed holdout and paper validation (enforced by the lab).")), { live: false }))];
+  async function loadHist() { try { const h = await api("/api/v1/research/strategies/" + encodeURIComponent(sid.value)); hist.replaceChildren(Array.isArray(h) ? (autoTable(h) || state("EMPTY")) : autoTable(Object.entries(h).map(([k, v]) => ({ field: k, value: v }))) || state("EMPTY")); } catch (e) { hist.replaceChildren(errState(e)); } refreshAll(); }
+};
+V["07"] = () => {
+  const ver = el("input", { placeholder: "version id" }), ds = el("input", { placeholder: "dataset id" }), gaps = el("input", { type: "checkbox" }), eid = el("input", { placeholder: "experiment id" }), hds = el("input", { placeholder: "holdout dataset id" });
+  const stages = (r) => el("span", { class: "frm" }, Object.entries(r.results || {}).map(([k, v]) => tag(k.slice(0, 4) + (v.passed ? " ✓" : " ✗"), v.passed ? "up" : "dn")));
+  return [grid("c2",
+    panel("Run Experiment", "POST /research/experiments · 60/20/20 · walk-forward · cost stress", async () => el("div", {}, el("div", { class: "frm" }, ver, ds, el("label", {}, gaps, "allow gaps"), el("button", { class: "pri", onclick: () => act(() => post("/api/v1/research/experiments", { version_id: ver.value, dataset_id: ds.value, allow_gaps: gaps.checked }), "experiment complete") }, "Run")),
+      el("div", { class: "frm", style: "margin-top:6px" }, eid, hds, el("button", { onclick: () => act(() => post(`/api/v1/research/experiments/${encodeURIComponent(eid.value)}/holdout?dataset_id=${encodeURIComponent(hds.value)}`), "holdout evaluated (once only)") }, "Open holdout (once)"), el("button", { onclick: () => act(() => post(`/api/v1/research/experiments/${encodeURIComponent(eid.value)}/paper-validation`), "paper validation evaluated") }, "Paper validation"))), { live: false }),
+    panel("Dataset Coverage", "/research/coverage", async () => table(await api("/api/v1/research/coverage"), [{ h: "und", v: "underlying", l: true }, { h: "class", v: "class", l: true }, { h: "gran", v: "granularity" }, { h: "from", v: (r) => String(r.from).slice(0, 10) }, { h: "to", v: (r) => String(r.to).slice(0, 10) }, { h: "status", v: (r) => tag(r.status) }, { h: "missing", v: (r) => nil(r.missing_pct) ? "—" : f(r.missing_pct, 2) + "%" }]), { tight: true, empty: "no datasets" })),
+    panel("Experiments", "/research/experiments", async () => table(await api("/api/v1/research/experiments"), [{ h: "id", v: (r) => short(r.id, 12), l: true }, { h: "version", v: (r) => short(r.strategy_version_id, 10), l: true }, { h: "dataset", v: (r) => short(r.dataset_id, 10), l: true }, { h: "status", v: (r) => tag(r.status, /PASS/.test(r.status) ? "up" : /FAIL/.test(r.status) ? "dn" : "am") }, { h: "stages", v: stages, l: true }, { h: "manifest", v: (r) => short(r.manifest_sha256, 10) }, { h: "created", v: (r) => ts(r.created_at), l: true }]), { tight: true, empty: "no experiments" }),
+    panel("Option-Premium Backtests", "/research/option-backtests · after full Indian charges", async () => table(await api("/api/v1/research/option-backtests"), [{ h: "id", v: (r) => short(r.id, 12), l: true }, { h: "data", v: (r) => tag(r.data_class, r.data_class === "SIMULATED" ? "dn" : "am") }, { h: "trades", v: (r) => int(r.metrics.trades) }, { h: "net ₹", v: (r) => pnl(r.metrics.net_pnl) }, { h: "charges ₹", v: (r) => f(r.metrics.charges) }, { h: "win", v: (r) => pct(r.metrics.win_rate) }, { h: "max dd", v: (r) => f(r.metrics.max_drawdown) }, { h: "metrics", v: (r) => compact(r.metrics), l: true, w: true }]), { tight: true, empty: "no backtests" })];
+};
+V["08"] = () => [panel("Pre-registered Predictions", "/ai/predictions · outcomes resolved deterministically", async () => table(await api("/api/v1/ai/predictions?limit=300"), [{ h: "created", v: (r) => ts(r.created_at), l: true }, { h: "agent", v: "agent_id", l: true }, { h: "und", v: "underlying_key", l: true }, { h: "dir", v: (r) => tag(r.direction, r.direction === "UP" ? "up" : r.direction === "DOWN" ? "dn" : "") }, { h: "conf", v: "confidence" }, { h: "horizon", v: (r) => r.horizon_min + "m" }, { h: "ref", v: (r) => f(r.ref_value) }, { h: "resolve at", v: (r) => ts(r.resolve_at), l: true }, { h: "realized", v: (r) => f(r.realized_value) }, { h: "ret", v: (r) => el("span", { class: sgn(r.signed_return) }, pct(r.signed_return, 3)) }, { h: "hit", v: (r) => nil(r.hit) ? tag("PENDING") : tag(r.hit ? "HIT" : "MISS", r.hit ? "up" : "dn") }, { h: "brier", v: (r) => f(r.brier, 4) }, { h: "mode", v: (r) => tag(r.mode, r.mode === "REPLAY" ? "" : "am") }]), { tight: true, empty: "no predictions yet" })];
+V["09"] = () => [grid("c4", panel("Account", "/paper/portfolio · paper engine (charges deducted)", async () => { const p = await api("/api/v1/paper/portfolio"); return kv([["Equity", inr(p.equity)], ["Cash", inr(p.cash)], ["Day P&L", pnl(p.day_pnl)], ["Unrealized", pnl(p.unrealized)], ["Realized net", pnl(p.realized_net)], ["Open risk", inr(p.open_risk)], ["Consec. losses", int(p.consecutive_losses)], ["Ledger events", int(p.ledger_events)]]); }, { cls: "s2" }),
+    panel("Equity Curve", "/paper/equity-curve · closed trades", async () => { const e = await api("/api/v1/paper/equity-curve"); return e.points.length ? el("div", {}, equitySvg(e.points, e.starting_capital), el("div", { class: "mono mu" }, `start ${inr(e.starting_capital)} → ${inr(e.points[e.points.length - 1].equity)}`)) : state("EMPTY", "no closed trades"); }, { cls: "s2" })),
+  panel("Positions", "paper engine marks at executable bid", async () => { const p = await api("/api/v1/paper/portfolio"); return table(p.positions, [{ h: "symbol", v: "symbol", l: true }, { h: "instrument", v: (r) => `${r.underlying} ${r.expiry || ""} ${f(r.strike, 0)} ${r.option_type}`, l: true }, { h: "side", v: (r) => tag(r.side) }, { h: "state", v: (r) => tag(r.state) }, { h: "qty", v: (r) => `${int(r.qty_open)}/${int(r.qty_entered)}` }, { h: "entry", v: (r) => f(r.avg_entry) }, { h: "ltp", v: (r) => el("span", { class: r.mark_stale ? "mu3" : "", title: r.mark_stale ? "stale mark" : "" }, f(r.mark)) }, { h: "sl", v: (r) => f(r.stop_loss) }, { h: "target", v: (r) => r.targets.map((t) => (t.done ? "✓" : "") + f(t.price)).join(" ") }, { h: "unreal", v: (r) => pnl(r.unrealized) }, { h: "real gross", v: (r) => pnl(r.realized_gross) }, { h: "charges", v: (r) => inr(r.charges) },
+    { h: "", v: (r) => el("button", { class: "dng", onclick: () => dialog("Close paper position " + r.symbol, [el("div", { class: "mu" }, "Sends a PAPER exit order to the simulator. No broker is involved.")], [el("button", { class: "dng", onclick: () => { closeDlg(); act(() => post(`/api/v1/paper/positions/${encodeURIComponent(r.id)}/close`), "paper exit submitted"); } }, "Close")]) }, "Close") }]); }, { tight: true, empty: "no open positions" }),
+  grid("c2", panel("Working Orders", "paper simulator", async () => table((await api("/api/v1/paper/portfolio")).working_orders, [{ h: "id", v: (r) => short(r.id, 10), l: true }, { h: "purpose", v: "purpose", l: true }, { h: "side", v: (r) => tag(r.side) }, { h: "qty", v: "quantity" }, { h: "filled", v: "filled_qty" }, { h: "limit", v: (r) => f(r.limit_price) }, { h: "status", v: (r) => tag(r.status, "am") }, { h: "submitted", v: (r) => ts(r.submitted_at), l: true }, { h: "expires", v: (r) => ts(r.expires_at), l: true }]), { tight: true, empty: "no working orders" }),
+    panel("Order Blotter · Closed Trades", "/paper/trades", async () => table([...(await api("/api/v1/paper/trades"))].reverse(), [{ h: "closed", v: (r) => ts(r.closed_at), l: true }, { h: "und", v: "underlying_key", l: true }, { h: "sec", v: "security_id" }, { h: "qty", v: "quantity" }, { h: "entry", v: (r) => f(r.avg_entry) }, { h: "exit", v: (r) => f(r.avg_exit) }, { h: "gross", v: (r) => pnl(r.gross_pnl) }, { h: "charges", v: (r) => inr(r.charges) }, { h: "net", v: (r) => pnl(r.net_pnl) }, { h: "reason", v: "exit_reason", l: true }]), { tight: true, empty: "no closed trades" }))];
+V["09"].wm = true;
+V["10"] = () => [grid("c2", panel("Performance After Costs", "/paper/analytics", async () => { const a = await api("/api/v1/paper/analytics"); return kv([["Trades", int(a.trades)], ["Win rate", pct(a.win_rate, 1)], ["Net P&L", pnl(a.net_pnl)], ["Gross P&L", pnl(a.gross_pnl)], ["Charges", inr(a.charges)], ["Expectancy", pnl(a.expectancy)], ["Avg win", pnl(a.avg_win)], ["Avg loss", pnl(a.avg_loss)], ["Max drawdown", inr(a.max_drawdown)], ["Max DD %", pct(a.max_drawdown_pct)]]); }),
+    panel("Equity Path", "/paper/equity-curve", async () => { const e = await api("/api/v1/paper/equity-curve"); return e.points.length ? equitySvg(e.points, e.starting_capital) : state("EMPTY", "no closed trades"); })),
+  grid("c2", panel("By Underlying", "/paper/analytics", async () => { const a = await api("/api/v1/paper/analytics"); return table(Object.entries(a.by_underlying), [{ h: "underlying", v: (r) => r[0], l: true }, { h: "trades", v: (r) => r[1].trades }, { h: "net", v: (r) => pnl(r[1].net_pnl) }, { h: "charges", v: (r) => inr(r[1].charges) }]); }, { tight: true, empty: "no trades" }),
+    panel("By Exit Reason", "/paper/analytics", async () => { const a = await api("/api/v1/paper/analytics"); return table(Object.entries(a.by_exit_reason), [{ h: "reason", v: (r) => r[0], l: true }, { h: "trades", v: (r) => r[1].trades }, { h: "net", v: (r) => pnl(r[1].net_pnl) }, { h: "charges", v: (r) => inr(r[1].charges) }]); }, { tight: true, empty: "no trades" }))];
+V["11"] = () => { const mode = el("select", {}, ["LIVE", "REPLAY"].map((m) => el("option", { value: m }, m)));
+  const p = panel("Agent Leaderboard", "/ai/leaderboard · ranked only with sufficient n", async () => { const lb = await api("/api/v1/ai/leaderboard?mode=" + mode.value); return el("div", {}, table(lb.agents, [{ h: "rank", v: (r) => r.rank ?? "—" }, { h: "agent", v: "name", l: true }, { h: "n", v: "n" }, { h: "hit", v: (r) => pct(r.hit_rate, 1) }, { h: "wilson lb", v: (r) => pct(r.hit_rate_wilson_lb, 1) }, { h: "brier", v: (r) => f(r.brier, 4) }, { h: "ic", v: (r) => f(r.ic_spearman, 3) }, { h: "follow", v: (r) => f(r.follow_ratio, 2) }, { h: "", v: (r) => r.provisional ? tag("PROVISIONAL") : tag("RANKED", "am") }]) || state("EMPTY", "no scored agents"), el("div", { class: "mu", style: "padding:6px 9px" }, `min n ${lb.min_n_for_rank} · unscored: ${lb.unscored_agents.join(", ") || "none"}`)); }, { tight: true, tools: [mode] });
+  mode.addEventListener("change", () => p.refresh()); return [p]; };
+V["12"] = () => [grid("c4", panel("Live Recorder", "/system/status", async () => { const s = await api("/api/v1/system/status"), r = s.market_data.recorder, d = s.database || {}; return kv([["Snapshots (proc)", int(r.snapshots)], ["Failures", int(r.failures), r.failures ? "dn" : ""], ["Snapshots (db)", int(d.recorded_snapshots)], ["Last snapshot", ts(d.last_snapshot_at), "sm"]]); }, { cls: "s2" }),
+    panel("Replay", "feature engine replay (look-ahead safe)", async () => el("div", { class: "mu" }, "Replay runs server-side over recorded snapshots and approved datasets (scripts and lab). REPLAY-mode predictions are kept separate from LIVE on the leaderboard (11)."), { cls: "s2", live: false })),
+  panel("Historical Datasets & Recorded Chains", "/research/coverage", async () => table(await api("/api/v1/research/coverage"), [{ h: "underlying", v: "underlying", l: true }, { h: "class", v: "class", l: true }, { h: "series", v: "series", l: true }, { h: "granularity", v: "granularity" }, { h: "from", v: (r) => ts(r.from), l: true }, { h: "to", v: (r) => ts(r.to), l: true }, { h: "status", v: (r) => tag(r.status, r.status === "APPROVED" || r.status === "RECORDED" ? "am" : "") }, { h: "expected", v: (r) => int(r.expected) }, { h: "actual", v: (r) => int(r.actual) }, { h: "missing", v: (r) => nil(r.missing_pct) ? "—" : f(r.missing_pct, 2) + "%" }, { h: "src verified", v: (r) => r.source_verified ? "YES" : "NO" }]), { tight: true, empty: "no datasets recorded" })];
+V["13"] = () => [grid("c2", panel("Daily Report", "/reports/daily", async () => el("pre", {}, await api("/api/v1/reports/daily"))),
+  panel("Approval Audit Log", "/admin/approvals · hash-chained", async () => { const a = await api("/api/v1/admin/approvals"); return autoTable([...a.records].reverse().slice(0, 200)); }, { tight: true, empty: "no approval records" }))];
+V["14"] = () => [grid("c4",
+  panel("Grok Spend vs Hard Cap", "/ai/budget", async () => { const b = await api("/api/v1/ai/budget"); const cap = Number(b.hard_limit_inr); return el("div", {}, kv([["Spent", inr(b.spent_inr), "am"], ["Reserved", inr(b.reserved_inr)], ["Remaining", inr(b.remaining_inr)], ["Usable", inr(b.usable_inr)], ["Hard cap", inr(cap, 0)], ["Overrun", inr(b.overrun_inr), Number(b.overrun_inr) ? "dn" : ""], ["Utilisation", pct(b.utilisation, 1)], ["Month", b.month, "sm"]]), el("div", { class: "hbar" }, el("i", { style: `width:${Math.min(100, Number(b.spent_inr) / cap * 100)}%` })), aiStop() ? el("div", { class: "bn dn" }, "HARD STOP — new AI meetings disabled") : null); }, { cls: "s2" }),
+  panel("Dhan Market Data", "/system/status · /healthz", async () => { const s = await api("/api/v1/system/status"), m = s.market_data, fc = m.feed_collector; const age = fc && fc.last_packet_at ? (Date.now() - new Date(fc.last_packet_at)) / 1000 : null;
+    return kv([["Provider", m.provider_configured ? "CONFIGURED" : "NONE", "sm"], ["Token", m.token ? m.token.state : "—", "sm"], ["Token expires", m.token ? ts(m.token.expires_at) : "—", "sm"], ["WebSocket", fc ? fc.state : "DISABLED", "sm"], ["Last tick age", nil(age) ? "—" : f(age, 1) + "s"], ["Packets", int(fc && fc.packets)], ["Reconnects", int(fc && fc.reconnects)], ["Decode errors", int(fc && fc.decode_errors)], ["Subscribed", int(fc && fc.subscribed)], ["Last error", fc ? fc.last_error || fc.fatal || "—" : "—", "sm"]]); }, { cls: "s2" }),
+  panel("Infrastructure", "/system/status", async () => { const s = await api("/api/v1/system/status"), d = s.database || {}; return kv([["PostgreSQL", d.reachable ? "UP" : "DOWN", d.reachable ? "up sm" : "dn sm"], ["Migration", d.migration_version || "—", "sm"], ["Redis", "NOT MONITORED", "sm mu"], ["Paper store", s.paper ? s.paper.persistence : "—", "sm"], ...Object.entries(d.ai_queue || {}).map(([k, v]) => ["AI queue " + k, int(v)]), ["Kill switch", s.kill_switch ? "ON" : "OFF", s.kill_switch ? "dn sm" : "sm"]]); }, { cls: "s2" }),
+  panel("Data Freshness", "chain quality", async () => { const s = await api("/api/v1/system/status"), d = s.database || {}; const rows = Object.entries(S.tick).map(([k, t]) => [k, f(t.age, 1) + "s", t.stale ? "STALE" : "FRESH"]); return el("div", {}, kv([["Last recorded snapshot", ts(d.last_snapshot_at), "sm"], ["Universe live", Object.entries(s.market_data.universe).filter(([, v]) => v).map(([k]) => k).join(" ") || "—", "sm"]]), table(rows, [{ h: "underlying", v: (r) => r[0], l: true }, { h: "age", v: (r) => r[1] }, { h: "", v: (r) => tag(r[2], r[2] === "STALE" ? "dn" : "up") }]) || state("EMPTY", "no chains polled yet")); }, { cls: "s2" })),
+  grid("c2", panel("Token Usage by Agent", "/ai/usage · month to date", async () => table((await api("/api/v1/ai/usage")).by_agent, [{ h: "agent", v: "agent_id", l: true }, { h: "calls", v: "calls" }, { h: "prompt", v: (r) => big(r.prompt_tokens) }, { h: "cached", v: (r) => big(r.cached_tokens) }, { h: "output", v: (r) => big(r.completion_tokens) }, { h: "reasoning", v: (r) => big(r.reasoning_tokens) }, { h: "₹", v: (r) => f(r.cost_inr, 3) }]), { tight: true, empty: "no Grok calls this month" }),
+    panel("Recent Errors", "/ai/usage · non-OK provider calls", async () => table((await api("/api/v1/ai/usage")).recent_errors, [{ h: "at", v: (r) => ts(r.at), l: true }, { h: "agent", v: "agent_id", l: true }, { h: "model", v: "model", l: true }, { h: "status", v: (r) => tag(r.status, "dn") }, { h: "error", v: "error", l: true, w: true }]), { tight: true, empty: "no errors" })),
+  panel("Unverified Integrations", "honest status", async () => el("div", {}, (await api("/api/v1/system/status")).unverified_integrations.map((u) => el("div", { class: "cl" }, tag("UNVERIFIED", "am"), " ", u))))];
+V["15"] = () => { const on = el("input", { type: "checkbox" }), fl = el("input", { type: "checkbox" }), nt = el("input", { placeholder: "note (audited)", maxlength: 500 }), lim = el("input", { type: "number", min: 1, max: HARD_CAP, step: 1, placeholder: "₹ ≤ 3000" }), unf = el("input", { type: "checkbox" }), bn = el("input", { placeholder: "note" });
+  return [grid("c2",
+    panel("Identity", "/auth/whoami", async () => { const w = await api("/api/v1/auth/whoami"); return kv([["Actor", w.actor, "sm"], ["Role", w.role, "am sm"], ["Dev mode", w.dev_mode ? "YES" : "NO", "sm"]]); }),
+    panel("Kill Switch", "POST /admin/kill-switch · admin", async () => el("div", { class: "frm" }, el("label", {}, on, "engage"), el("label", {}, fl, "flatten paper positions"), nt, el("button", { class: "dng", onclick: () => act(() => post("/api/v1/admin/kill-switch", { on: on.checked, flatten: fl.checked, note: nt.value || null }), "kill switch updated") }, "Apply")), { live: false }),
+    panel("Grok Budget Limit", "POST /ai/budget · admin · server refuses > ₹3,000", async () => el("div", { class: "frm" }, lim, el("label", {}, unf, "unfreeze month"), bn, el("button", { class: "pri", onclick: () => { const v = Number(lim.value); if (!(v > 0 && v <= HARD_CAP)) { toast("limit must be 1–3000", true); return; } act(() => post("/api/v1/ai/budget", { hard_limit_inr: v, unfreeze: unf.checked, note: bn.value || null }), "budget updated"); } }, "Set")), { live: false }),
+    panel("Scoring", "POST /ai/scoring/run · admin", async () => el("div", { class: "frm" }, el("button", { onclick: () => act(() => post("/api/v1/ai/scoring/run"), "scoring run complete") }, "Resolve predictions & score"), el("span", { class: "mu" }, "Deterministic; no LLM calls.")), { live: false }),
+    panel("Session Key", "this tab only (sessionStorage)", async () => el("div", { class: "frm" }, el("button", { onclick: keyDialog }, "Change key"), el("button", { class: "dng", onclick: () => { key = ""; sessionStorage.removeItem("doi_key"); refreshAll(); } }, "Forget key")), { live: false }),
+    panel("Safety Guarantees", "enforced by backend", async () => el("div", {}, ["No live broker execution route exists; the API has no order route outside the paper simulator.", "AI agents cannot submit orders. Recommendations wait for a human approver, then the deterministic RiskGate re-checks before the paper engine.", "Grok spend is reserved before each call and capped in the database (₹3,000/month hard limit).", "Kill switch persists across restarts and halts polling, AI meetings and new paper orders."].map((t) => el("div", { class: "cl" }, tag("ENFORCED", "am"), " ", t))), { live: false }))]; };
+
+// ---------- router / boot
+function keyDialog() { const i = el("input", { type: "password", placeholder: "API key", autocomplete: "off" }); dialog("API key (kept in this tab only)", [i, el("div", { class: "mu" }, "Stored in sessionStorage; sent only as a Bearer header to this origin.")], [el("button", { class: "pri", onclick: () => { key = i.value.trim(); sessionStorage.setItem("doi_key", key); closeDlg(); S.und = null; refreshAll(); show(); } }, "Use key")]); setTimeout(() => i.focus(), 0); }
+function show() {
+  const [sec = "01", arg] = location.hash.replace(/^#\/?/, "").split("/");
+  const id = SECTIONS.some(([n]) => n === sec) ? sec : "01";
+  for (const a of $("nav").querySelectorAll("a")) a.classList.toggle("act", a.dataset.s === id);
+  LIVE = [];
+  const name = SECTIONS.find(([n]) => n === id)[1];
+  const body = V[id](arg);
+  $("main").replaceChildren(el("div", { class: "sh" }, el("h1", {}, el("span", {}, id), name), el("div", { class: "ctl" }, el("span", { class: "paper" }, "PAPER MODE"), el("button", { onclick: refreshAll }, "↻ Refresh"))), ...body);
+  $("wm").style.display = V[id].wm ? "flex" : "none";
+  if (V[id].after) V[id].after();
+}
+for (const [n, t] of SECTIONS) $("nav").append(el("a", { href: "#/" + n, "data-s": n, title: t }, el("span", { class: "nn" }, n), el("span", { class: "nl" }, t)));
+$("rail").addEventListener("click", () => $("nav").classList.toggle("c"));
+$("h-user").addEventListener("click", keyDialog);
+$("h-ntf").addEventListener("click", () => { $("ntf").style.display = $("ntf").style.display === "block" ? "none" : "block"; });
+$("ks").addEventListener("click", () => { const want = !killOn(); const fl = el("input", { type: "checkbox" }), nt = el("input", { placeholder: "note (audited)", maxlength: 500 });
+  dialog(want ? "ENGAGE KILL SWITCH" : "RELEASE KILL SWITCH", [el("div", { class: "mu" }, want ? "Halts chain polling, AI meetings and new paper orders. Requires admin role." : "Resumes deterministic polling and paper engine. Requires admin role."), want ? el("label", { class: "frm" }, fl, "also flatten paper positions") : null, nt],
+    [el("button", { class: want ? "dng" : "pri", onclick: () => { closeDlg(); act(() => post("/api/v1/admin/kill-switch", { on: want, flatten: fl.checked, note: nt.value || null }), "kill switch " + (want ? "engaged" : "released")); } }, want ? "Engage" : "Release")]); });
+$("dlg").addEventListener("click", (e) => { if (e.target === $("dlg")) closeDlg(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") { closeDlg(); $("ntf").style.display = "none"; } });
+window.addEventListener("hashchange", show);
+refreshShell().then(show);
+setInterval(refreshShell, 15000);
+setInterval(() => { if (document.visibilityState === "visible") for (const p of LIVE) if (p.isConnected) p.refresh(); }, 15000);
 </script>
 </body>
 </html>

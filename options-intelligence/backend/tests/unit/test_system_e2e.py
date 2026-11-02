@@ -56,6 +56,9 @@ def test_full_research_to_paper_flow(pg_dsn):
     assert asyncio.run(pump_once(rt)) == 1 and next(iter(rt.paper.orders.values())).filled_qty == 150
     d = c.get(f"/api/v1/ai/meetings/{m['id']}", headers=k["viewer"]).json()
     assert d["recommendation"]["status"] == "SUBMITTED" and len(d["turns"]) == 11 and d["evidence"]
+    sm = d["summary"]
+    assert sm["panel_size"] == 15 and len(sm["agents"]) == 15 and sm["final_action"] == "RECOMMEND_PAPER"
+    assert sm["label"] in ("STRONG BULLISH", "BULLISH", "NEUTRAL", "BEARISH", "STRONG BEARISH", "WAIT")
     assert rt.approvals.verify() >= 1
     st = c.get("/api/v1/system/status", headers=k["viewer"]).json()
     assert st["mode"] == "RESEARCH_AND_PAPER_ONLY" and st["live_broker_execution"] == "NOT_IMPLEMENTED"
@@ -66,6 +69,18 @@ def test_full_research_to_paper_flow(pg_dsn):
     assert float(st["ai"]["budget"]["spent_inr"]) > 0 and st["session"]["state"] in ("PRE-OPEN", "OPEN", "CLOSED")
     u = c.get("/api/v1/ai/usage", headers=k["viewer"]).json()
     assert sum(float(a["cost_inr"]) for a in u["by_agent"]) > 0 and isinstance(u["recent_errors"], list)
+    port = c.get("/api/v1/paper/portfolio", headers=k["viewer"]).json()["positions"][0]
+    assert port["side"] == "LONG" and port["option_type"] == "CE" and "unrealized" in port and "charges" in port
+    for path in (
+        "/api/v1/ai/predictions",
+        "/api/v1/research/strategies",
+        "/api/v1/research/experiments",
+        "/api/v1/research/option-backtests",
+    ):
+        assert isinstance(c.get(path, headers=k["viewer"]).json(), list), path
+    assert len(c.get("/api/v1/ai/predictions", headers=k["viewer"]).json()) >= 1
+    an = c.get("/api/v1/paper/analytics", headers=k["viewer"]).json()
+    assert an["trades"] == 0 and an["win_rate"] is None
     eq = c.get("/api/v1/paper/equity-curve", headers=k["viewer"]).json()
     assert float(eq["starting_capital"]) > 0 and eq["points"] == []
     met = c.get("/metrics", headers=k["viewer"]).text
@@ -81,6 +96,10 @@ def test_dashboard_is_static_and_safe(pg_dsn):
     assert r.status_code == 200 and "Bull50 Research Desk" in r.text
     assert "innerHTML" not in r.text.replace("never uses innerHTML", "") and "localStorage" not in r.text
     assert "frame-ancestors 'none'" in r.headers["content-security-policy"]
+    for sec in ("Command Center", "Options Intelligence", "AI Investment Committee", "Paper Trading", "System Monitoring", "Administration"):
+        assert sec in r.text
+    assert 'id="ks"' in r.text and 'id="h-meter"' in r.text and "PAPER MODE — NO LIVE EXECUTION" in r.text  # global shell
+    assert "XAI_API_KEY" not in r.text and "access-token" not in r.text and "/live" not in r.text
 
 
 def test_grok_outage_never_touches_market_data_or_paper(pg_dsn):
@@ -129,3 +148,18 @@ def test_kill_switch_blocks_ai_and_paper_entries(pg_dsn):
         assert conn.execute("SELECT status, skip_reason FROM ai_events").fetchone() == ("SKIPPED", "kill switch engaged")
         assert conn.execute("SELECT count(*) FROM llm_calls WHERE status = 'OK'").fetchone()[0] == 0
     _ = datetime.now(UTC)
+
+
+def test_paper_analytics_math():
+    from datetime import timedelta
+    from decimal import Decimal as D
+    from types import SimpleNamespace as N
+
+    from doi.app.views_routes import paper_analytics
+
+    t0 = datetime(2026, 11, 2, 5, tzinfo=UTC)
+    tr = [N(closed_at=t0 + timedelta(minutes=i), net_pnl=D(v), gross_pnl=D(v) + 10, charges=D(10), underlying_key="NIFTY", exit_reason="STOP")
+          for i, v in enumerate(("100", "-300", "50"))]  # fmt: skip
+    a = paper_analytics(tr, D(1000))
+    assert a["trades"] == 3 and a["wins"] == 2 and a["net_pnl"] == D(-150) and a["charges"] == D(30)
+    assert a["max_drawdown"] == D(300) and a["by_underlying"]["NIFTY"]["trades"] == 3

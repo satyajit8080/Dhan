@@ -296,4 +296,7 @@ def create_app(settings: Settings | None = None, runtime: Runtime | None = None)
     app.include_router(ops_router)
 
     app.include_router(research_router)
+    from doi.app.views_routes import router as views_router
+
+    app.include_router(views_router)
     return app

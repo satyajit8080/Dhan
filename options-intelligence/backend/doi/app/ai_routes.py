@@ -124,7 +124,11 @@ async def meeting(request: Request, meeting_id: str, who: Principal = Depends(re
     d = await asyncio.to_thread(meeting_detail, rt.ai.store, meeting_id)
     if d is None:
         raise HTTPException(404, "meeting not found")
-    return jsonable_encoder(d)
+    from doi.ai.committee_view import summarize
+
+    d = jsonable_encoder(d)
+    d["summary"] = summarize(d)
+    return d
 
 
 @router.get("/recommendations")
