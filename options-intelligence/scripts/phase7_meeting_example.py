@@ -26,11 +26,21 @@ from tests.unit.test_meetings import ctx  # noqa: E402
 
 
 def bear(ev):
-    return {"stance": "BEAR", "confidence": 4, "claims": [claim(ev, ("oi",))], "prediction": {"target": "INDEX", "direction": "DOWN", "horizon_min": 30}}
+    return {
+        "stance": "BEAR",
+        "confidence": 4,
+        "claims": [claim(ev, ("oi",))],
+        "prediction": {"target": "INDEX", "direction": "DOWN", "horizon_min": 30},
+    }
 
 
 def veto(ev):
-    return {"veto": True, "confidence": 4, "flaws": [claim(ev, ("liquidity", "volatility"))], "kill_criteria": [claim(ev, ("oi",))]}
+    return {
+        "veto": True,
+        "confidence": 4,
+        "flaws": [claim(ev, ("liquidity", "volatility"))],
+        "kill_criteria": [claim(ev, ("oi",))],
+    }
 
 
 async def one(title: str, overrides: dict, **kw) -> str:
@@ -59,7 +69,13 @@ async def main() -> None:
     parts.append(await one("A. Consensus: recommendation goes to the human approval queue", {}))
     parts.append(await one("B. Specialists disagree: rebuttal round recorded", {"options_flow": bear}))
     parts.append(await one("C. Contrarian veto with no CIO rebuttal: downgraded to WATCH", {"contrarian": veto}))
-    parts.append(await one("D. Deterministic RiskGate rejects: risk veto beats the CIO", {}, risk_dry_run={"approved": False, "reasons": ["spread: 3.1% (max 1.0%)"]}))
+    parts.append(
+        await one(
+            "D. Deterministic RiskGate rejects: risk veto beats the CIO",
+            {},
+            risk_dry_run={"approved": False, "reasons": ["spread: 3.1% (max 1.0%)"]},
+        )
+    )
     (ROOT / "docs" / "phase7-meeting-example.md").write_text("\n".join(parts))
     print("wrote docs/phase7-meeting-example.md")
 

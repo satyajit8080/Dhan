@@ -29,8 +29,14 @@ class RedactingFilter(logging.Filter):
         return _HEADER.sub(lambda m: f"{m.group(1)}{m.group(2)}***", text)
 
     def filter(self, record: logging.LogRecord) -> bool:
-        record.msg = self.redact(record.getMessage())
-        record.args = ()
+        # Redact the template and each argument in place. Keeping the args matters: formatters
+        # such as uvicorn's access log unpack record.args (found in the Phase 8 deployment drill).
+        if isinstance(record.msg, str):
+            record.msg = self.redact(record.msg)
+        if isinstance(record.args, tuple):
+            record.args = tuple(self.redact(a) if isinstance(a, str) else a for a in record.args)
+        elif isinstance(record.args, dict):
+            record.args = {k: self.redact(v) if isinstance(v, str) else v for k, v in record.args.items()}
         return True
 
 
@@ -42,4 +48,38 @@ def configure_logging(level: str = "INFO", secrets: list[str] | None = None) -> 
     root = logging.getLogger()
     root.handlers[:] = [handler]
     root.setLevel(level)
+    return flt
+
+
+def settings_secrets(settings) -> list[str]:
+    """Every configured secret value, including the password inside DATABASE_URL."""
+    import re as _re
+
+    out = []
+    for name in ("xai_api_key", "dhan_access_token", "database_url"):
+        v = getattr(settings, name, None)
+        if v is not None:
+            raw = v.get_secret_value()
+            out.append(raw)
+            m = _re.search(r"://[^:/@]+:([^@]+)@", raw) or _re.search(r"password=([^\s]+)", raw)
+            if m:
+                out.append(m.group(1))
+    return out
+
+
+def install_redaction(
+    secrets: list[str], logger_names: tuple[str, ...] = ("", "uvicorn", "uvicorn.error", "uvicorn.access")
+) -> RedactingFilter:
+    """Attach one redacting filter to every handler of the given loggers (API process).
+    Loggers without handlers get a redacting stream handler so nothing bypasses it."""
+    flt = RedactingFilter(secrets)
+    for name in logger_names:
+        lg = logging.getLogger(name)
+        if not lg.handlers and name == "":
+            h = logging.StreamHandler()
+            h.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s"))
+            lg.addHandler(h)
+        for h in lg.handlers:
+            h.addFilter(flt)
+        lg.addFilter(flt)
     return flt

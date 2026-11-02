@@ -96,7 +96,11 @@ def create_app(settings: Settings | None = None, runtime: Runtime | None = None)
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         if getattr(app.state, "runtime", None) is None:
-            app.state.runtime = await build_runtime(settings or Settings.from_env())
+            from doi.core.logging import install_redaction, settings_secrets
+
+            s = settings or Settings.from_env()
+            install_redaction(settings_secrets(s))
+            app.state.runtime = await build_runtime(s)
         rt = app.state.runtime
         tasks = []
         if rt.paper is not None and rt.provider is not None:

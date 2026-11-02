@@ -124,7 +124,7 @@ def test_tokens_redacted_and_cli(pg_dsn, monkeypatch, capsys):
     flt = RedactingFilter()
     rec = logging.LogRecord("x", logging.INFO, "f", 1, "Authorization: Bearer doi_abcdefgh12345678", (), None)
     flt.filter(rec)
-    assert "doi_abcdefgh12345678" not in rec.msg
+    assert "doi_abcdefgh12345678" not in rec.getMessage()
     monkeypatch.setenv("DATABASE_URL", pg_dsn)
     assert main(["create-key", "--email", "cli@x", "--role", "viewer"]) == 0
     out = capsys.readouterr().out

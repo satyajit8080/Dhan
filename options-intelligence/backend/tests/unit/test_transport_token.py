@@ -123,4 +123,10 @@ def test_log_redaction():
     jwt = _jwt(datetime.now(UTC))
     rec = logging.LogRecord("x", logging.INFO, "f", 1, "t=%s jwt=%s access-token: zzzz9999 pin=1234", (TOKEN, jwt), None)
     flt.filter(rec)
-    assert TOKEN not in rec.msg and jwt not in rec.msg and "zzzz9999" not in rec.msg and "1234" not in rec.msg
+    out = rec.getMessage()  # the final rendered message is what reaches a sink
+    assert TOKEN not in out and jwt not in out and "zzzz9999" not in out and "1234" not in out
+    access = logging.LogRecord(
+        "uvicorn.access", logging.INFO, "f", 1, '%s - "%s %s HTTP/%s" %d', ("127.0.0.1", "GET", "/x?t=" + TOKEN, "1.1", 200), None
+    )
+    flt.filter(access)
+    assert len(access.args) == 5 and TOKEN not in access.getMessage()  # formatter-compatible args survive

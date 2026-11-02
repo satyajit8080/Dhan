@@ -14,10 +14,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
 
-from doi.app.runtime import build_runtime  # noqa: E402
-from doi.core.config import Settings  # noqa: E402
-from doi.core.errors import DoiError  # noqa: E402
-from doi.core.logging import configure_logging  # noqa: E402
+from doi.app.runtime import build_runtime
+from doi.core.config import Settings
+from doi.core.errors import DoiError
+from doi.core.logging import configure_logging
 
 
 async def main() -> int:
