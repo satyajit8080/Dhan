@@ -151,3 +151,36 @@ async def set_budget(request: Request, body: BudgetIn, who: Principal = Depends(
     await asyncio.to_thread(rt.approvals.append, who, "BUDGET_CHANGE", "llm_budget", "current_month", body.note,
                             {"hard_limit_inr": body.hard_limit_inr, "unfreeze": body.unfreeze})  # fmt: skip
     return {"ok": True}
+
+
+@router.get("/leaderboard")
+async def ai_leaderboard(request: Request, mode: str = "LIVE", by_version: bool = False, min_n: int = 30,
+                         who: Principal = Depends(requires("viewer"))):  # fmt: skip
+    rt = _ai(request)
+    if rt.paper_store is None:
+        raise HTTPException(503, "leaderboard requires DATABASE_URL")
+    from doi.ai.scoring import PgScoring
+
+    if mode not in ("LIVE", "REPLAY"):
+        raise HTTPException(422, "mode must be LIVE or REPLAY")
+    rows = await asyncio.to_thread(PgScoring(rt.paper_store.dsn).leaderboard, mode, min_n=max(1, min_n), by_version=by_version)
+    names = {a.id: a.name for a in AGENTS}
+    for r in rows:
+        r["name"] = names.get(r["agent_id"], r["agent_id"])
+    return jsonable_encoder({"mode": mode, "min_n_for_rank": min_n, "agents": rows,
+                             "unscored_agents": sorted(set(names) - {r["agent_id"] for r in rows})})  # fmt: skip
+
+
+@router.post("/scoring/run")
+async def run_scoring(request: Request, who: Principal = Depends(requires("admin"))):
+    rt = _ai(request)
+    if rt.paper_store is None:
+        raise HTTPException(503, "scoring requires DATABASE_URL")
+    from doi.ai.scoring import PgScoring
+
+    sc = PgScoring(rt.paper_store.dsn)
+    now = datetime.now(UTC)
+    ids = {k: v.security_id for k, v in rt.universe.items()}
+    resolved = await asyncio.to_thread(sc.resolve_due, now, ids)
+    snap = await asyncio.to_thread(sc.snapshot, now, "LIVE")
+    return {"resolved": resolved, "scorecards_written": snap}

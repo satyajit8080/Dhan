@@ -427,13 +427,12 @@ class MeetingEngine:
 
     async def _predictions(self, mid: str, ctx: MeetingContext, turns: list[AgentTurn], now: datetime) -> list[str]:
         """Pre-register every directional view BEFORE its outcome exists."""
+        # Reference = index LTP (forward - basis): the same quantity the scorer later observes.
         ref = None
         if ctx.features is not None:
-            for name in ("forward", "ema_9"):
-                fv = ctx.features.values.get(name)
-                if fv is not None and fv.value is not None:
-                    ref = fv.value
-                    break
+            fw, basis = ctx.features.values.get("forward"), ctx.features.values.get("forward_basis")
+            if fw is not None and basis is not None and fw.value is not None and basis.value is not None:
+                ref = fw.value - basis.value
         if ref is None:
             return []
         ids = []

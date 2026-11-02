@@ -266,6 +266,11 @@ class AIWorker:
         while True:
             now = datetime.now(UTC)
             try:
+                if self.rt.paper_store is not None:  # resolve pre-registered predictions from recorded data
+                    from doi.ai.scoring import PgScoring
+
+                    ids = {k: v.security_id for k, v in self.rt.universe.items()}
+                    await asyncio.to_thread(PgScoring(self.rt.paper_store.dsn).resolve_due, now, ids)
                 await self.observe(now)
                 while await self.process_one(datetime.now(UTC)) is not None:
                     pass
