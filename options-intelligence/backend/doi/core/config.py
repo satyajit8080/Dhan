@@ -33,6 +33,16 @@ class Settings(BaseModel):
     paper_feed_interval_s: float = 3.0
     dhan_feed_enabled: bool = False
     holidays_file: Path | None = DEFAULT_HOLIDAYS
+    # Phase 7 AI research (off unless explicitly enabled AND a key is configured)
+    ai_enabled: bool = False
+    xai_api_key: SecretStr | None = None
+    xai_base_url: str = "https://api.x.ai/v1"
+    llm_fast_model: str = "grok-4.20-non-reasoning"
+    llm_reasoning_model: str = "grok-4.20-reasoning"
+    llm_monthly_limit_inr: float = 3000.0
+    llm_safety_buffer_inr: float = 150.0
+    llm_fx_inr_per_usd: float = 90.0
+    llm_tax_multiplier: float = 1.18
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> Settings:
@@ -56,6 +66,15 @@ class Settings(BaseModel):
             "paper_feed_interval_s": "PAPER_FEED_INTERVAL_S",
             "dhan_feed_enabled": "DHAN_FEED_ENABLED",
             "holidays_file": "HOLIDAYS_FILE",
+            "ai_enabled": "AI_ENABLED",
+            "xai_api_key": "XAI_API_KEY",
+            "xai_base_url": "XAI_BASE_URL",
+            "llm_fast_model": "LLM_FAST_MODEL",
+            "llm_reasoning_model": "LLM_REASONING_MODEL",
+            "llm_monthly_limit_inr": "LLM_MONTHLY_LIMIT_INR",
+            "llm_safety_buffer_inr": "LLM_SAFETY_BUFFER_INR",
+            "llm_fx_inr_per_usd": "LLM_FX_INR_PER_USD",
+            "llm_tax_multiplier": "LLM_TAX_MULTIPLIER",
         }
         data = {f: env[k] for f, k in fields.items() if env.get(k)}
         return cls(**data)

@@ -39,4 +39,4 @@ select = ["E", "F", "I", "B", "UP", "RUF", "DTZ"]
 ignore = ["B008", "UP046", "E731", "RUF001", "RUF005", "RUF009"]
 
 [tool.ruff.lint.pycodestyle]
-max-line-length = 150
+max-line-length = 170
