@@ -58,8 +58,17 @@ async def main() -> int:
     calls = MemoryCallLog()
     gw = LLMGateway(client, MemoryBudget(RUN_CAP_INR, Decimal("2")), calls, prices=book, enabled=True)
 
-    r = await gw.complete(LLMRequest(purpose="live:probe", system="Reply with the JSON object {\"ok\": true} only.", user="ping", max_tokens=20))
-    out("probe", ok=True, model=r.model, usage=r.usage.__dict__, cost_inr=r.cost_inr, provider_cost_reported=r.usage.cost_ticks is not None)
+    r = await gw.complete(
+        LLMRequest(purpose="live:probe", system='Reply with the JSON object {"ok": true} only.', user="ping", max_tokens=20)
+    )
+    out(
+        "probe",
+        ok=True,
+        model=r.model,
+        usage=r.usage.__dict__,
+        cost_inr=r.cost_inr,
+        provider_cost_reported=r.usage.cost_ticks is not None,
+    )
 
     from tests.unit.test_meetings import ctx  # SIMULATED evidence pack (clearly labelled)
 
@@ -67,12 +76,22 @@ async def main() -> int:
     from doi.ai.evidence import build_pack
 
     pack = build_pack(as_of=c.features.as_of, underlying_key="NIFTY", event={"kind": "LIVE_CHECK", "evidence": "SIMULATED"}, features=c.features,
-                      extra={"proposal": c.proposal, "risk": c.risk_dry_run, "calendar": {"status": "UNVERIFIED_SOURCE"}, "breadth": {"status": "NO_SOURCE"}})  # fmt: skip
+                      extra={"proposal": c.proposal, "risk": c.risk_dry_run, "calendar": {"status": "UNVERIFIED_SOURCE"},
+                             "breadth": {"status": "NO_SOURCE"}})  # fmt: skip
     for a in AGENTS:
-        t = await run_agent(a, pack, gw, task="Live validation: give your assessment.", turns=[{"agent": "regime", "stance": "NEUTRAL"}])
+        t = await run_agent(
+            a, pack, gw, task="Live validation: give your assessment.", turns=[{"agent": "regime", "stance": "NEUTRAL"}]
+        )
         out("agent", agent=a.id, status=t.status, errors=list(t.errors)[:3], cost_inr=t.cost_inr)
     m = await MeetingEngine(gw, MemoryMeetingStore()).run(c, c.features.as_of)
-    out("meeting", status=m.status, final_action=m.final_action, abort_reason=m.abort_reason, overrides=m.overrides, cost_inr=m.cost_inr)
+    out(
+        "meeting",
+        status=m.status,
+        final_action=m.final_action,
+        abort_reason=m.abort_reason,
+        overrides=m.overrides,
+        cost_inr=m.cost_inr,
+    )
     ok_rows = [x for x in calls.rows if x["status"] == "OK"]
     ticks = [x for x in ok_rows if x.get("cost_source") == "PROVIDER_TICKS"]
     st = gw.budget.status()
