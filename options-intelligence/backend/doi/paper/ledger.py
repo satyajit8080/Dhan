@@ -12,12 +12,11 @@ import dataclasses
 import hashlib
 import json
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import datetime
 from decimal import Decimal
-from enum import Enum
 from pathlib import Path
-from typing import Any
 
+from doi.core.canonical import canonical
 from doi.core.errors import DoiError
 
 GENESIS = "0" * 64
@@ -25,24 +24,6 @@ GENESIS = "0" * 64
 
 class LedgerCorrupt(DoiError):
     pass
-
-
-def _default(o: Any) -> Any:
-    if isinstance(o, Decimal):
-        return str(o)
-    if isinstance(o, (datetime, date)):
-        return o.isoformat()
-    if isinstance(o, Enum):
-        return o.value
-    if dataclasses.is_dataclass(o) and not isinstance(o, type):
-        return {f.name: getattr(o, f.name) for f in dataclasses.fields(o)}
-    if isinstance(o, (set, frozenset, tuple)):
-        return list(o)
-    raise TypeError(f"not serialisable: {type(o).__name__}")
-
-
-def canonical(obj: Any) -> str:
-    return json.dumps(obj, default=_default, sort_keys=True, separators=(",", ":"))
 
 
 @dataclass(frozen=True, slots=True)

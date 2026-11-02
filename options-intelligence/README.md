@@ -18,7 +18,8 @@ It is self-contained so it can move to its own repository unchanged (`git subtre
 | 6.1 Persistence | done | PostgreSQL (`migrations/002_paper_persistence.sql`) holds accounts, cash book, the hash-chained ledger, submissions, orders, fills, positions and trades. Each engine operation is saved in one transaction with an optimistic version lock, a ledger-chain continuity check and an SQL cash re-sum. At start-up the app migrates, loads, reconciles and recovers |
 | 6.2 Reliability | done | `PaperExecution.recover`, `doi/paper/reconcile.py` (an independent ledger projection compared against state), positions carried over a restart or holiday are squared off at the next open, and the holiday calendar is in `doi/core/holidays.yaml` (partial, see below) |
 | 6.3 Integration | done, needs a live run | Chain polling and the `doi/data/dhan/collector.py` Live Market Feed (v2 binary, full packet with depth, reconnect with jitter, auth disconnects are fatal) both feed the persisted engine through `PaperService`. The feed is off by default (`DHAN_FEED_ENABLED`) |
-| 4, 5, 7, 8 | not started | Analytics, signal engine, backtests, dashboard |
+| 7.0A Feature engine | done | `doi/analytics/` holds the pure technical, Black-76 and option-chain functions. `doi/intelligence/feature_engine/` holds the versioned config, the feature declarations (inputs, lookback, warm-up, null policy, publication time), `FeatureEngine.calculate()`, which returns an immutable `FeatureVector` with per-feature provenance and a SHA-256 digest, and `FeatureStore`, which writes once to `market_features`. It drops all data not yet known at `as_of`, and tests enforce this |
+| 4 (rest), 5, 7, 8 | not started | Analytics, signal engine, backtests, dashboard |
 
 ## Layout
 
