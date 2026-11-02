@@ -2,11 +2,14 @@
 
 Last commit: Grok client aligned with official xAI docs (1def955). 257 tests pass.
 
-## Can do now (no credentials needed, ~1-2 h)
-1. Recalculate the per-meeting cost estimate with the verified Grok prices, and update docs/phase7-deployment.md and docs/phase8-validation.md.
-2. Check the Dhan docs (dhanhq.co, now reachable): history depth, intraday look-back, WebSocket behaviour.
-3. Fetch the official NSE circular NSE/FA/73061 and the 2026 holiday list. NSE blocks plain curl, so retry with a browser user-agent, then mark them verified.
-4. Record the live findings in docs/phase8-validation.md: real master index ids (13/25/27/51/69), lot sizes and verified xAI prices.
+## Done 2026-11-02
+- Per-meeting cost recalculated with verified Grok prices (≈ ₹4.2/meeting, ≈ ₹280/month) — docs updated.
+- Dhan docs checked: intraday 5 years look-back, ≤ 90 days per request (now enforced); expired options ≤ 30 days per call, ATM ±10; WebSocket ≤ 5 connections × 5,000 instruments, ≤ 100 per message, server ping every 10 s; option chain 1 unique request / 3 s. All match the code.
+- Live findings recorded in docs/phase8-validation.md.
+- Backend display analytics added: option-chain `analytics` (Black-76 IV/Greeks, PCR, Max Pain, walls), `session` in system status, `/api/v1/ai/usage`, `/api/v1/paper/equity-curve`.
+
+## Still open (blocked)
+3. Official NSE circular NSE/FA/73061 and 2026 holiday list: NSE site blocks automated fetches (bot protection); download manually and confirm.
 
 ## Needs credentials
 5. Run `XAI_API_KEY=... python scripts/grok_live_check.py` (capped at ₹20).

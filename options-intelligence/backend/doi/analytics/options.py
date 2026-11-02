@@ -156,3 +156,58 @@ def liquidity(rows: Sequence[ChainRow]) -> LiquidityStats:
 
 def discount_factor(rate: float, t: float) -> float:
     return math.exp(-rate * max(t, 0.0))
+
+
+def _b76_leg(
+    leg: OptionLeg | None, f: float | None, k: float, t: float | None, df: float, rate: float, is_call: bool
+) -> dict | None:
+    p = leg_price(leg)
+    if p is None or f is None or t is None:
+        return None
+    iv = black76.implied_vol(p, f, k, t, df, is_call)
+    if iv is None:
+        return None
+    g = black76.greeks(f, k, t, iv, df, is_call, rate)
+    return {"iv": iv, "delta": g.delta, "gamma": g.gamma, "theta": g.theta, "vega": g.vega}
+
+
+def chain_summary(
+    rows: Sequence[ChainRow], spot: float | None, t: float | None, rate: float, band_pct: float, walls: int = 3
+) -> dict:
+    """Display-ready chain analytics. Greeks/IV are Black-76 from two-sided mids (never vendor values);
+    PCR is None when the call side is zero. Every field may be None when inputs are missing."""
+    df = discount_factor(rate, t or 0.0)
+    fwd, n_parity = implied_forward(rows, spot, df, band_pct) if spot else (None, 0)
+    center = fwd or spot
+    atm = atm_strike(rows, center) if center else None
+    per_row = []
+    for r in sorted(rows, key=lambda x: x.strike):
+        per_row.append({"strike": r.strike, "ce": _b76_leg(r.ce, center, r.strike, t, df, rate, True),
+                        "pe": _b76_leg(r.pe, center, r.strike, t, df, rate, False)})  # fmt: skip
+    atm_row = next((x for x in per_row if x["strike"] == atm), None)
+    atm_ivs = [x["iv"] for x in ((atm_row or {}).get("ce"), (atm_row or {}).get("pe")) if x]
+
+    def top(side: str) -> list[dict]:
+        legs = [(getattr(r, side).oi or 0, r.strike) for r in rows if getattr(r, side) is not None]
+        return [{"strike": k, "oi": oi} for oi, k in sorted(legs, key=lambda x: (-x[0], x[1]))[:walls] if oi > 0]
+
+    return {
+        "method": "black76_mid@1",
+        "rate": rate,
+        "time_to_expiry_years": t,
+        "days_to_expiry": None if t is None else t * 365,
+        "forward": fwd,
+        "parity_strikes": n_parity,
+        "atm_strike": atm,
+        "atm_iv": statistics.mean(atm_ivs) if atm_ivs else None,
+        "pcr_oi": pcr(rows, "oi"),
+        "pcr_volume": pcr(rows, "volume"),
+        "max_pain": max_pain(rows),
+        "total_ce_oi": _sum(rows, "ce", "oi"),
+        "total_pe_oi": _sum(rows, "pe", "oi"),
+        "total_ce_volume": _sum(rows, "ce", "volume"),
+        "total_pe_volume": _sum(rows, "pe", "volume"),
+        "ce_walls": top("ce"),
+        "pe_walls": top("pe"),
+        "rows": per_row,
+    }

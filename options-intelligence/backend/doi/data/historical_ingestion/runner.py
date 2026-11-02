@@ -101,8 +101,10 @@ class HistoricalIngestor:
         supported: bool = True,
         source_id: str = "dhan_rest",
     ) -> IngestResult:
-        """Index candles in bounded windows. Dhan's per-request window and
-        look-back limits are UNVERIFIED, so `window_days` is configurable."""
+        """Index candles in bounded windows. Dhan docs (dhanhq.co/docs/v2/historical-data, checked
+        2026-11-02): intraday look-back 5 years, at most 90 days per request."""
+        if not 1 <= window_days <= 90:
+            raise ValueError("window_days must be 1..90 (Dhan intraday per-request limit)")
         bars: list[Bar] = []
         d = start
         while d < end:

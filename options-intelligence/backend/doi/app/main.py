@@ -7,13 +7,14 @@ import asyncio
 import contextlib
 from contextlib import asynccontextmanager
 from dataclasses import asdict
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, time
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
+from doi.analytics import options as opt
 from doi.app.runtime import Runtime, build_runtime, set_kill_switch
 from doi.app.security import PaperRequest, requires, submit_paper
 from doi.core.auth import Principal
@@ -27,7 +28,9 @@ from doi.core.errors import (
     UpstreamError,
     UpstreamTimeout,
 )
+from doi.core.market import SessionCalendar
 from doi.core.models import UnderlyingRef
+from doi.intelligence.feature_engine.config import FeatureConfig
 from doi.paper.driver import run_forever
 from doi.paper.engine import PaperExecution
 from doi.paper.models import InvalidTransition
@@ -186,6 +189,9 @@ def create_app(settings: Settings | None = None, runtime: Runtime | None = None)
             "max_age_s": cfg.freshness.chain_max_age_s,
         }
         body["contract"] = jsonable_encoder(prof)
+        t = (SessionCalendar.at(expiry, time(15, 30)) - (snap.source_ts or snap.received_at)).total_seconds() / (365 * 86400)
+        fc = FeatureConfig()
+        body["analytics"] = opt.chain_summary(snap.rows, snap.underlying_ltp, t if t > 0 else None, fc.rate, fc.parity_band_pct)
         return body
 
     # ---- Paper trading: simulated only. Nothing here reaches a broker order API. ----
@@ -227,6 +233,16 @@ def create_app(settings: Settings | None = None, runtime: Runtime | None = None)
     @app.get("/api/v1/paper/trades")
     async def paper_trades(request: Request, who: Principal = Depends(requires("viewer"))):
         return jsonable_encoder(_paper(_rt(request)).trades)
+
+    @app.get("/api/v1/paper/equity-curve")
+    async def paper_equity_curve(request: Request, who: Principal = Depends(requires("viewer"))):
+        """Closed-trade equity path: starting capital plus cumulative net P&L (charges already deducted)."""
+        p = _paper(_rt(request))
+        eq, pts = p.starting_capital, []
+        for t in sorted(p.trades, key=lambda x: x.closed_at):
+            eq += t.net_pnl
+            pts.append({"at": t.closed_at, "net_pnl": t.net_pnl, "charges": t.charges, "equity": eq})
+        return jsonable_encoder({"starting_capital": p.starting_capital, "points": pts})
 
     @app.get("/api/v1/paper/ledger")
     async def paper_ledger(

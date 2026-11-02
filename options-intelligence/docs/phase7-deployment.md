@@ -94,9 +94,17 @@ All migrations from 003 onward are additive. 002 replaced the never-written plac
   Admission control also refuses events whenever the AI is unavailable.
 - Admins can lower the cap or unfreeze it via `POST /api/v1/ai/budget`. Raising it above `LLM_MONTHLY_LIMIT_INR` is refused, and every change is an approval record.
 
-**Cost estimate.** Measured with real prompt sizes and pessimistic seed prices: a full trade meeting (7 specialists plus contrarian, risk, CIO and compliance) costs about **₹11**. It breaks down as 9 fast-tier calls at about 1,050 prompt tokens (about ₹1.9) and 2 reasoning calls at about 2,360 prompt tokens plus 2,000 reasoning tokens (about ₹9.2).
+**Cost estimate (verified prices).** Official xAI prices (docs.x.ai/developers/models, checked 2026-11-02) for `grok-4.20-0309-non-reasoning` and `grok-4.20-0309-reasoning`: $1.25 input, $0.20 cached input, $2.50 output per 1M tokens (below 200k prompt tokens). At ₹90/USD × 1.18:
 
-With the default caps (3 trade meetings a day, cooldowns, 22 sessions), that is about ₹730 a month for trade meetings. The rest of the budget is headroom, and any overrun is enforced by the cap. These are estimates until xAI prices are verified.
+| Call | Tokens (measured prompt sizes) | Cost each | Count | Subtotal |
+|---|---|---|---|---|
+| Fast specialist | ~1,050 prompt + ~400 output | ≈ ₹0.25 | 9 | ≈ ₹2.2 |
+| Reasoning (risk, CIO) | ~2,360 prompt + ~2,000 reasoning + ~600 output | ≈ ₹1.00 | 2 | ≈ ₹2.0 |
+| **Full trade meeting** | | | | **≈ ₹4.2** |
+
+Worst-case reservation per reasoning call (16,000-token reasoning allowance) is ≈ ₹4.9, so a meeting reserves up to ≈ ₹12 before settling to actual cost.
+
+With the default caps (3 trade meetings a day, 22 sessions) that is ≈ ₹280 a month; even at the full reservation it stays below ₹800. The rest of the ₹3,000 is headroom, and the cap is enforced in the database. Actual billing is still to be reconciled with one live call (`scripts/grok_live_check.py`).
 
 ## 5. Failure handling (tested)
 
@@ -129,7 +137,7 @@ Verified from official sources reachable here:
 - **STT**: 0.15% from 1 Apr 2026, from several published broker schedules.
 
 **UNVERIFIED** (not reachable, or no credentials, in this environment):
-- docs.x.ai: the REST chat-completions request/response shape, which model names are live, current prices, and whether REST returns `cost_in_usd_ticks`.
+- Verified from docs.x.ai on 2026-11-02: REST `POST /v1/chat/completions` with `max_completion_tokens`, `GET /v1/models` price units, usage `prompt_tokens_details.cached_tokens` / `completion_tokens_details.reasoning_tokens`, model names and prices. Still unverified: a live call against our key.
 - dhanhq.co: history depth per endpoint, intraday look-back, option-chain OI unit, and live feed behaviour.
 - Completeness of the NSE/BSE 2026–27 holiday list.
 - The NSE options exchange charge (0.03503% vs about 0.03553%).

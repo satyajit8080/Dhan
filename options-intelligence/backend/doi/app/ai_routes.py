@@ -68,6 +68,32 @@ async def budget(request: Request, who: Principal = Depends(requires("viewer")))
     )  # fmt: skip
 
 
+def _usage(dsn: str) -> dict:
+    import psycopg
+
+    with psycopg.connect(dsn, connect_timeout=3) as c:
+        agents = c.execute(
+            "SELECT coalesce(agent_id, '(none)'), count(*), coalesce(sum(prompt_tokens),0), coalesce(sum(cached_tokens),0),"
+            " coalesce(sum(completion_tokens),0), coalesce(sum(reasoning_tokens),0), coalesce(sum(cost_inr),0)"
+            " FROM llm_calls WHERE created_at >= date_trunc('month', now() AT TIME ZONE 'Asia/Kolkata') AT TIME ZONE 'Asia/Kolkata'"
+            " GROUP BY 1 ORDER BY 7 DESC"
+        ).fetchall()
+        errors = c.execute(
+            "SELECT created_at, agent_id, model, status, left(coalesce(error,''), 200) FROM llm_calls"
+            " WHERE status NOT IN ('OK', 'CACHE_HIT') ORDER BY created_at DESC LIMIT 20"
+        ).fetchall()
+    cols = ("agent_id", "calls", "prompt_tokens", "cached_tokens", "completion_tokens", "reasoning_tokens", "cost_inr")
+    return {"by_agent": [dict(zip(cols, r, strict=True)) for r in agents],
+            "recent_errors": [dict(zip(("at", "agent_id", "model", "status", "error"), r, strict=True)) for r in errors]}  # fmt: skip
+
+
+@router.get("/usage")
+async def usage(request: Request, who: Principal = Depends(requires("viewer"))):
+    """Month-to-date token usage and cost per agent, plus recent non-OK provider calls."""
+    rt = _ai(request)
+    return jsonable_encoder(await asyncio.to_thread(_usage, rt.ai.budget.dsn))
+
+
 @router.post("/meetings", status_code=202)
 async def request_meeting(request: Request, body: MeetingIn, who: Principal = Depends(requires("approver"))):
     rt = _ai(request)

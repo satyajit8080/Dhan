@@ -89,3 +89,25 @@ def test_no_order_routes():
     assert "/api/v1/ai/recommendations/{rec_id}/approve" in paths
     assert not any(("order" in p and "paper" not in p) for p in paths)
     assert not any(w in p for p in paths for w in ("/live", "/broker", "/dhan/orders", "/execute"))
+
+
+def test_option_chain_analytics_backend_black76():
+    b = client().get("/api/v1/market/option-chain", params={"underlying": "NIFTY", "expiry": E1.isoformat()}).json()
+    a = b["analytics"]
+    assert a["method"] == "black76_mid@1" and len(a["rows"]) == len(b["rows"])
+    assert a["total_ce_oi"] >= 0 and a["total_pe_oi"] >= 0
+    assert a["pcr_oi"] is None or abs(a["pcr_oi"] - a["total_pe_oi"] / a["total_ce_oi"]) < 1e-9
+
+
+def test_session_state_and_pcr_zero():
+    from datetime import UTC, datetime
+
+    from doi.analytics.options import pcr
+    from doi.app.ops_routes import session_state
+    from doi.core.market import SessionCalendar
+
+    cal = SessionCalendar()
+    assert session_state(datetime(2026, 11, 2, 3, 35, tzinfo=UTC), cal)["state"] == "PRE-OPEN"  # 09:05 IST Monday
+    assert session_state(datetime(2026, 11, 2, 5, 0, tzinfo=UTC), cal)["state"] == "OPEN"
+    assert session_state(datetime(2026, 11, 1, 5, 0, tzinfo=UTC), cal)["state"] == "CLOSED"  # Sunday
+    assert pcr([]) is None

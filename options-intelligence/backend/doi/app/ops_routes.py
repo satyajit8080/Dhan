@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import UTC, datetime
+from datetime import UTC, datetime, time
 from pathlib import Path
 
 import psycopg
@@ -13,18 +13,31 @@ from fastapi.responses import HTMLResponse, PlainTextResponse
 
 from doi.app.security import requires
 from doi.core.auth import Principal
+from doi.core.market import IST, SessionCalendar
 
 router = APIRouter()
 DASHBOARD = Path(__file__).resolve().parent / "dashboard.html"
 CSP = "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'"
 
 UNVERIFIED = [
-    "xAI REST request/response shape and current model names/prices (docs.x.ai unreachable; usage/cost fields verified from xai-proto)",
-    "DhanHQ endpoint history depth and intraday look-back (dhanhq.co unreachable); OI unit = units confirmed live via Dhan MCP on 2026-11-02",
+    "Live Grok call against this deployment's key (docs.x.ai request shape, models and prices verified 2026-11-02)",
+    "Own-transport Dhan REST and WebSocket calls with this deployment's credentials (limits verified from dhanhq.co docs 2026-11-02)",
     "Dhan Live Market Feed packet layout (taken from official DhanHQ-py source, not live-tested)",
     "NSE/BSE holiday list and NSE options charge 0.03553% (NSE/FA/73061) are secondary-source verified; official NSE PDFs unreachable",
     "INR/USD rate and GST treatment used for Grok cost conversion",
 ]
+
+
+def session_state(now: datetime, cal: SessionCalendar) -> dict:
+    """Exchange session from the holiday-aware calendar. PRE-OPEN is 09:00-09:15 IST on trading days."""
+    local = now.astimezone(IST)
+    trading = cal.is_trading_day(local.date())
+    state = "CLOSED"
+    if trading and time(9, 0) <= local.time() < cal.open:
+        state = "PRE-OPEN"
+    elif cal.is_open(now):
+        state = "OPEN"
+    return {"state": state, "trading_day": trading, "ist": local.isoformat(timespec="seconds")}
 
 
 def _db_info(dsn: str) -> dict:
@@ -69,6 +82,7 @@ async def system_status(rt) -> dict:
         "mode": "RESEARCH_AND_PAPER_ONLY",
         "live_broker_execution": "NOT_IMPLEMENTED",
         "kill_switch": rt.kill_switch,
+        "session": session_state(now, rt.paper.cal if rt.paper else SessionCalendar()),
         "auth": "enforced" if rt.auth else "dev-mode (no database)",
         "market_data": {
             "provider_configured": rt.provider is not None,

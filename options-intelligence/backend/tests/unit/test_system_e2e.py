@@ -63,7 +63,11 @@ def test_full_research_to_paper_flow(pg_dsn):
         st["database"]["migration_version"] == __import__("doi.db.migrate", fromlist=["discover"]).discover()[-1][0]
         and st["paper"]["open_positions"] == 1
     )
-    assert float(st["ai"]["budget"]["spent_inr"]) > 0
+    assert float(st["ai"]["budget"]["spent_inr"]) > 0 and st["session"]["state"] in ("PRE-OPEN", "OPEN", "CLOSED")
+    u = c.get("/api/v1/ai/usage", headers=k["viewer"]).json()
+    assert sum(float(a["cost_inr"]) for a in u["by_agent"]) > 0 and isinstance(u["recent_errors"], list)
+    eq = c.get("/api/v1/paper/equity-curve", headers=k["viewer"]).json()
+    assert float(eq["starting_capital"]) > 0 and eq["points"] == []
     met = c.get("/metrics", headers=k["viewer"]).text
     assert "doi_llm_spent_inr" in met and "doi_paper_open_positions 1.0" in met
     rep = c.get("/api/v1/reports/daily", headers=k["viewer"]).text

@@ -6,7 +6,8 @@ Every result here is labelled **LIVE** (it touched a real external system) or **
 
 | Host | Needed for | Result from this cloud session |
 |---|---|---|
-| `api.x.ai`, `docs.x.ai` | Grok calls, official docs and prices | **Blocked** (proxy 403) |
+| `docs.x.ai` | Official docs and prices | **Reachable** (verified 2026-11-02) |
+| `api.x.ai` | Grok calls | Reachable after allow-listing; **no API key** |
 | `api.dhan.co` | Dhan REST via our transport | Reachable, but **no Dhan credentials** are configured in this environment |
 | `api-feed.dhan.co` | Live Market Feed (WebSocket) | **Blocked** |
 | `images.dhan.co` | Instrument master CSV | **Blocked** (our transport needs it to resolve contracts) |
@@ -20,7 +21,7 @@ To unblock, allow those hosts in the environment's network settings ([docs](http
 
 | Check | Status |
 |---|---|
-| Official request format, models, prices | **NOT VERIFIED LIVE** (host blocked). Usage/cost fields and price units were verified earlier from official GitHub sources (xai-proto@7c1372f, xai-sdk-python@884ba42) |
+| Official request format, models, prices | **VERIFIED from official docs** (docs.x.ai, 2026-11-02): `max_completion_tokens` (reasoning tokens not bounded by it), `GET /v1/models` prices in USD cents per 100M tokens, grok-4.20-0309 (non-)reasoning at $1.25 / $0.20 cached / $2.50 per 1M. Live call still **NOT RUN** (no key) |
 | Real usage reporting | **NOT VERIFIED LIVE** |
 | One real meeting, ₹20 cap | **NOT RUN.** `scripts/grok_live_check.py` is ready: it runs the model listing and price refresh, a probe call, all 15 agents, one meeting, and a budget reconciliation, stopping at ₹20. Here it exited with `XAI_API_KEY not set` and then `ProxyError` |
 | Budget vs provider billing | **NOT VERIFIED LIVE.** Offline: settlement prefers provider `cost_in_usd_ticks`, and overruns freeze the month (tested) |
@@ -79,3 +80,12 @@ These calls went through the Dhan MCP connector, not through this repository's `
 
 ## Offline test totals
 256 tests pass. Lint and the security scan are clean, and there are no known dependency vulnerabilities.
+
+## Live findings recorded (2026-11-02)
+
+| Item | Finding | Source |
+|---|---|---|
+| Index security ids (IDX_I INDEX rows) | NIFTY 13, BANKNIFTY 25, FINNIFTY 27, SENSEX 51, BANKEX 69. Option rows' `UNDERLYING_SECURITY_ID` (e.g. 26000) differ, so the resolver now reads the IDX_I row | Live Dhan instrument master download |
+| Lot sizes | NIFTY 65, BANKNIFTY 30, FINNIFTY 60, SENSEX 20, BANKEX 30 | Live Dhan instrument master |
+| Grok prices | $1.25 in / $0.20 cached / $2.50 out per 1M tokens (<200k prompt) | docs.x.ai/developers/models |
+| Meeting cost | ≈ ₹4.2 per full trade meeting, ≈ ₹280/month at default caps | Computed from verified prices (see phase7-deployment.md §4) |
