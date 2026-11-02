@@ -2,7 +2,7 @@
 
 import asyncio
 import logging
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, time, timedelta
 
 import psycopg
 import pytest
@@ -64,6 +64,15 @@ def _boot(pg_dsn):
 
     rt = runtime()
     asyncio.run(init_paper(rt, Settings(database_url=pg_dsn, holidays_file=None), datetime.now(UTC) - timedelta(seconds=5)))
+    # tests must not depend on wall-clock market hours (same overrides as runtime())
+    from doi.paper.engine import ExecutionPolicy
+    from doi.risk.models import RiskConfig
+    from tests.unit.test_paper_integration import AlwaysOpen
+
+    rt.paper.gate.calendar = AlwaysOpen()
+    rt.paper.cal = rt.paper.gate.calendar
+    rt.paper.gate.config = RiskConfig(last_entry_time=time(23, 59, 59))
+    rt.paper.policy = ExecutionPolicy(square_off=None)
     return rt
 
 

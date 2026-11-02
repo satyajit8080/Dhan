@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bull50 Research Desk</title>
+<style>
+  :root { --bg:#f7f7f5; --fg:#1d232a; --muted:#5b6670; --card:#fff; --line:#e3e3df; --accent:#1f6f5c; --warn:#a1580b; --bad:#b3261e; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#14181c; --fg:#e7eaed; --muted:#9aa5ae; --card:#1c2227; --line:#2c343b; --accent:#5cc2a6; --warn:#e3a35b; --bad:#ef7d74; } }
+  * { box-sizing:border-box } body { margin:0; font:14px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif; background:var(--bg); color:var(--fg) }
+  header { display:flex; flex-wrap:wrap; gap:12px; align-items:center; padding:12px 16px; border-bottom:1px solid var(--line); background:var(--card) }
+  header h1 { font-size:16px; margin:0 12px 0 0 } .badge { padding:2px 8px; border-radius:10px; font-size:12px; border:1px solid var(--line) }
+  .on { color:var(--bad); border-color:var(--bad) } nav button, .btn { background:none; border:1px solid var(--line); color:var(--fg); padding:6px 10px; border-radius:6px; cursor:pointer }
+  nav button.active { border-color:var(--accent); color:var(--accent) } main { padding:16px; max-width:1200px; margin:0 auto }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:12px } .card { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:12px }
+  .card h3 { margin:0 0 8px; font-size:13px; color:var(--muted); font-weight:600 } .big { font-size:22px; font-weight:600 }
+  table { width:100%; border-collapse:collapse; font-size:13px } th, td { text-align:left; padding:6px; border-bottom:1px solid var(--line); vertical-align:top }
+  th { color:var(--muted); font-weight:600 } .bar { height:8px; background:var(--line); border-radius:4px; overflow:hidden } .bar > div { height:100%; background:var(--accent) }
+  .muted { color:var(--muted) } input { padding:6px; border:1px solid var(--line); border-radius:6px; background:var(--bg); color:var(--fg); min-width:220px }
+  pre { white-space:pre-wrap; word-break:break-word; background:var(--bg); padding:8px; border-radius:6px; max-height:420px; overflow:auto }
+  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center } .err { color:var(--bad) }
+</style>
+</head>
+<body>
+<header>
+  <h1>Bull50 Research Desk</h1>
+  <span class="badge">research &amp; paper only</span>
+  <span id="ks" class="badge">kill switch: ?</span>
+  <span class="row"><input id="tok" type="password" placeholder="API key (kept in this tab only)" autocomplete="off"><button class="btn" id="save">Use key</button></span>
+  <nav class="row" id="tabs"></nav>
+</header>
+<main><div id="msg" class="err"></div><div id="view"></div></main>
+<script>
+"use strict";
+// Every value from the API, including agent text, is untrusted. This page builds DOM nodes with textContent and never uses innerHTML.
+const tabs = ["Status","Budget","Recommendations","Meetings","Leaderboard","Paper","Report"];
+let key = sessionStorage.getItem("doi_key") || "";
+const $ = (id) => document.getElementById(id);
+function el(tag, props = {}, ...kids) { const n = document.createElement(tag); for (const [k,v] of Object.entries(props)) { if (k === "class") n.className = v; else if (k.startsWith("on")) n.addEventListener(k.slice(2), v); else n.setAttribute(k, v); } for (const c of kids) n.append(c instanceof Node ? c : document.createTextNode(c === null || c === undefined ? "-" : String(c))); return n; }
+async function api(path, opts = {}) {
+  const r = await fetch(path, { ...opts, headers: { "Content-Type":"application/json", ...(key ? { Authorization: "Bearer " + key } : {}) } });
+  const t = await r.text(); let b; try { b = JSON.parse(t); } catch { b = t; }
+  if (!r.ok) throw new Error((b && b.detail ? JSON.stringify(b.detail) : t).slice(0, 400));
+  return b;
+}
+function table(rows, cols) { const t = el("table"); t.append(el("tr", {}, ...cols.map(c => el("th", {}, c[0])))); for (const r of rows) t.append(el("tr", {}, ...cols.map(c => el("td", {}, typeof c[1] === "function" ? c[1](r) : r[c[1]])))); return t; }
+function card(title, ...body) { return el("div", {class:"card"}, el("h3", {}, title), ...body); }
+const views = {
+  async Status() { const s = await api("/api/v1/system/status"); $("ks").textContent = "kill switch: " + (s.kill_switch ? "ON" : "off"); $("ks").className = "badge" + (s.kill_switch ? " on" : "");
+    const p = s.paper || {}; const ai = s.ai || {}; const b = ai.budget || {};
+    return el("div", {}, el("div", {class:"grid"},
+      card("Mode", el("div", {class:"big"}, s.mode), el("div", {class:"muted"}, "Live broker execution: " + s.live_broker_execution)),
+      card("Paper equity", el("div", {class:"big"}, "₹" + (p.equity ?? "-")), el("div", {class:"muted"}, `${p.open_positions ?? 0} open · risk ₹${p.open_risk ?? 0}`)),
+      card("Grok budget", el("div", {class:"big"}, `₹${Number(b.spent_inr||0).toFixed(2)} / ₹${b.usable_inr ?? "-"}`), el("div", {class:"bar"}, el("div", {style:`width:${Math.min(100,(b.utilisation||0)*100)}%`})), el("div", {class:"muted"}, "provider live: " + ai.provider_live)),
+      card("Data", el("div", {}, "recorded snapshots: " + ((s.database||{}).recorded_snapshots ?? "-")), el("div", {class:"muted"}, "recorder failures: " + s.market_data.recorder.failures))),
+      card("Unverified integrations", el("ul", {}, ...s.unverified_integrations.map(u => el("li", {}, u))))); },
+  async Budget() { const b = await api("/api/v1/ai/budget"); return el("div", {class:"grid"}, ...Object.entries(b).map(([k,v]) => card(k, el("pre", {}, typeof v === "object" ? JSON.stringify(v, null, 1) : String(v))))); },
+  async Recommendations() { const rs = await api("/api/v1/ai/recommendations");
+    const act = (r, verb) => el("button", {class:"btn", onclick: async () => { try { const note = prompt(verb + " note (optional)") || null; await api(`/api/v1/ai/recommendations/${encodeURIComponent(r.id)}/${verb}`, {method:"POST", body: JSON.stringify({note})}); show("Recommendations"); } catch (e) { $("msg").textContent = e.message; } }}, verb);
+    return card("Recommendations (human approval required; the RiskGate re-checks on approval)", table(rs, [["id","id"],["underlying","underlying_key"],["contract", r => `${r.expiry} ${r.strike} ${r.option_type}`],["stop","stop_loss"],["status","status"],["valid until","valid_until"],["", r => r.status === "PENDING_HUMAN" ? el("span", {class:"row"}, act(r,"approve"), act(r,"reject")) : ""]])); },
+  async Meetings() { const ms = await api("/api/v1/ai/meetings?limit=50"); const detail = el("div");
+    const open = async (id) => { const d = await api("/api/v1/ai/meetings/" + encodeURIComponent(id)); detail.replaceChildren(card("Meeting " + id,
+      table(d.turns, [["#", "seq"],["round","round"],["agent","agent_id"],["status","status"],["stance","stance"],["conf","confidence"],["output", t => el("pre", {}, JSON.stringify(t.output, null, 1))]]),
+      el("h3", {}, "Disagreements"), el("pre", {}, JSON.stringify(d.disagreements, null, 1)), el("h3", {}, "Decision"), el("pre", {}, JSON.stringify(d.decision, null, 1)))); };
+    return el("div", {}, card("Meetings", table(ms, [["id", m => el("button", {class:"btn", onclick: () => open(m.id)}, m.id)],["kind","kind"],["status","status"],["final","final_action"],["abort","abort_reason"],["cost ₹","cost_inr"],["started","started_at"]])), detail); },
+  async Leaderboard() { const lb = await api("/api/v1/ai/leaderboard"); return card(`Leaderboard (${lb.mode}; ranked only with n ≥ ${lb.min_n_for_rank})`, table(lb.agents, [["rank","rank"],["agent","name"],["n","n"],["hit","hit_rate"],["Wilson LB","hit_rate_wilson_lb"],["Brier","brier"],["IC","ic_spearman"],["follow ratio","follow_ratio"],["provisional","provisional"]]), el("div", {class:"muted"}, "Unscored: " + lb.unscored_agents.join(", "))); },
+  async Paper() { const p = await api("/api/v1/paper/portfolio"); return el("div", {}, card("Positions", table(p.positions, [["id","id"],["contract","symbol"],["state","state"],["qty","qty_open"],["avg","avg_entry"],["mark","mark"],["stop","stop_loss"]])), card("Working orders", table(p.working_orders, [["id","id"],["side","side"],["qty","quantity"],["filled","filled_qty"],["status","status"],["reason","reason"]]))); },
+  async Report() { return card("Daily report", el("pre", {}, await api("/api/v1/reports/daily"))); },
+};
+async function show(name) { for (const b of $("tabs").children) b.classList.toggle("active", b.textContent === name); $("msg").textContent = "";
+  try { $("view").replaceChildren(await views[name]()); } catch (e) { $("view").replaceChildren(); $("msg").textContent = e.message; } }
+for (const t of tabs) $("tabs").append(el("button", {onclick: () => show(t)}, t));
+$("save").addEventListener("click", () => { key = $("tok").value.trim(); sessionStorage.setItem("doi_key", key); $("tok").value = ""; show("Status"); });
+show("Status");
+</script>
+</body>
+</html>

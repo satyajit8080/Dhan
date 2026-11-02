@@ -1,6 +1,6 @@
 # Phase 7: Bull50 AI Financial Research Institution (architecture proposal)
 
-Status: **proposal, awaiting approval**. No code has been written for this phase.
+Status: **implemented** (Phases 7.0A–7.6). See `phase7-deployment.md` for the as-built architecture, deployment and verification status.
 Baseline: commit `d1aafb5` (Phases 0–3 and 6.0–6.4 complete; Phases 4, 5 and the 7 backtester are not built).
 
 ---

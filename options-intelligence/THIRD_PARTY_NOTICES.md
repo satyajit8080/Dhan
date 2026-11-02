@@ -11,6 +11,7 @@ No third-party source code has been copied or adapted into this project yet.
 | psycopg 3 | PostgreSQL driver | LGPL-3.0 (dynamic use, unmodified) | pinned |
 | websockets | Live Market Feed client | BSD-3 | pinned |
 | dhan-oss/DhanHQ-py `marketfeed.py` | Reference for the feed's binary packet layout only. No code copied | MIT | commit 8c6583e |
+| xai-org/xai-proto, xai-sdk-python | Reference for usage/cost fields and price units only. No code copied | Apache-2.0 | 7c1372f, 884ba42 |
 | DhanHQ v2 REST API | Endpoint contract (option chain, expiry list, charts, rolling option) | Dhan API terms | docs checked 02 Nov 2026 |
 
 Before vendoring from marketcalls/openbull, marketcalls/openalgo (AGPL-3.0), bhawuk-arora/Backtesting-NSE

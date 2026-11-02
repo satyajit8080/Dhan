@@ -62,6 +62,8 @@ def scripted(overrides: dict | None = None):
         schema = re.search(r"JSON schema of your reply:\n(.*)$", messages[0]["content"], re.S)
         title = json.loads(schema.group(1)).get("title") if schema else "Opinion"
         reply = dict(base.get(title, base["Opinion"]))
+        if aid in ("macro_events", "breadth"):  # their sources are unverified/unconfigured: abstain, as instructed
+            reply.update(stance="ABSTAIN", confidence=1, prediction=None)
         if isinstance(o, dict):
             reply.update(o)
         return json.dumps(reply)

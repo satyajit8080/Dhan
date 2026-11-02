@@ -235,7 +235,7 @@ class PgMeetingStore:
         cols = ("id", "meeting_id", "underlying_key", "expiry", "strike", "option_type", "stop_loss", "targets", "valid_until", "status",
                 "decided_by", "decided_at", "paper_result")  # fmt: skip
         with psycopg.connect(self.dsn) as c:
-            r = c.execute(f"SELECT {', '.join(cols)} FROM ai_recommendations WHERE id = %s", (rid,)).fetchone()
+            r = c.execute(f"SELECT {', '.join(cols)} FROM ai_recommendations WHERE id = %s", (rid,)).fetchone()  # nosec B608 - constant column list, values bound as parameters
         return dict(zip(cols, r, strict=True)) if r else None
 
     def update_recommendation(self, rid, status, who, result, now):

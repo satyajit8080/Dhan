@@ -211,7 +211,7 @@ class PgCallLog:
     def log(self, row: dict) -> None:
         with psycopg.connect(self.dsn) as c:
             c.execute(
-                f"INSERT INTO llm_calls ({', '.join(self.COLS)}) VALUES ({', '.join(['%s'] * len(self.COLS))})",
+                f"INSERT INTO llm_calls ({', '.join(self.COLS)}) VALUES ({', '.join(['%s'] * len(self.COLS))})",  # nosec B608 - constant column list, values bound as parameters
                 [row.get(k) for k in self.COLS],
             )
 

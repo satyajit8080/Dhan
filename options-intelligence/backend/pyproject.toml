@@ -26,6 +26,7 @@ include = ["doi*"]
 [tool.setuptools.package-data]
 "doi.intelligence.strategy_configs" = ["*.yaml"]
 "doi.core" = ["*.yaml"]
+"doi.app" = ["*.html"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

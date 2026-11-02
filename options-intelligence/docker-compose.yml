@@ -25,5 +25,16 @@ services:
     ports: ["127.0.0.1:8000:8000"]
     depends_on: [db, redis]
 
+  # Phase 7 AI research worker: separate process, reads recorded data from PostgreSQL,
+  # never calls Dhan and never submits paper orders (humans approve via the API).
+  ai-worker:
+    build:
+      context: .
+      dockerfile: infra/docker/api.Dockerfile
+    command: ["python", "-m", "doi.ai.worker"]
+    env_file: .env
+    depends_on: [db, api]
+    restart: unless-stopped
+
 volumes:
   dbdata:

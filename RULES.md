@@ -20,6 +20,15 @@ disagree, fix the code.
 - **Never type the user's credentials, PIN or OTP.** The user logs in themselves.
 - **Dhan Cloud:** credentials go in `{{VAR}}` Variables, never in code.
 
+## 1b. Phase 7 AI research (options-intelligence only)
+
+- AI agents interpret and debate; Python computes every number. Any AI claim must cite evidence that Python supplied.
+- No AI output may feed this Bull50 MCP server or the `sensex-scalp` skill.
+- AI recommendations reach the paper engine only after an authenticated human approval, followed by a live RiskGate re-check.
+  The RiskGate and the AI Risk Officer veto the CIO; the CIO cannot override them.
+- The Grok monthly hard cap is ₹3,000, enforced by the database. When it is exhausted, AI stops; market data and paper trading continue.
+- No live broker execution exists anywhere. Do not add one.
+
 ## 2. Pricing (why the numbers are trustworthy)
 
 - **The index LTP is never spot.** It can sit 300+ points below the true
