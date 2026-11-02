@@ -79,6 +79,8 @@ def test_full_research_to_paper_flow(pg_dsn):
     ):
         assert isinstance(c.get(path, headers=k["viewer"]).json(), list), path
     assert len(c.get("/api/v1/ai/predictions", headers=k["viewer"]).json()) >= 1
+    fv = c.get("/api/v1/market/features", params={"underlying": "NIFTY"}, headers=k["viewer"]).json()
+    assert fv["underlying"] == "NIFTY" and "adx" in fv["values"]
     an = c.get("/api/v1/paper/analytics", headers=k["viewer"]).json()
     assert an["trades"] == 0 and an["win_rate"] is None
     eq = c.get("/api/v1/paper/equity-curve", headers=k["viewer"]).json()
@@ -96,7 +98,14 @@ def test_dashboard_is_static_and_safe(pg_dsn):
     assert r.status_code == 200 and "Bull50 Research Desk" in r.text
     assert "innerHTML" not in r.text.replace("never uses innerHTML", "") and "localStorage" not in r.text
     assert "frame-ancestors 'none'" in r.headers["content-security-policy"]
-    for sec in ("Command Center", "Options Intelligence", "AI Investment Committee", "Paper Trading", "System Monitoring", "Administration"):
+    for sec in (
+        "Command Center",
+        "Options Intelligence",
+        "AI Investment Committee",
+        "Paper Trading",
+        "System Monitoring",
+        "Administration",
+    ):
         assert sec in r.text
     assert 'id="ks"' in r.text and 'id="h-meter"' in r.text and "PAPER MODE — NO LIVE EXECUTION" in r.text  # global shell
     assert "XAI_API_KEY" not in r.text and "access-token" not in r.text and "/live" not in r.text

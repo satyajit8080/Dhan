@@ -7,7 +7,7 @@ Last commit: Grok client aligned with official xAI docs (1def955). 257 tests pas
 - Dhan docs checked: intraday 5 years look-back, ≤ 90 days per request (now enforced); expired options ≤ 30 days per call, ATM ±10; WebSocket ≤ 5 connections × 5,000 instruments, ≤ 100 per message, server ping every 10 s; option chain 1 unique request / 3 s. All match the code.
 - Live findings recorded in docs/phase8-validation.md.
 - Backend display analytics added: option-chain `analytics` (Black-76 IV/Greeks, PCR, Max Pain, walls), `session` in system status, `/api/v1/ai/usage`, `/api/v1/paper/equity-curve`.
-- Terminal UI rebuilt (`/dashboard`): 15-section institutional shell, global kill switch + ₹3,000 budget meter + hard-stop banner on every page, loading/empty/error/disconnected states; read-only endpoints added (`/ai/predictions`, `/research/strategies|experiments|option-backtests`, `/paper/analytics`), committee summary in meeting detail. Regime/VIX REST endpoint not exposed yet (UI shows DISCONNECTED).
+- Terminal UI rebuilt (`/dashboard`): 15-section institutional shell, global kill switch + ₹3,000 budget meter + hard-stop banner on every page, loading/empty/error/disconnected states; read-only endpoints added (`/ai/predictions`, `/research/strategies|experiments|option-backtests`, `/paper/analytics`), committee summary in meeting detail. Regime/VIX via `/api/v1/market/features` (deterministic feature engine on recorded data).
 
 ## Still open (blocked)
 3. Official NSE circular NSE/FA/73061 and 2026 holiday list: NSE site blocks automated fetches (bot protection); download manually and confirm.

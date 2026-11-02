@@ -100,3 +100,26 @@ async def paper_analytics_route(request: Request, who: Principal = Depends(requi
     if p is None:
         raise HTTPException(503, "paper engine not configured")
     return jsonable_encoder(paper_analytics(p.trades, p.starting_capital))
+
+
+@router.get("/api/v1/market/features")
+async def market_features(request: Request, underlying: str = Query(...), who: Principal = Depends(requires("viewer"))):
+    """Latest deterministic feature vector (regime, VIX, technicals) from recorded data. Read-only; no LLM."""
+    from datetime import UTC, datetime
+
+    from doi.ai.service import AIWorker
+
+    rt = request.app.state.runtime
+    if getattr(rt, "ai", None) is None or rt.paper_store is None:
+        raise HTTPException(503, "feature engine needs DATABASE_URL and AI components (recorded data replay)")
+    key = underlying.upper()
+    if key not in rt.configs:
+        raise HTTPException(404, f"unknown underlying {key}")
+    fv = await asyncio.to_thread(AIWorker(rt)._features, key, datetime.now(UTC))
+    if fv is None:
+        raise HTTPException(404, f"no recorded data for {key}")
+    return jsonable_encoder(
+        {"underlying": fv.underlying_key, "as_of": fv.as_of, "timeframe_min": fv.timeframe_min, "engine_version": fv.engine_version,
+         "coverage_status": fv.coverage_status, "data_quality_score": fv.data_quality_score,
+         "values": {k: {"value": v.value, "status": v.status, "reason": v.reason} for k, v in fv.values.items()}}
+    )  # fmt: skip
