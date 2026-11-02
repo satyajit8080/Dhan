@@ -3,6 +3,7 @@ WORKDIR /app
 COPY backend/pyproject.toml ./
 COPY backend/doi ./doi
 COPY migrations /migrations
+COPY scripts/smoke_live.py /scripts/smoke_live.py
 ENV MIGRATIONS_DIR=/migrations
 RUN pip install --no-cache-dir . && useradd -r app
 USER app
