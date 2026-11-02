@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from doi.core.errors import DoiError
 from doi.core.market import Quote
@@ -76,6 +76,7 @@ async def pump_once(rt, now: datetime | None = None) -> int:
         except DoiError as e:
             log.warning("paper feed %s %s: %s", key, expiry, type(e).__name__)
             continue
+        await asyncio.to_thread(rt.recorder.snapshot, snap)  # isolated: never raises
         for c in contracts:
             leg = find_leg(snap, c)
             if leg is not None:
@@ -95,9 +96,37 @@ def feed_subscriptions(engine: PaperExecution) -> set[tuple[str, str]]:
     return {(c.exchange_segment, c.security_id) for cs in engine.watch().values() for c in cs}
 
 
-async def run_forever(rt, interval_s: float = 3.0) -> None:
+async def record_index_bars_once(rt, now: datetime | None = None, timeframe_min: int = 1) -> int:
+    """Fetch today's index candles for live-enabled underlyings and record them.
+    Recording and fetch failures are logged and swallowed (isolation)."""
+    if rt.provider is None:
+        return 0
+    today = (now or datetime.now(UTC)).date()
+    n = 0
+    for key, cfg in rt.configs.items():
+        ref = rt.universe.get(key)
+        if ref is None or not cfg.live_enabled:
+            continue
+        try:
+            bars = await rt.provider.get_candles(
+                ref.security_id, ref.segment, "INDEX", str(timeframe_min), today, today + timedelta(days=1)
+            )
+        except DoiError as e:
+            log.warning("index bars %s: %s", key, type(e).__name__)
+            continue
+        await asyncio.to_thread(rt.recorder.bars, ref.security_id, timeframe_min, bars, "dhan_rest:intraday")
+        n += len(bars)
+    return n
+
+
+async def run_forever(rt, interval_s: float = 3.0, bars_every_s: float = 60.0) -> None:
+    last_bars = 0.0
+    loop = asyncio.get_running_loop()
     while True:
         try:
+            if loop.time() - last_bars >= bars_every_s:
+                last_bars = loop.time()
+                await record_index_bars_once(rt)
             await pump_once(rt)
             if rt.collector is not None and rt.paper is not None:
                 await rt.collector.set_subscriptions(feed_subscriptions(rt.paper))

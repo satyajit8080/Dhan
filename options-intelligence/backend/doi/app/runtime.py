@@ -21,6 +21,7 @@ from doi.data.dhan.token import TokenSource
 from doi.data.dhan.transport import DhanTransport
 from doi.data.instruments.master import InstrumentMaster
 from doi.data.provider import MarketDataProvider
+from doi.data.recorder import MarketRecorder, SafeRecorder
 from doi.db.migrate import migrate
 from doi.intelligence.strategy_configs.loader import IndexConfig, load_index_configs
 from doi.paper.engine import ExecutionPolicy, PaperExecution
@@ -47,6 +48,7 @@ class Runtime:
     paper: PaperExecution | None = None
     paper_store: PaperStore | None = None
     collector: MarketFeedCollector | None = None
+    recorder: SafeRecorder = field(default_factory=lambda: SafeRecorder(None))
     _paper_service: PaperService | None = field(default=None, repr=False)
 
     @property
@@ -98,6 +100,7 @@ async def init_paper(rt: Runtime, settings: Settings, now: datetime) -> None:
     if applied:
         log.info("applied migrations: %s", ", ".join(applied))
     rt.paper_store = PaperStore(dsn)
+    rt.recorder = SafeRecorder(MarketRecorder(dsn))
     gate = build_gate(rt.configs, calendar=calendar)
     loaded = await asyncio.to_thread(rt.paper_store.load, PAPER_ACCOUNT, gate)
     if loaded is None:
@@ -169,6 +172,7 @@ async def build_runtime(settings: Settings) -> Runtime:
         svc = rt.paper_service
 
         async def on_quote(q):
+            await asyncio.to_thread(rt.recorder.quotes, [q])  # never raises
             await svc.call(lambda e: e.process_market_event(q))
 
         rt.collector = MarketFeedCollector(settings.dhan_client_id, rt.token.get, on_quote)

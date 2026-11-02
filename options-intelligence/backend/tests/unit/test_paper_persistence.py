@@ -68,13 +68,14 @@ async def scenario(svc: PaperService):
 
 def test_migrations_idempotent_and_checksummed(pg_dsn, tmp_path):
     assert migrate(pg_dsn) == []
-    assert [v for v, _, _ in discover()] == ["001", "002"]
+    versions = [v for v, _, _ in discover()]
+    assert versions[:2] == ["001", "002"] and versions == sorted(versions)
     d = tmp_path / "m"
     shutil.copytree(DEFAULT_DIR, d)
     (d / "002_paper_persistence.sql").write_text((d / "002_paper_persistence.sql").read_text() + "\n-- edited\n")
     with pytest.raises(ConfigError, match="changed"):
         migrate(pg_dsn, d)
-    (d / "003_x.sql").write_text("SELECT 1;")
+    (d / "998_x.sql").write_text("SELECT 1;")
     (d / "bad.sql").write_text("SELECT 1;")
     with pytest.raises(ConfigError, match="bad migration"):
         discover(d)
@@ -83,12 +84,12 @@ def test_migrations_idempotent_and_checksummed(pg_dsn, tmp_path):
 def test_failed_migration_rolls_back(pg_dsn, tmp_path):
     d = tmp_path / "m"
     shutil.copytree(DEFAULT_DIR, d)
-    (d / "003_broken.sql").write_text("CREATE TABLE half_done (x int); SELECT * FROM no_such_table;")
+    (d / "999_broken.sql").write_text("CREATE TABLE half_done (x int); SELECT * FROM no_such_table;")
     with pytest.raises(psycopg.Error):
         migrate(pg_dsn, d)
     with psycopg.connect(pg_dsn) as c:
         assert c.execute("SELECT to_regclass('half_done')").fetchone()[0] is None
-        assert c.execute("SELECT max(version) FROM schema_migrations").fetchone()[0] == "002"
+        assert c.execute("SELECT max(version) FROM schema_migrations").fetchone()[0] == discover()[-1][0]
 
 
 # ---------------- restore ----------------
