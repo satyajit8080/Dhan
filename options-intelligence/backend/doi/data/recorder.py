@@ -28,7 +28,7 @@ from psycopg.types.json import Jsonb
 
 from doi.core.canonical import canonical
 from doi.core.market import Quote
-from doi.core.models import Bar, ChainRow, OptionChainSnapshot, OptionLeg
+from doi.core.models import Bar, ChainRow, OptionBar, OptionChainSnapshot, OptionLeg
 
 log = logging.getLogger(__name__)
 
@@ -114,7 +114,8 @@ class MarketRecorder:
             )
         return True
 
-    def record_bars(self, security_id: str, timeframe_min: int, bars: Sequence[Bar], source_version: str) -> int:
+    def record_bars(self, security_id: str, timeframe_min: int, bars: Sequence[Bar | OptionBar], source_version: str) -> int:
+        """Index bars or rolling-option bars (OptionBar strike/spot/iv are kept for premium backtests)."""
         if not bars:
             return 0
         tf = f"{timeframe_min}m"
@@ -123,10 +124,11 @@ class MarketRecorder:
             n = 0
             for b in bars:
                 cur.execute(
-                    "INSERT INTO market_bars (security_id, timeframe, bar_ts, open, high, low, close, volume, oi, source_version)"
-                    " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT DO NOTHING",
+                    "INSERT INTO market_bars (security_id, timeframe, bar_ts, open, high, low, close, volume, oi, source_version, strike, spot, iv)"
+                    " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT DO NOTHING",
                     (security_id, tf, b.ts, b.open, b.high, b.low, b.close,
-                     None if b.volume is None else round(b.volume), None if b.oi is None else round(b.oi), source_version),
+                     None if b.volume is None else round(b.volume), None if b.oi is None else round(b.oi), source_version,
+                     getattr(b, "strike", None), getattr(b, "spot", None), getattr(b, "iv", None)),
                 )  # fmt: skip
                 n += cur.rowcount
         return n
@@ -249,3 +251,20 @@ class ReplayStore:
             ).fetchall()
         f = lambda x: None if x is None else float(x)
         return [Quote(s, ts, f(b), bq, f(a), aq, f(ltp), None, oi, vol, seq) for s, ts, b, bq, a, aq, ltp, oi, vol, seq in rows]
+
+
+def load_option_bars(
+    dsn: str, series_key: str, timeframe_min: int, as_of: datetime, since: datetime | None = None
+) -> list[OptionBar]:
+    """Rolling-option bars with strike/spot/iv, closed at or before as_of."""
+    tf = timedelta(minutes=timeframe_min)
+    q = ("SELECT bar_ts, open, high, low, close, volume, oi, iv, strike, spot FROM market_bars"
+         " WHERE security_id = %s AND timeframe = %s AND bar_ts + %s <= %s")  # fmt: skip
+    args: list = [series_key, f"{timeframe_min}m", tf, as_of]
+    if since is not None:
+        q += " AND bar_ts >= %s"
+        args.append(since)
+    f = lambda x: None if x is None else float(x)
+    with psycopg.connect(dsn) as c:
+        return [OptionBar(ts, float(o), float(h), float(lo), float(cl), f(v), f(oi), f(iv), f(k), f(sp))
+                for ts, o, h, lo, cl, v, oi, iv, k, sp in c.execute(q + " ORDER BY bar_ts", args)]  # fmt: skip

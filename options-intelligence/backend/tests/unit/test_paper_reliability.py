@@ -183,7 +183,9 @@ def test_charge_schedule_matches_published_rates():
     assert s.exchange_txn_pct == {"NSE": D("0.03553"), "BSE": D("0.0325")} and s.sebi_per_crore == D("10")
     assert schedule_for(date(2025, 6, 1)).stt_sell_pct == D("0.1")
     assert schedule_for(date(2025, 6, 1)).exchange_txn_pct["NSE"] == D("0.03503")  # pre NSE/FA/73061
-    assert schedule_for(date(2026, 3, 15)).exchange_txn_pct["NSE"] == D("0.03553") and schedule_for(date(2026, 3, 15)).stt_sell_pct == D("0.1")
+    assert schedule_for(date(2026, 3, 15)).exchange_txn_pct["NSE"] == D("0.03553") and schedule_for(
+        date(2026, 3, 15)
+    ).stt_sell_pct == D("0.1")
     assert [x.effective_from for x in SCHEDULES] == sorted(x.effective_from for x in SCHEDULES)
 
 

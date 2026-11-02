@@ -82,7 +82,7 @@ class HistoricalIngestor:
                 n = self.recorder.record_bars(
                     key,
                     interval,
-                    [Bar(b.ts, b.open, b.high, b.low, b.close, b.volume, b.oi) for b in bars],
+                    list(bars),  # OptionBars: strike/spot/iv are stored for premium backtests
                     f"{source_id}:rolling",
                 )
             ds = self._register(source_id, reqs[0].underlying_key, "ROLLING_OPTION", key, f"{interval}m", start, end - timedelta(days=1), report,

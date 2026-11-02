@@ -66,7 +66,11 @@ async def run_experiment(request: Request, body: ExperimentIn, who: Principal = 
     rt, lab = _lab(request)
     try:
         _, bars = await asyncio.to_thread(load_approved_dataset, rt.paper_store.dsn, body.dataset_id, allow_gaps=body.allow_gaps)
-        return jsonable_encoder(await asyncio.to_thread(lab.run_experiment, body.version_id, bars, dataset_id=body.dataset_id))
+        return jsonable_encoder(
+            await asyncio.to_thread(
+                lab.run_experiment, body.version_id, bars, dataset_id=body.dataset_id, data_class="HISTORICAL"
+            )
+        )
     except (DatasetNotApproved, LabError) as e:
         raise _err(e) from None
 

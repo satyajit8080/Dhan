@@ -59,7 +59,10 @@ def test_full_research_to_paper_flow(pg_dsn):
     assert rt.approvals.verify() >= 1
     st = c.get("/api/v1/system/status", headers=k["viewer"]).json()
     assert st["mode"] == "RESEARCH_AND_PAPER_ONLY" and st["live_broker_execution"] == "NOT_IMPLEMENTED"
-    assert st["database"]["migration_version"] == "010" and st["paper"]["open_positions"] == 1
+    assert (
+        st["database"]["migration_version"] == __import__("doi.db.migrate", fromlist=["discover"]).discover()[-1][0]
+        and st["paper"]["open_positions"] == 1
+    )
     assert float(st["ai"]["budget"]["spent_inr"]) > 0
     met = c.get("/metrics", headers=k["viewer"]).text
     assert "doi_llm_spent_inr" in met and "doi_paper_open_positions 1.0" in met

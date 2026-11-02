@@ -312,7 +312,9 @@ class Lab:
             (eid, stage, Jsonb(json.loads(canonical(m))), _sha(m), passed),
         )
 
-    def run_experiment(self, version_id: str, bars: Sequence[Bar], *, dataset_id: str | None = None) -> dict:
+    def run_experiment(
+        self, version_id: str, bars: Sequence[Bar], *, dataset_id: str | None = None, data_class: str = "UNSPECIFIED"
+    ) -> dict:
         """Development, validation, walk-forward, sensitivity and cost stress. The holdout stays sealed."""
         spec = self.spec(version_id)
         dev, val, hold = split_sessions(bars, self.calendar)
@@ -322,7 +324,8 @@ class Lab:
             "feature_engine": ENGINE_VERSION, "feature_config_hash": self.engine.cfg.hash, "code_version": _code_version(),
             "split": {"development": [str(dev[0].ts), str(dev[-1].ts)], "validation": [str(val[0].ts), str(val[-1].ts)],
                       "holdout_sessions": len({self.calendar.session_date(b.ts) for b in hold})},
-            "approximation": "directional index-point simulation; not option-premium P&L",
+            "approximation": "directional index-point simulation; not option-premium P&L (see research_option_backtests)",
+            "data_class": data_class,
         }  # fmt: skip
         fs = feature_series(bars, spec.timeframe_min, self.calendar, self.engine)  # causal; shared by every stage
         eid = "EXP-" + secrets.token_hex(5)
@@ -372,8 +375,17 @@ class Lab:
         passed = dev_ok and val_ok and wf_ok and sens_ok and stress_ok
         with self._c() as c, c.transaction():
             c.execute(
-                "INSERT INTO research_experiments (id, strategy_version_id, dataset_id, manifest, manifest_sha256, status) VALUES (%s, %s, %s, %s, %s, %s)",
-                (eid, version_id, dataset_id, Jsonb(manifest), _sha(manifest), "PASSED_IS" if passed else "FAILED_IS"),
+                "INSERT INTO research_experiments (id, strategy_version_id, dataset_id, manifest, manifest_sha256, status, data_class)"
+                " VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                (
+                    eid,
+                    version_id,
+                    dataset_id,
+                    Jsonb(manifest),
+                    _sha(manifest),
+                    "PASSED_IS" if passed else "FAILED_IS",
+                    data_class,
+                ),
             )
             self._result(c, eid, "DEVELOPMENT", m_dev, dev_ok)
             self._result(c, eid, "VALIDATION", m_val, val_ok)
