@@ -5,11 +5,14 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
+from decimal import Decimal
+from pathlib import Path
 
 import httpx
 
 from doi.core.config import Settings
 from doi.core.errors import ConfigError, DoiError
+from doi.core.market import SessionCalendar
 from doi.core.models import UnderlyingRef
 from doi.data.dhan.adapter import DhanMarketData
 from doi.data.dhan.token import TokenSource
@@ -17,6 +20,11 @@ from doi.data.dhan.transport import DhanTransport
 from doi.data.instruments.master import InstrumentMaster
 from doi.data.provider import MarketDataProvider
 from doi.intelligence.strategy_configs.loader import IndexConfig, load_index_configs
+from doi.paper.engine import ExecutionPolicy, PaperExecution
+from doi.paper.fills import FillModel
+from doi.paper.ledger import Ledger
+from doi.risk.gate import RiskGate
+from doi.risk.models import LiquidityLimits, RiskConfig
 
 log = logging.getLogger(__name__)
 
@@ -30,8 +38,11 @@ class Runtime:
     universe_errors: dict[str, str] = field(default_factory=dict)
     master_version: str | None = None
     kill_switch: bool = False
+    master: InstrumentMaster | None = None
+    paper: PaperExecution | None = None
 
     def resolve(self, master: InstrumentMaster, today: date | None = None) -> None:
+        self.master = master
         self.master_version = master.version.version
         self.universe.clear()
         self.universe_errors.clear()
@@ -40,6 +51,32 @@ class Runtime:
                 self.universe[key] = master.resolve_underlying(key, cfg.exchange_family, cfg.master_symbol, today)
             except DoiError as e:
                 self.universe_errors[key] = str(e)
+
+
+def build_paper(
+    configs: dict[str, IndexConfig],
+    *,
+    starting_capital: Decimal,
+    now: datetime,
+    ledger_path: Path | None = None,
+    fill_model: FillModel | None = None,
+    risk: RiskConfig | None = None,
+    calendar: SessionCalendar | None = None,
+    policy: ExecutionPolicy | None = None,
+) -> PaperExecution:
+    limits = {
+        k: LiquidityLimits(c.liquidity.max_spread_pct, c.liquidity.min_oi, c.liquidity.min_volume, c.liquidity.max_quote_age_s)
+        for k, c in configs.items()
+    }
+    gate = RiskGate(risk or RiskConfig(), fill_model or FillModel(), calendar or SessionCalendar(), limits)
+    return PaperExecution(
+        account_id="paper-1",
+        starting_capital=starting_capital,
+        gate=gate,
+        opened_at=now,
+        ledger=Ledger(ledger_path),
+        policy=policy,
+    )
 
 
 async def download_master(url: str, timeout_s: float = 90.0) -> InstrumentMaster:
@@ -52,6 +89,12 @@ async def download_master(url: str, timeout_s: float = 90.0) -> InstrumentMaster
 async def build_runtime(settings: Settings) -> Runtime:
     configs = load_index_configs(settings.strategy_config_dir)
     rt = Runtime(configs=configs)
+    rt.paper = build_paper(
+        configs,
+        starting_capital=Decimal(str(settings.paper_starting_capital)),
+        now=datetime.now(UTC),
+        ledger_path=settings.paper_ledger_path,
+    )
     if not settings.dhan_client_id:
         log.warning("DHAN_CLIENT_ID not set; market data disabled")
         return rt

@@ -7,8 +7,11 @@ disagree, fix the code.
 
 - **Read-only.** The server never places, modifies or cancels orders. No
   positions, funds or margin are touched.
-- **Paper-trading module stays deleted.** It was built and removed on request
-  (23 Sep 2026). Do not re-add it without an explicit ask.
+- **Paper-trading module stays deleted from the Bull50 MCP server.** It was
+  built and removed on request (23 Sep 2026). Do not re-add it there. The only
+  paper simulator is the approved Phase 6 module in
+  `options-intelligence/backend/doi/paper/` (approved 2 Nov 2026). It is
+  simulation-only, has no broker client, and must not be copied into `server/`.
 - **Never echo the Dhan token.** Show the fingerprint (last 4) only. Tokens are
   held in memory or read from `DHAN_TOKEN_FILE`, never written to disk by the
   server, and redacted from logs.

@@ -27,6 +27,9 @@ class Settings(BaseModel):
     database_url: SecretStr | None = None
     redis_url: str | None = None
     strategy_config_dir: Path = DEFAULT_STRATEGY_DIR
+    paper_starting_capital: float = 500000.0
+    paper_ledger_path: Path | None = None
+    paper_feed_interval_s: float = 3.0
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> Settings:
@@ -45,6 +48,9 @@ class Settings(BaseModel):
             "database_url": "DATABASE_URL",
             "redis_url": "REDIS_URL",
             "strategy_config_dir": "STRATEGY_CONFIG_DIR",
+            "paper_starting_capital": "PAPER_STARTING_CAPITAL",
+            "paper_ledger_path": "PAPER_LEDGER_PATH",
+            "paper_feed_interval_s": "PAPER_FEED_INTERVAL_S",
         }
         data = {f: env[k] for f, k in fields.items() if env.get(k)}
         return cls(**data)

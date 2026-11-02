@@ -3,17 +3,59 @@ never leave the backend. No route can place, modify or cancel a broker order."""
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 from contextlib import asynccontextmanager
 from dataclasses import asdict
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.encoders import jsonable_encoder
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
 
 from doi.app.runtime import Runtime, build_runtime
 from doi.core.config import Settings
-from doi.core.errors import CircuitOpen, DhanError, RateLimited, SchemaError, TokenRejected, UpstreamError, UpstreamTimeout
+from doi.core.errors import (
+    CircuitOpen,
+    ConfigError,
+    DhanError,
+    InstrumentError,
+    RateLimited,
+    SchemaError,
+    TokenRejected,
+    UpstreamError,
+    UpstreamTimeout,
+)
 from doi.core.models import UnderlyingRef
+from doi.paper.driver import market_state, run_forever
+from doi.paper.engine import PaperExecution
+from doi.paper.models import InvalidTransition
+from doi.risk.models import Candidate, Direction, Target
+
+
+class TargetIn(BaseModel):
+    price: float = Field(gt=0)
+    fraction: float = Field(gt=0, le=1)
+
+
+class PaperOrderIn(BaseModel):
+    signal_id: str = Field(min_length=1, max_length=128)
+    underlying: str
+    expiry: date
+    strike: float = Field(gt=0)
+    option_type: str = Field(pattern="^(CE|PE)$")
+    stop_loss: float = Field(gt=0)
+    targets: list[TargetIn] = Field(min_length=1, max_length=5)
+    valid_for_s: float = Field(default=60, gt=0, le=900)
+    underlying_invalidation: float | None = None
+    feature_snapshot_id: str | None = None
+
+
+def _paper(rt: Runtime) -> PaperExecution:
+    if rt.paper is None:
+        raise HTTPException(503, "paper engine not configured")
+    return rt.paper
 
 
 def _rt(request: Request) -> Runtime:
@@ -50,7 +92,15 @@ def create_app(settings: Settings | None = None, runtime: Runtime | None = None)
     async def lifespan(app: FastAPI):
         if getattr(app.state, "runtime", None) is None:
             app.state.runtime = await build_runtime(settings or Settings.from_env())
+        rt = app.state.runtime
+        feed = None
+        if rt.paper is not None and rt.provider is not None:
+            feed = asyncio.create_task(run_forever(rt, (settings or Settings.from_env()).paper_feed_interval_s))
         yield
+        if feed is not None:
+            feed.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await feed
 
     app = FastAPI(title="Dhan Options Intelligence", version="0.1.0", lifespan=lifespan)
     app.state.runtime = runtime
@@ -122,5 +172,80 @@ def create_app(settings: Settings | None = None, runtime: Runtime | None = None)
         }
         body["contract"] = jsonable_encoder(prof)
         return body
+
+    # ---- Paper trading: simulated only. Nothing here reaches a broker order API. ----
+
+    @app.post("/api/v1/paper/orders", status_code=201)
+    async def paper_order(request: Request, body: PaperOrderIn):
+        rt = _rt(request)
+        engine = _paper(rt)
+        ref = _underlying(rt, body.underlying)
+        cfg = rt.configs[ref.key]
+        if rt.master is None:
+            raise HTTPException(503, "instrument master not loaded")
+        try:
+            contract = rt.master.contract(cfg.exchange_family, cfg.master_symbol, body.expiry, body.strike, body.option_type)
+        except InstrumentError as e:
+            raise HTTPException(404, str(e)) from None
+        try:
+            snap = await rt.provider.get_option_chain(ref, body.expiry, max_age_s=cfg.freshness.chain_max_age_s / 2)  # type: ignore[union-attr]
+        except (DhanError, CircuitOpen, SchemaError) as e:
+            raise _upstream(e) from None
+        now = datetime.now(UTC)  # after the fetch, so quote age is never negative
+        if rt.kill_switch:
+            engine.set_kill_switch(True, now)
+        try:
+            cand = Candidate(
+                signal_id=body.signal_id,
+                underlying_key=ref.key,
+                direction=Direction.BUY_CE if body.option_type == "CE" else Direction.BUY_PE,
+                contract=contract,
+                created_at=now,
+                valid_until=now + timedelta(seconds=body.valid_for_s),
+                stop_loss=body.stop_loss,
+                targets=tuple(Target(t.price, t.fraction) for t in body.targets),
+                config_version=cfg.config_version,
+                underlying_invalidation=body.underlying_invalidation,
+                feature_snapshot_id=body.feature_snapshot_id,
+            )
+        except ConfigError as e:
+            raise HTTPException(422, str(e)) from None
+        res = engine.submit_simulated(cand, market_state(snap, contract, now, cfg.freshness.chain_max_age_s), now)
+        out = jsonable_encoder(
+            {
+                "duplicate": res.duplicate,
+                "approved": bool(res.decision and res.decision.approved),
+                "decision": res.decision,
+                "reasons": res.decision.reasons if res.decision else [],
+                "order": engine._order_view(res.order) if res.order else None,
+            }
+        )
+        if res.duplicate:
+            return JSONResponse(out, status_code=200)
+        if not out["approved"]:
+            raise HTTPException(422, out)
+        return out
+
+    @app.get("/api/v1/paper/portfolio")
+    async def paper_portfolio(request: Request):
+        return jsonable_encoder(_paper(_rt(request)).portfolio(datetime.now(UTC)))
+
+    @app.get("/api/v1/paper/trades")
+    async def paper_trades(request: Request):
+        return jsonable_encoder(_paper(_rt(request)).trades)
+
+    @app.get("/api/v1/paper/ledger")
+    async def paper_ledger(request: Request, after_seq: int = Query(0, ge=0), limit: int = Query(500, ge=1, le=5000)):
+        led = _paper(_rt(request)).ledger
+        return jsonable_encoder({"head": led.head, "events": led.since(after_seq)[:limit]})
+
+    @app.post("/api/v1/paper/positions/{position_id}/close")
+    async def paper_close(request: Request, position_id: str):
+        engine = _paper(_rt(request))
+        try:
+            order = engine.close_position(position_id, datetime.now(UTC))
+        except InvalidTransition as e:
+            raise HTTPException(409, str(e)) from None
+        return jsonable_encoder({"exit_order": engine._order_view(order) if order else None})
 
     return app
