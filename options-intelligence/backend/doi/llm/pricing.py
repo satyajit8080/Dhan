@@ -36,16 +36,19 @@ class ModelPrice:
 
 @dataclass(frozen=True, slots=True)
 class TierModels:
-    fast: str = "grok-4.20-non-reasoning"  # name present in official SDK examples; availability UNVERIFIED
-    reasoning: str = "grok-4.20-reasoning"  # idem
+    fast: str = "grok-4.20-0309-non-reasoning"  # listed on docs.x.ai/developers/models (checked 2026-11-02)
+    reasoning: str = "grok-4.20-0309-reasoning"  # dated ids: no silent model drift
 
 
-# Pessimistic seeds (upper ends of third-party ranges, Nov 2026). Overestimating
-# keeps the hard cap safe; settlement uses provider-reported cost when present.
+# Official prices, docs.x.ai/developers/models, checked 2026-11-02 (below 200k prompt tokens;
+# long-context requests are refused by the gateway). Settlement still prefers the provider's
+# cost_in_usd_ticks, which the REST usage object always returns.
+_DOCS = "docs.x.ai/developers/models 2026-11-02"
 SEED_PRICES = {
-    "grok-4.20-non-reasoning": ModelPrice("grok-4.20-non-reasoning", D("1.25"), D("0.30"), D("2.50"), "seed-unverified", False),
-    "grok-4.20-reasoning": ModelPrice("grok-4.20-reasoning", D("3.00"), D("0.75"), D("15.00"), "seed-unverified", False),
+    "grok-4.20-0309-non-reasoning": ModelPrice("grok-4.20-0309-non-reasoning", D("1.25"), D("0.20"), D("2.50"), _DOCS, True),
+    "grok-4.20-0309-reasoning": ModelPrice("grok-4.20-0309-reasoning", D("1.25"), D("0.20"), D("2.50"), _DOCS, True),
 }
+LONG_CONTEXT_PROMPT_TOKENS = 128_000  # most conservative threshold seen in the official docs
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,7 +70,9 @@ class CostModel:
         return (usd * self.fx_inr_per_usd * self.tax_multiplier).quantize(D("0.000001"))
 
     def allowance(self, tier: Tier) -> int:
-        return (self.reasoning_allowance or {"fast": 0, "reasoning": 4000})[tier]
+        # max_completion_tokens does NOT bound reasoning tokens (official REST docs), so the reservation
+        # carries a large reasoning allowance; any excess is still settled truthfully and freezes the month.
+        return (self.reasoning_allowance or {"fast": 500, "reasoning": 16000})[tier]
 
 
 def estimate_prompt_tokens(text: str) -> int:
@@ -114,14 +119,14 @@ def prices_from_listing(models: list[dict]) -> dict[str, ModelPrice]:
     out = {}
     for m in models:
         try:
-            p_in = D(m["prompt_text_token_price"]) / D(10_000)  # 1/100 cents per 1M -> USD per 1M
+            # GET /v1/models prices are USD cents per 100M tokens (official REST docs) -> /10_000 = USD per 1M
+            p_in = D(m["prompt_text_token_price"]) / D(10_000)
             p_out = D(m["completion_text_token_price"]) / D(10_000)
-            p_cached = D(m.get("cached_prompt_token_price", m["prompt_text_token_price"])) / D(
-                10_000
-            )  # cents per 100M -> USD per 1M
+            cached = m.get("cached_prompt_text_token_price", m.get("cached_prompt_token_price", m["prompt_text_token_price"]))
+            p_cached = D(cached) / D(10_000)
         except (KeyError, ArithmeticError, TypeError, ValueError):
             continue
         for name in [m.get("id") or m.get("name"), *(m.get("aliases") or [])]:
             if name:
-                out[name] = ModelPrice(name, p_in, p_cached, p_out, "xai:/v1/language-models", True)
+                out[name] = ModelPrice(name, p_in, p_cached, p_out, "xai:GET /v1/models", True)
     return out

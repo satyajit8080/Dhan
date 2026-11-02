@@ -37,8 +37,8 @@ class Settings(BaseModel):
     ai_enabled: bool = False
     xai_api_key: SecretStr | None = None
     xai_base_url: str = "https://api.x.ai/v1"
-    llm_fast_model: str = "grok-4.20-non-reasoning"
-    llm_reasoning_model: str = "grok-4.20-reasoning"
+    llm_fast_model: str = "grok-4.20-0309-non-reasoning"
+    llm_reasoning_model: str = "grok-4.20-0309-reasoning"
     llm_monthly_limit_inr: float = 3000.0
     llm_safety_buffer_inr: float = 150.0
     llm_fx_inr_per_usd: float = 90.0

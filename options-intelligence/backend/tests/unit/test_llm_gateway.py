@@ -37,7 +37,7 @@ from doi.llm.pricing import (
 from tests.unit.test_feature_engine import AS_OF, inp
 
 NOW = datetime(2026, 11, 2, 5, 0, tzinfo=UTC)
-FAST = SEED_PRICES["grok-4.20-non-reasoning"]
+FAST = SEED_PRICES["grok-4.20-0309-non-reasoning"]
 
 
 def req(**kw):
@@ -62,7 +62,7 @@ def test_usage_parsing_and_provider_cost_preferred():
     usd, src = usd_actual(FAST, Usage(1000, 200, 0, 0, cost_ticks=12_345_000_000))
     assert src == "PROVIDER_TICKS" and usd == D("1.2345")  # 1 tick = 1e-10 USD (xai-proto)
     usd2, src2 = usd_actual(FAST, u)
-    assert src2 == "PRICE_BOOK" and usd2 == (D(600) * D("1.25") + D(400) * D("0.30") + D(250) * D("2.50")) / D(1_000_000)
+    assert src2 == "PRICE_BOOK" and usd2 == (D(600) * D("1.25") + D(400) * D("0.20") + D(250) * D("2.50")) / D(1_000_000)
 
 
 def test_listing_unit_conversion():
@@ -74,6 +74,11 @@ def test_listing_unit_conversion():
         and p["grok-x"].cached_input_per_m == D("0.05")
     )
     assert p["grok-x-latest"].verified and prices_from_listing([{"name": "bad"}]) == {}
+    # the official REST example (GET /v1/models): USD cents per 100M tokens
+    official = prices_from_listing([{"id": "latest", "prompt_text_token_price": 12500, "cached_prompt_text_token_price": 2000,
+                                     "completion_text_token_price": 25000}])  # fmt: skip
+    o = official["latest"]
+    assert (o.input_per_m, o.cached_input_per_m, o.output_per_m) == (D("1.25"), D("0.2"), D("2.5"))
 
 
 def test_estimate_is_upper_bound_of_settled_cost():

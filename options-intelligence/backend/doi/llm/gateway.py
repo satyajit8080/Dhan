@@ -38,6 +38,7 @@ from doi.core.errors import CircuitOpen, DoiError
 from doi.data.scheduler.chain_scheduler import CircuitBreaker
 from doi.llm.budget import BudgetExhausted, MemoryBudget, PgBudget
 from doi.llm.pricing import (
+    LONG_CONTEXT_PROMPT_TOKENS,
     SEED_PRICES,
     CostModel,
     ModelPrice,
@@ -80,7 +81,8 @@ class XaiClient:
         self._client = client or httpx.AsyncClient()
 
     async def chat(self, *, model: str, messages: list[dict], max_tokens: int, temperature: float) -> dict:
-        body = {"model": model, "messages": messages, "max_tokens": max_tokens, "temperature": temperature}
+        # max_tokens is deprecated; max_completion_tokens bounds visible output only (official REST docs)
+        body = {"model": model, "messages": messages, "max_completion_tokens": max_tokens, "temperature": temperature}
         try:
             r = await self._client.post(
                 f"{self._base}/chat/completions",
@@ -103,7 +105,7 @@ class XaiClient:
 
     async def list_models(self) -> list[dict]:
         r = await self._client.get(
-            f"{self._base}/language-models",
+            f"{self._base}/models",
             headers={"Authorization": f"Bearer {self._key.get_secret_value()}"},
             timeout=self._timeout,
         )
@@ -281,6 +283,9 @@ class LLMGateway:
                             "cost_inr": D(0), "cost_source": "CACHE", "status": "CACHE_HIT"})  # fmt: skip
             return LLMResult(_text(cached), model, tier, u, D(0), True, cid, 0)
 
+        prompt_est = estimate_prompt_tokens(req.system + req.user) + 8
+        if prompt_est >= LONG_CONTEXT_PROMPT_TOKENS:
+            raise self._refuse(req, "REFUSED_LONG_CONTEXT", f"prompt ~{prompt_est} tokens: long-context pricing is not budgeted")
         max_out = req.max_tokens + self.cost.allowance(tier)
         est_inr = self.cost.inr(usd_estimate(price, estimate_prompt_tokens(req.system + req.user) + 8, max_out))
         last_err: Exception | None = None
