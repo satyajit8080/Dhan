@@ -92,7 +92,7 @@ def test_charge_components_and_rounding():
     s = schedule_for(date(2026, 11, 2))
     buy = compute_charges("BUY", D("100.05"), 150, "NSE", s, include_brokerage=True)
     assert (buy.brokerage, buy.stt, buy.stamp) == (D("20.00"), D("0"), D("0.45"))
-    assert buy.exchange_txn == D("5.26") and buy.sebi == D("0.02") and buy.gst == D("4.55")
+    assert buy.exchange_txn == D("5.33") and buy.sebi == D("0.02") and buy.gst == D("4.56")  # NSE 0.03553% from 1 Mar 2026
     sell = compute_charges("SELL", D("125"), 150, "BSE", s, include_brokerage=False)
     assert sell.brokerage == 0 and sell.stamp == 0 and sell.stt == D("28.13")  # 0.15% after 1 Apr 2026
     assert buy.schedule_version == "in-idxopt-2026-04-01"

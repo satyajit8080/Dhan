@@ -43,6 +43,17 @@ SCHEDULES: tuple[ChargeSchedule, ...] = (
         stamp_buy_pct=D("0.003"),
         exchange_txn_pct={"NSE": D("0.03503"), "BSE": D("0.0325")},
     ),
+    # NSE circular NSE/FA/73061 (27 Feb 2026) revised transaction charges from 1 Mar 2026.
+    # 0.03553% of options premium per published broker schedules (Zerodha; Oquilia ₹3,552.99/crore).
+    # The official PDF was not reachable from the build environment: secondary-source verified.
+    ChargeSchedule(
+        version="in-idxopt-2026-03-01",
+        effective_from=date(2026, 3, 1),
+        brokerage_per_order=D("20"),
+        stt_sell_pct=D("0.1"),
+        stamp_buy_pct=D("0.003"),
+        exchange_txn_pct={"NSE": D("0.03553"), "BSE": D("0.0325")},
+    ),
     # Union Budget 2026-27: STT on sold option premium 0.10% -> 0.15% from 1 Apr 2026.
     ChargeSchedule(
         version="in-idxopt-2026-04-01",
@@ -50,7 +61,7 @@ SCHEDULES: tuple[ChargeSchedule, ...] = (
         brokerage_per_order=D("20"),
         stt_sell_pct=D("0.15"),
         stamp_buy_pct=D("0.003"),
-        exchange_txn_pct={"NSE": D("0.03503"), "BSE": D("0.0325")},
+        exchange_txn_pct={"NSE": D("0.03553"), "BSE": D("0.0325")},
     ),
 )
 

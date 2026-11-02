@@ -20,9 +20,9 @@ CSP = "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' '
 
 UNVERIFIED = [
     "xAI REST request/response shape and current model names/prices (docs.x.ai unreachable; usage/cost fields verified from xai-proto)",
-    "DhanHQ endpoint history depth, intraday look-back and option-chain OI unit (dhanhq.co unreachable)",
+    "DhanHQ endpoint history depth and intraday look-back (dhanhq.co unreachable); OI unit = units confirmed live via Dhan MCP on 2026-11-02",
     "Dhan Live Market Feed packet layout (taken from official DhanHQ-py source, not live-tested)",
-    "NSE/BSE 2026-27 holiday list completeness; NSE options exchange-charge rate (0.03503% vs ~0.03553%)",
+    "NSE/BSE holiday list and NSE options charge 0.03553% (NSE/FA/73061) are secondary-source verified; official NSE PDFs unreachable",
     "INR/USD rate and GST treatment used for Grok cost conversion",
 ]
 

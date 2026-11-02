@@ -1,8 +1,13 @@
-# NSE/BSE equity-derivatives trading holidays used by the paper simulator's
-# session calendar (weekends are handled in code). Partial: confirm and complete
-# from the official NSE "Trading holidays for the calendar year" circular before
-# relying on it. A missing holiday is low-risk: no quotes arrive, so nothing fills.
+# NSE/BSE equity and equity-derivatives trading holidays (weekdays only; weekends are handled in code).
+# Source tier for every entry: SECONDARY (several published broker/news calendars agree). The official
+# NSE circular host (nsearchives.nseindia.com) was not reachable from the build environment.
+# Not included: currency-derivative-only closures. Muhurat trading (Sun 8 Nov 2026) is a special
+# session on a weekend and is NOT modelled; the paper engine treats Sundays as closed.
 holidays:
-  - {date: 2026-01-15, name: "Maharashtra municipal elections", source: "NSE/CMTR/72260 (12 Jan 2026)"}
-  - {date: 2026-10-02, name: "Gandhi Jayanti", source: "NSE 2026 holiday list (secondary sources)"}
-  - {date: 2026-11-10, name: "Diwali Balipratipada", source: "NSE 2026 holiday list (secondary sources)"}
+  - {date: 2026-01-15, name: "Maharashtra municipal elections", source: "NSE/CMTR/72260 (12 Jan 2026), reported"}
+  - {date: 2026-01-26, name: "Republic Day", source: "secondary"}
+  - {date: 2026-03-03, name: "Holi", source: "secondary"}
+  - {date: 2026-10-02, name: "Gandhi Jayanti", source: "secondary"}
+  - {date: 2026-11-10, name: "Diwali Balipratipada", source: "secondary"}
+  - {date: 2026-11-24, name: "Guru Nanak Jayanti", source: "secondary (one source said 25 Nov; 24 Nov is the Tuesday)"}
+  - {date: 2026-12-25, name: "Christmas", source: "secondary"}
