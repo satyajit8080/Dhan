@@ -68,6 +68,42 @@ class PaperExecution:
     ) -> None:
         if starting_capital <= 0:
             raise ValueError("starting capital must be positive")
+        self._init_state(account_id, starting_capital, gate, ledger, policy)
+        self.ledger.append(
+            "ACCOUNT_OPENED",
+            opened_at,
+            {
+                "account_id": account_id,
+                "starting_capital": starting_capital,
+                "fill_model": self.fm,
+                "risk_config": gate.config.version,
+            },
+        )
+        self.ledger.post_cash(opened_at, account_id, "DEPOSIT", starting_capital, "opening")
+        self._session: date = self.cal.session_date(opened_at)
+        self.daily_start_equity = starting_capital
+
+    @classmethod
+    def restored(
+        cls,
+        *,
+        account_id: str,
+        starting_capital: Decimal,
+        gate: RiskGate,
+        ledger: Ledger,
+        session: date,
+        daily_start_equity: Decimal,
+        policy: ExecutionPolicy | None = None,
+    ) -> PaperExecution:
+        """Empty shell around an already-persisted ledger; persistence code fills the
+        collections (see doi.paper.store). No ACCOUNT_OPENED event is written."""
+        self = cls.__new__(cls)
+        self._init_state(account_id, starting_capital, gate, ledger, policy)
+        self._session = session
+        self.daily_start_equity = daily_start_equity
+        return self
+
+    def _init_state(self, account_id, starting_capital, gate, ledger, policy) -> None:
         self.account_id = account_id
         self.gate = gate
         self.fm = gate.fill_model
@@ -88,19 +124,10 @@ class PaperExecution:
         self._fill_keys: set[str] = set()
         self._last_ts: dict[str, datetime] = {}
         self._n = defaultdict(int)
-        self.ledger.append(
-            "ACCOUNT_OPENED",
-            opened_at,
-            {
-                "account_id": account_id,
-                "starting_capital": starting_capital,
-                "fill_model": self.fm,
-                "risk_config": gate.config.version,
-            },
-        )
-        self.ledger.post_cash(opened_at, account_id, "DEPOSIT", starting_capital, "opening")
-        self._session: date = self.cal.session_date(opened_at)
-        self.daily_start_equity = starting_capital
+        self._persist_cache: dict[str, str] = {}  # entity key -> last persisted canonical JSON
+        self._persisted_events = 0
+        self._persisted_cash = 0
+        self._db_version: int | None = None  # optimistic-lock version once persisted
 
     # ---------- identity / accounting helpers ----------
 
@@ -267,9 +294,16 @@ class PaperExecution:
                 self._expire(o, now)
         today = self.cal.session_date(now)
         square = self.cal.at(today, self.policy.square_off) if self.policy.square_off else None
+        session_open = self.cal.at(today, self.cal.open)
+        trading = self.cal.is_trading_day(today)
         for p in self._live():
+            carried = p.opened_at is not None and self.cal.session_date(p.opened_at) < today
             if p.contract.expiry is not None and p.contract.expiry < today:
                 self._exit_all(p, ExitReason.EXPIRY, now)
+            elif not trading:
+                continue  # weekend/holiday: no market, time exits wait for the next session
+            elif square is not None and carried and now >= session_open:
+                self._exit_all(p, ExitReason.TIME_SQUARE_OFF, now)  # missed square-off (restart/holiday): flatten at next open
             elif square is not None and now >= square:
                 self._exit_all(p, ExitReason.TIME_SQUARE_OFF, now)
             elif self.policy.max_holding_s is not None and now - p.opened_at >= timedelta(seconds=self.policy.max_holding_s):  # type: ignore[operator]
@@ -459,8 +493,38 @@ class PaperExecution:
             del self._planned[o.position_id]  # no fill ever happened: nothing to unwind
             self.ledger.append("ENTRY_ABANDONED", now, {"position_id": o.position_id, "signal_id": o.signal_id})
 
+    def recover(self, now: datetime) -> list[str]:
+        """Repair states a crash or restart could leave behind, then apply every
+        expiry/square-off that fell due while the process was down. Cash and fills
+        are never modified here; money inconsistencies are reported by
+        doi.paper.reconcile and must stop start-up."""
+        actions: list[str] = []
+        for pid, p in list(self._planned.items()):
+            o = self.orders.get(p.entry_order_id or "")
+            if o is None or not o.active:
+                del self._planned[pid]
+                actions.append(f"dropped planned {pid}: entry order not working")
+        for p in list(self.positions.values()):
+            if p.state is PositionState.EVALUATED:
+                continue
+            if p.state is PositionState.CLOSED or p.qty_open == 0:
+                if p.state is PositionState.OPEN:
+                    p.transition(PositionState.EXIT_PENDING)
+                self._close(p, p.closed_at or now)
+                actions.append(f"finalised {p.id}")
+            elif p.state is PositionState.EXIT_PENDING:
+                o = self.orders.get(p.exit_order_id or "")
+                if o is None or not o.active:
+                    p.exit_order_id, p.exit_reason = None, None
+                    p.transition(PositionState.OPEN)
+                    actions.append(f"reopened {p.id}: exit order not working")
+        self.ledger.append("RECOVERY", now, {"actions": actions})
+        self.advance_time(now)
+        return actions
+
     def _close(self, p: Position, ts: datetime) -> None:
-        p.transition(PositionState.CLOSED)
+        if p.state is not PositionState.CLOSED:
+            p.transition(PositionState.CLOSED)
         p.closed_at = ts
         gross = p.exit_proceeds - p.entry_cost
         p.realized_gross = gross
@@ -483,6 +547,9 @@ class PaperExecution:
             closed_at=ts,
             config_version=p.config_version,
         )
+        if any(t.position_id == p.id for t in self.trades):
+            p.transition(PositionState.EVALUATED)
+            return
         self.trades.append(trade)
         self.ledger.append("POSITION_CLOSED", ts, {"trade": trade})
         if net < 0:

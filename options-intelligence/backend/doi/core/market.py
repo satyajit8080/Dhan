@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, time
+from pathlib import Path
 from zoneinfo import ZoneInfo
+
+import yaml
 
 IST = ZoneInfo("Asia/Kolkata")
 
@@ -62,3 +65,11 @@ class SessionCalendar:
     @staticmethod
     def at(d: date, t: time) -> datetime:
         return datetime.combine(d, t, IST).astimezone(UTC)
+
+
+def load_holidays(path: Path | None) -> frozenset[date]:
+    """Exchange trading holidays from YAML: {holidays: [{date: YYYY-MM-DD, name: ..., source: ...}]}."""
+    if path is None or not Path(path).exists():
+        return frozenset()
+    data = yaml.safe_load(Path(path).read_text()) or {}
+    return frozenset(date.fromisoformat(str(h["date"])) for h in data.get("holidays", []))

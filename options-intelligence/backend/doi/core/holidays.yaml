@@ -1,0 +1,8 @@
+# NSE/BSE equity-derivatives trading holidays used by the paper simulator's
+# session calendar (weekends are handled in code). Partial: confirm and complete
+# from the official NSE "Trading holidays for the calendar year" circular before
+# relying on it. A missing holiday is low-risk: no quotes arrive, so nothing fills.
+holidays:
+  - {date: 2026-01-15, name: "Maharashtra municipal elections", source: "NSE/CMTR/72260 (12 Jan 2026)"}
+  - {date: 2026-10-02, name: "Gandhi Jayanti", source: "NSE 2026 holiday list (secondary sources)"}
+  - {date: 2026-11-10, name: "Diwali Balipratipada", source: "NSE 2026 holiday list (secondary sources)"}

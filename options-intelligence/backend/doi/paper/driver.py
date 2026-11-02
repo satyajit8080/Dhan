@@ -62,12 +62,12 @@ def market_state(snap: OptionChainSnapshot, contract: Instrument, now: datetime,
 
 
 async def pump_once(rt, now: datetime | None = None) -> int:
-    """One pass: fetch each watched chain once and feed matching quotes. Returns quotes fed."""
-    engine: PaperExecution | None = rt.paper
-    if engine is None or rt.provider is None:
+    """One pass: fetch each watched chain once, then apply all quotes plus the
+    clock in ONE serialised engine call (one database transaction)."""
+    if rt.paper is None or rt.provider is None:
         return 0
-    fed = 0
-    for (key, expiry), contracts in engine.watch().items():
+    quotes: list[Quote] = []
+    for (key, expiry), contracts in rt.paper.watch().items():
         ref, cfg = rt.universe.get(key), rt.configs.get(key)
         if ref is None or cfg is None:
             continue
@@ -79,16 +79,28 @@ async def pump_once(rt, now: datetime | None = None) -> int:
         for c in contracts:
             leg = find_leg(snap, c)
             if leg is not None:
-                engine.process_market_event(quote_from_leg(leg, c, snap))
-                fed += 1
-    engine.advance_time(now or datetime.now(UTC))
-    return fed
+                quotes.append(quote_from_leg(leg, c, snap))
+    clock = now or datetime.now(UTC)
+
+    def apply(e: PaperExecution) -> None:
+        for q in quotes:
+            e.process_market_event(q)
+        e.advance_time(clock)
+
+    await rt.paper_service.call(apply)
+    return len(quotes)
+
+
+def feed_subscriptions(engine: PaperExecution) -> set[tuple[str, str]]:
+    return {(c.exchange_segment, c.security_id) for cs in engine.watch().values() for c in cs}
 
 
 async def run_forever(rt, interval_s: float = 3.0) -> None:
     while True:
         try:
             await pump_once(rt)
+            if rt.collector is not None and rt.paper is not None:
+                await rt.collector.set_subscriptions(feed_subscriptions(rt.paper))
         except Exception:  # keep the feed alive; the ledger records every state change
             log.exception("paper feed pass failed")
         await asyncio.sleep(interval_s)

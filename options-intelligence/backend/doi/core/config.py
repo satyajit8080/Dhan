@@ -8,6 +8,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, SecretStr
 
+DEFAULT_HOLIDAYS = Path(__file__).resolve().parent / "holidays.yaml"
 DEFAULT_STRATEGY_DIR = Path(__file__).resolve().parent.parent / "intelligence" / "strategy_configs"
 
 
@@ -30,6 +31,8 @@ class Settings(BaseModel):
     paper_starting_capital: float = 500000.0
     paper_ledger_path: Path | None = None
     paper_feed_interval_s: float = 3.0
+    dhan_feed_enabled: bool = False
+    holidays_file: Path | None = DEFAULT_HOLIDAYS
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> Settings:
@@ -51,6 +54,8 @@ class Settings(BaseModel):
             "paper_starting_capital": "PAPER_STARTING_CAPITAL",
             "paper_ledger_path": "PAPER_LEDGER_PATH",
             "paper_feed_interval_s": "PAPER_FEED_INTERVAL_S",
+            "dhan_feed_enabled": "DHAN_FEED_ENABLED",
+            "holidays_file": "HOLIDAYS_FILE",
         }
         data = {f: env[k] for f, k in fields.items() if env.get(k)}
         return cls(**data)

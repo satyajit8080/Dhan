@@ -166,3 +166,61 @@ def test_runtime_without_dhan_still_has_paper_engine(tmp_path):
 
     rt = asyncio.run(build_runtime(Settings(paper_ledger_path=tmp_path / "l.jsonl")))
     assert rt.paper is not None and rt.provider is None and (tmp_path / "l.jsonl").exists()
+
+
+def test_db_backed_runtime_restart_with_polling_and_feed(pg_dsn):
+    """Chain polling and the WebSocket collector both drive the persisted engine; a
+    restart restores the identical state and recovery keeps it consistent."""
+    from doi.app.runtime import init_paper
+    from doi.core.config import Settings
+    from doi.data.dhan.collector import MarketFeedCollector
+    from doi.paper.reconcile import reconcile
+    from doi.paper.store import PaperStore
+    from tests.unit.test_feed import FakeWS, full_packet
+
+    settings = Settings(database_url=pg_dsn, holidays_file=None)
+    rt = runtime()
+    asyncio.run(init_paper(rt, settings, datetime.now(UTC) - timedelta(seconds=5)))
+    assert rt.paper_store is not None
+    # make the restored engine permissive about wall-clock hours, like runtime() does
+    rt.paper.gate.calendar = AlwaysOpen()
+    rt.paper.gate.config = RiskConfig(last_entry_time=time(23, 59, 59))
+    rt.paper.policy = ExecutionPolicy(square_off=None)
+    c = TestClient(create_app(runtime=rt))
+    assert c.post("/api/v1/paper/orders", json=ORDER).status_code == 201
+
+    ce = rt.provider.ce
+    ws = FakeWS([full_packet(sid=int(ce.security_id), bid=99.5, ask=100.0, bq=75, aq=75)])
+
+    async def on_quote(q):
+        await rt.paper_service.call(lambda e: e.process_market_event(q))
+
+    import time as _t
+
+    _t.sleep(0.3)
+    feed = MarketFeedCollector("cid", lambda: "tok", on_quote, connect=lambda url: _ret(ws), backoff_base_s=0.001)
+
+    async def stream():
+        await feed.set_subscriptions({(ce.exchange_segment, ce.security_id)})
+        task = asyncio.create_task(feed.run())
+        await asyncio.sleep(0.05)
+        await feed.stop()
+        task.cancel()
+
+    asyncio.run(stream())
+    order = rt.paper.orders["ORD-000001"]
+    assert order.filled_qty == 75  # partial fill from feed depth (1 lot shown)
+    _t.sleep(0.01)
+    asyncio.run(pump_once(rt))  # chain polling completes the fill
+    assert rt.paper.orders["ORD-000001"].filled_qty == 150
+
+    restored = PaperStore(pg_dsn).load(rt.paper.account_id, rt.paper.gate, rt.paper.policy)
+    assert restored.ledger.head == rt.paper.ledger.head and reconcile(restored) == []
+    rt2 = runtime()
+    asyncio.run(init_paper(rt2, settings, datetime.now(UTC)))  # second boot: load + recover
+    assert rt2.paper.orders["ORD-000001"].filled_qty == 150 and reconcile(rt2.paper) == []
+    assert "RECOVERY" in [ev.kind for ev in rt2.paper.ledger.events]
+
+
+async def _ret(x):
+    return x

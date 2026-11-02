@@ -3,7 +3,7 @@
 -- Raw request manifests are stored separately from normalized rows so bad
 -- ingestion can be audited and replayed.
 
-BEGIN;
+-- Applied inside one transaction by doi.db.migrate.
 
 CREATE TABLE users (
     id          bigserial PRIMARY KEY,
@@ -296,4 +296,3 @@ BEGIN
 END
 $$;
 
-COMMIT;

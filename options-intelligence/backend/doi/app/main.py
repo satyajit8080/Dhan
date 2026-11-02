@@ -93,14 +93,18 @@ def create_app(settings: Settings | None = None, runtime: Runtime | None = None)
         if getattr(app.state, "runtime", None) is None:
             app.state.runtime = await build_runtime(settings or Settings.from_env())
         rt = app.state.runtime
-        feed = None
+        tasks = []
         if rt.paper is not None and rt.provider is not None:
-            feed = asyncio.create_task(run_forever(rt, (settings or Settings.from_env()).paper_feed_interval_s))
+            tasks.append(asyncio.create_task(run_forever(rt, (settings or Settings.from_env()).paper_feed_interval_s)))
+        if rt.collector is not None:
+            tasks.append(asyncio.create_task(rt.collector.run()))
         yield
-        if feed is not None:
-            feed.cancel()
+        if rt.collector is not None:
+            await rt.collector.stop()
+        for t in tasks:
+            t.cancel()
             with contextlib.suppress(asyncio.CancelledError):
-                await feed
+                await t
 
     app = FastAPI(title="Dhan Options Intelligence", version="0.1.0", lifespan=lifespan)
     app.state.runtime = runtime
@@ -113,6 +117,8 @@ def create_app(settings: Settings | None = None, runtime: Runtime | None = None)
             "status": "ok",
             "paper_only": True,
             "kill_switch": rt.kill_switch,
+            "paper_persistence": "postgres" if rt.paper_store else "memory",
+            "market_feed": None if rt.collector is None else jsonable_encoder(rt.collector.status),
             "master_version": rt.master_version,
             "token": None if tok is None else {"state": tok.state, "fingerprint": tok.fingerprint, "expires_at": tok.expires_at},
         }
@@ -192,8 +198,6 @@ def create_app(settings: Settings | None = None, runtime: Runtime | None = None)
         except (DhanError, CircuitOpen, SchemaError) as e:
             raise _upstream(e) from None
         now = datetime.now(UTC)  # after the fetch, so quote age is never negative
-        if rt.kill_switch:
-            engine.set_kill_switch(True, now)
         try:
             cand = Candidate(
                 signal_id=body.signal_id,
@@ -210,7 +214,15 @@ def create_app(settings: Settings | None = None, runtime: Runtime | None = None)
             )
         except ConfigError as e:
             raise HTTPException(422, str(e)) from None
-        res = engine.submit_simulated(cand, market_state(snap, contract, now, cfg.freshness.chain_max_age_s), now)
+        market = market_state(snap, contract, now, cfg.freshness.chain_max_age_s)
+
+        def submit(e):
+            if rt.kill_switch:
+                e.set_kill_switch(True, now)
+            return e.submit_simulated(cand, market, now)
+
+        res = await rt.paper_service.call(submit)
+        engine = rt.paper
         out = jsonable_encoder(
             {
                 "duplicate": res.duplicate,
@@ -241,9 +253,10 @@ def create_app(settings: Settings | None = None, runtime: Runtime | None = None)
 
     @app.post("/api/v1/paper/positions/{position_id}/close")
     async def paper_close(request: Request, position_id: str):
-        engine = _paper(_rt(request))
+        rt = _rt(request)
+        engine = _paper(rt)
         try:
-            order = engine.close_position(position_id, datetime.now(UTC))
+            order = await rt.paper_service.call(lambda e: e.close_position(position_id, datetime.now(UTC)))
         except InvalidTransition as e:
             raise HTTPException(409, str(e)) from None
         return jsonable_encoder({"exit_order": engine._order_view(order) if order else None})

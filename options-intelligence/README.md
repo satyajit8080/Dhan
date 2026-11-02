@@ -15,6 +15,9 @@ It is self-contained so it can move to its own repository unchanged (`git subtre
 | 2 Scheduler | REST done | Per-request-key 3 s cooldown, bounded priority pool, coalescing, cache, jittered backoff, circuit breaker. The WebSocket feed collector is still to do |
 | 3 Historical data and quality | planner and audit done | One ATM offset and one side per request, windows of 30 days or less, and a coverage audit that returns APPROVED / WITH_GAPS / QUARANTINED / UNSUPPORTED. The SENSEX/BANKEX history gate is `blocked` |
 | 6 Risk + paper execution | done (in memory) | `doi/risk/` is a deterministic risk gate (sizing, daily cap, aggregate risk, concurrency, correlated exposure, loss streak, reward/risk net of costs, liquidity, freshness, entry cutoff). `doi/paper/` is a bid/ask fill model with latency, slippage, lot-sized partial fills and a protective entry limit. It also has date-effective charges (brokerage, STT, exchange, SEBI, stamp duty, GST), stop/target/underlying/time/kill-switch exits, a hash-chained ledger with cash reconciliation, an optional JSONL sink, and REST routes. Postgres persistence and restoring after a restart are not wired yet |
+| 6.1 Persistence | done | PostgreSQL (`migrations/002_paper_persistence.sql`) holds accounts, cash book, the hash-chained ledger, submissions, orders, fills, positions and trades. Each engine operation is saved in one transaction with an optimistic version lock, a ledger-chain continuity check and an SQL cash re-sum. At start-up the app migrates, loads, reconciles and recovers |
+| 6.2 Reliability | done | `PaperExecution.recover`, `doi/paper/reconcile.py` (an independent ledger projection compared against state), positions carried over a restart or holiday are squared off at the next open, and the holiday calendar is in `doi/core/holidays.yaml` (partial, see below) |
+| 6.3 Integration | done, needs a live run | Chain polling and the `doi/data/dhan/collector.py` Live Market Feed (v2 binary, full packet with depth, reconnect with jitter, auth disconnects are fatal) both feed the persisted engine through `PaperService`. The feed is off by default (`DHAN_FEED_ENABLED`) |
 | 4, 5, 7, 8 | not started | Analytics, signal engine, backtests, dashboard |
 
 ## Layout
@@ -35,13 +38,20 @@ backend/doi/
 migrations/  infra/docker/  scripts/
 ```
 
+## Migrations
+
+`python -m doi.db.migrate` (also runs at start-up when `DATABASE_URL` is set). Files run in order, each in
+one transaction, under an advisory lock and with a recorded checksum. Editing an already-applied file is refused.
+
 ## Develop
 
 ```bash
 cd backend
 pip install -e ".[dev]"
-pytest -q
+pytest -q                      # persistence tests use TEST_DATABASE_URL or a local PostgreSQL install; skipped otherwise
 ruff check .
+bandit -q -r doi -ll
+pip-audit
 ```
 
 ## Run

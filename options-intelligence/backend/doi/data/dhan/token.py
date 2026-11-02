@@ -79,5 +79,6 @@ class TokenSource:
             raise TokenRejected("no Dhan access token configured")
         if status.state == "expired":
             raise TokenRejected(f"Dhan access token {status.fingerprint} expired at {status.expires_at}")
-        assert self._value is not None
+        if self._value is None:  # unreachable after the checks above; explicit for python -O
+            raise TokenRejected("no Dhan access token configured")
         return self._value

@@ -7,7 +7,6 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
     volumes:
       - dbdata:/var/lib/postgresql/data
-      - ./migrations:/docker-entrypoint-initdb.d:ro
     ports: ["127.0.0.1:5432:5432"]
 
   redis:
@@ -16,8 +15,8 @@ services:
 
   api:
     build:
-      context: ./backend
-      dockerfile: ../infra/docker/api.Dockerfile
+      context: .
+      dockerfile: infra/docker/api.Dockerfile
     env_file: .env
     environment:
       DHAN_TOKEN_FILE: /run/secrets/dhan_token
