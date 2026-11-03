@@ -33,9 +33,15 @@ decoder on your PC turns the log into the CSVs, ZIP and report.
    ```
    python -m collector.decode_cloud_log path\to\run.log
    ```
-   If a run stopped (token expired, request budget), it logs `START_AT_SYMBOL = '...'`.
-   Set that, run again, then decode all the logs together:
+   If a run stopped (token expired, daily request budget), it logs
+   `START_AT_SYMBOL = '...' and START_AT_DATE = '...'`. Set both, run again, then decode all
+   the logs together:
    `python -m collector.decode_cloud_log run1.log run2.log`.
+
+The run starts with a probe that finds a request shape Dhan accepts. In practice
+(3 Nov 2026) Dhan refused any stock-option window spanning more than one day (`fromDate`
+to `toDate`, inclusive) with DH-905, despite its docs saying 30 days. So a full 5-year,
+60-stock pull is about 657k requests: about 7 days at the ~95k/day budget, one run a day.
 
 By default the cloud run keeps only the bars within ±2 min of 09:30 and 15:20, with values
 unchanged (`KEEP = "SNAPSHOTS"`). That's about 60 MB of log for 60 stocks × 5 years;

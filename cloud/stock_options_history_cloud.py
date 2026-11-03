@@ -30,6 +30,7 @@ SYMBOLS = [
     "HAL", "VEDL", "TVSMOTOR",
 ]
 START_AT_SYMBOL = ""              # resume: skip symbols before this one (blank = start at the first)
+START_AT_DATE = ""                # resume: with START_AT_SYMBOL, skip that symbol's windows before this date
 STRIKES = ["ATM-3", "ATM-2", "ATM-1", "ATM", "ATM+1", "ATM+2", "ATM+3"]   # Dhan max for stocks: +/-3
 EXPIRY_CODE = 1                   # 1 = near month (0 is refused by Dhan)
 INTERVAL = 1                      # minutes
@@ -60,7 +61,7 @@ import urllib.request
 from datetime import date, datetime, timedelta, timezone
 
 PROGRAM = "stock-options-history"
-VERSION = "1.2"
+VERSION = "1.3"
 BASE_URL = "https://api.dhan.co/v2"
 ROLLING_PATH = "/charts/rollingoption"
 INSTRUMENT_FILE = "https://images.dhan.co/api-data/api-scrip-master.csv"
@@ -412,7 +413,7 @@ def history():
     emit("STKMETA", "meta", meta)
     log("info", "history_start", fromDate=frm.isoformat(), toDate=to.isoformat(),
         symbols=len(symbols), windows=len(wins), requests=total)
-    done, t0 = 0, time.monotonic()
+    done, t0, cur = 0, time.monotonic(), None
     bad_windows = 0
     try:
         for si, s in enumerate(symbols, 1):
@@ -421,6 +422,9 @@ def history():
                 continue
             rows = 0
             for a, b in wins:
+                if START_AT_DATE and s == START_AT_SYMBOL.upper() and a < date.fromisoformat(START_AT_DATE):
+                    continue
+                cur = a
                 legs = []
                 for strike in STRIKES:
                     for opt in ("CALL", "PUT"):
@@ -454,7 +458,8 @@ def history():
                                   rejected[0]["errorMessage"]))
             log("info", "symbol_done", symbol=s, barsKept=rows)
     except Stop as e:
-        log("error", "history_stopped", reason=str(e), resumeWith="START_AT_SYMBOL = %r" % s)
+        log("error", "history_stopped", reason=str(e),
+            resumeWith="START_AT_SYMBOL = %r and START_AT_DATE = %r" % (s, cur.isoformat() if cur else ""))
         return 3
     log("info", "history_done", requests=client.calls, orders="NONE",
         next="download this log, then on your PC: python -m collector.decode_cloud_log <logfile>")

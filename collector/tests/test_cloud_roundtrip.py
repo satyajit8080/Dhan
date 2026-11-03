@@ -152,6 +152,23 @@ class CloudRoundTrip(unittest.TestCase):
                                        .open(encoding="utf-8")))
             self.assertEqual(len(rows), 31 * 2 * 7)
 
+    def test_resume_from_symbol_and_date(self):
+        import urllib.request as ur
+        orig = ur.urlopen
+        try:
+            fake = StrictDhan()
+            mod = load_cloud(fake)
+            mod.SYMBOLS = ["NOTFNO", "RELIANCE", "BAJAJ-AUTO"]
+            mod.START_AT_SYMBOL, mod.START_AT_DATE = "RELIANCE", "2026-04-01"
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(mod.main(), 0)
+        finally:
+            ur.urlopen = orig
+        run = [b for b in fake.bodies if b["exchangeSegment"] == "NSE_FNO"][13:]   # after the probe
+        rel = [b for b in run if b["securityId"] == "2885"]
+        self.assertTrue(rel and min(b["fromDate"] for b in rel) >= "2026-04-01")
+        self.assertTrue(min(b["fromDate"] for b in run if b["securityId"] == "16669") < "2026-04-01")
+
     def test_stops_when_every_format_is_refused(self):
         import urllib.request as ur
         orig = ur.urlopen
