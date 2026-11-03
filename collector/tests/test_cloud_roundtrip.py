@@ -98,8 +98,24 @@ class CloudRoundTrip(unittest.TestCase):
     def test_cloud_source_avoids_blocked_patterns(self):
         src = CLOUD.read_text(encoding="utf-8")
         for pat in (r"^\s*import os\b", r"\bpathlib\b", r"os\.environ", r"sys\.exit\(", r"\bopen\(",
-                    r"subprocess", r"boto", r"place_order", r"getenv"):
+                    r"subprocess", r"boto", r"place_order", r"getenv", r"\bcode\b", r"\bhttp\b"):
             self.assertIsNone(re.search(pat, src, re.M), pat)
+        # Dhan Cloud's scanner reports a bare name equal to a stdlib module (e.g. `code`)
+        # as a "blocked import". Only real imports may use module names.
+        import ast
+        import sys
+        tree = ast.parse(src)
+        imported = {a.name.split(".")[0] for n in ast.walk(tree) if isinstance(n, ast.Import)
+                    for a in n.names}
+        imported |= {n.module.split(".")[0] for n in ast.walk(tree) if isinstance(n, ast.ImportFrom)}
+        names = set()
+        for n in ast.walk(tree):
+            for attr in ("id", "arg", "attr", "name"):
+                v = getattr(n, attr, None)
+                if isinstance(v, str):
+                    names.add(v)
+        stdlib = getattr(sys, "stdlib_module_names", set())
+        self.assertEqual(sorted((names & set(stdlib)) - imported), [])
         self.assertIn('CLIENT_ID = "{{CLIENT_ID}}"', src)
         self.assertIn('ACCESS_TOKEN = "{{ACCESS_TOKEN}}"', src)
 

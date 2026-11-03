@@ -94,12 +94,12 @@ def main(argv=None) -> int:
             if leg["status"] in ("ok", "no_data"):
                 resp = {"data": leg.get("data") or {}, "barsReturned": leg.get("barsReturned"),
                         "barsKept": leg.get("barsKept"), "source": "dhan-cloud-log"}
-                store.put(key, leg["request"], leg["status"], leg.get("http"), resp,
+                store.put(key, leg["request"], leg["status"], leg.get("httpStatus"), resp,
                           leg.get("attempts", 1))
                 n_legs += 1
             else:
                 store.log_error(sym, key, leg["request"],
-                                f"cloud run: HTTP {leg.get('http')} {leg.get('code')}", leg.get("http"))
+                                f"cloud run: HTTP {leg.get('httpStatus')} {leg.get('errorCode')}", leg.get("httpStatus"))
                 n_err += 1
     print(f"decoded {len(records)} records: {n_legs} legs stored, {n_err} failed legs logged")
     if broken:

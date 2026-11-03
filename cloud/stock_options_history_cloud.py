@@ -81,16 +81,16 @@ class Stop(Exception):
 
 class Redactor:
     def __init__(self):
-        self.secrets = set()
+        self._secrets = set()
 
     def register(self, *values):
         for v in values:
             if v and len(v) >= 4:
-                self.secrets.add(v)
+                self._secrets.add(v)
 
     def __call__(self, text):
         s = text if isinstance(text, str) else str(text)
-        for v in sorted(self.secrets, key=len, reverse=True):
+        for v in sorted(self._secrets, key=len, reverse=True):
             s = s.replace(v, "[REDACTED]")
         return re.sub(_JWT, "[REDACTED_JWT]", s)
 
@@ -173,8 +173,8 @@ def resolve_instruments(symbols):
 
 # ------------------------------------------------------------------ client
 class Client:
-    def __init__(self, client_id, token):
-        self.headers = {"access-token": token, "client-id": client_id,
+    def __init__(self, client_id, access_token):
+        self.headers = {"access-token": access_token, "client-id": client_id,
                         "Content-Type": "application/json", "Accept": "application/json"}
         self.gap = 1.0 / max(REQUESTS_PER_SECOND, 0.1)
         self.last = 0.0
@@ -183,7 +183,7 @@ class Client:
     def rolling(self, body):
         """Returns (status, http_status, error_code, data_or_None, attempts)."""
         data = json.dumps(body).encode()
-        err, code, http = "", "", None
+        err, ecode, http_status = "", "", None
         for attempt in range(1, 7):
             if self.calls >= MAX_REQUESTS:
                 raise Stop("MAX_REQUESTS reached (%d)" % MAX_REQUESTS)
@@ -196,40 +196,40 @@ class Client:
                                          headers=self.headers)
             try:
                 with urllib.request.urlopen(req, timeout=60) as r:
-                    http, raw = r.status, r.read()
+                    http_status, raw = r.status, r.read()
             except urllib.error.HTTPError as e:
-                http, raw = e.code, e.read() or b""
+                http_status, raw = e.status, e.read() or b""
             except Exception as e:
-                err, code = "network %s" % type(e).__name__, ""
+                err, ecode = "network %s" % type(e).__name__, ""
                 time.sleep(min(60.0, 2.0 ** attempt) + random.random())
                 continue
             try:
                 parsed = json.loads(raw.decode("utf-8", "replace")) if raw else {}
             except ValueError:
                 parsed = {}
-            code = ""
+            ecode = ""
             if isinstance(parsed, dict):
-                code = str(parsed.get("errorCode") or parsed.get("internalErrorCode") or "").upper()
-            if code in PLAN_CODES:
-                raise Stop("Data API plan missing (%s): enable the Data API in Dhan web" % code)
-            if http in (401, 403) or code in AUTH_CODES:
+                ecode = str(parsed.get("errorCode") or parsed.get("internalErrorCode") or "").upper()
+            if ecode in PLAN_CODES:
+                raise Stop("Data API plan missing (%s): enable the Data API in Dhan web" % ecode)
+            if http_status in (401, 403) or ecode in AUTH_CODES:
                 raise Stop("Dhan rejected the managed credentials (HTTP %s %s): refresh the "
-                           "account connection in Dhan Cloud and run again" % (http, code))
-            if http == 429 or code in THROTTLE_CODES or (http or 0) >= 500 or code in RETRY_CODES:
-                err = "HTTP %s %s" % (http, code)
+                           "account connection in Dhan Cloud and run again" % (http_status, ecode))
+            if http_status == 429 or ecode in THROTTLE_CODES or (http_status or 0) >= 500 or ecode in RETRY_CODES:
+                err = "HTTP %s %s" % (http_status, ecode)
                 time.sleep(min(60.0, 2.0 ** attempt) + random.random())
                 continue
-            if code in NO_DATA_CODES:
-                return "no_data", http, code, None, attempt
-            if (http or 0) >= 400:
-                return "failed", http, code, None, attempt
+            if ecode in NO_DATA_CODES:
+                return "no_data", http_status, ecode, None, attempt
+            if (http_status or 0) >= 400:
+                return "failed", http_status, ecode, None, attempt
             payload = parsed.get("data") if isinstance(parsed, dict) and "data" in parsed else parsed
             if not isinstance(payload, dict):
-                return "failed", http, "BAD_ENVELOPE", None, attempt
+                return "failed", http_status, "BAD_ENVELOPE", None, attempt
             side = payload.get("ce") or payload.get("pe") or {}
             ok = isinstance(side, dict) and bool(side.get("timestamp"))
-            return ("ok" if ok else "no_data"), http, code, payload, attempt
-        return "failed", http, err or code, None, 6
+            return ("ok" if ok else "no_data"), http_status, ecode, payload, attempt
+        return "failed", http_status, err or ecode, None, 6
 
 
 def trim(leg, keep_minutes):
@@ -312,11 +312,11 @@ def history():
                                 "expiryFlag": "MONTH", "expiryCode": EXPIRY_CODE,
                                 "strike": strike, "drvOptionType": opt, "requiredData": FIELDS,
                                 "fromDate": a.isoformat(), "toDate": b.isoformat()}
-                        st, http, code, payload, att = client.rolling(body)
+                        st, http_status, ecode, payload, att = client.rolling(body)
                         side = "ce" if opt == "CALL" else "pe"
                         leg = (payload or {}).get(side) if isinstance(payload, dict) else None
-                        rec = {"strike": strike, "side": side, "status": st, "http": http,
-                               "code": code, "attempts": att, "request": body}
+                        rec = {"strike": strike, "side": side, "status": st, "httpStatus": http_status,
+                               "errorCode": ecode, "attempts": att, "request": body}
                         if isinstance(leg, dict):
                             n = len(leg.get("timestamp") or [])
                             kept = trim(leg, keep) if KEEP == "SNAPSHOTS" else leg
