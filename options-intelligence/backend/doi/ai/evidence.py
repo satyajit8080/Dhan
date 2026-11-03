@@ -11,7 +11,8 @@ Validation rules for agent output:
   3. Every number in the output must equal a number in the agent's visible evidence
      (within tolerance), or a simple deterministic derivation of two such numbers
      (difference, ratio or % change), or be a small structural integer (0-10),
-     or be a minute horizon named in a visible evidence key (15m, 60m).
+     or be an indicator period or minute horizon named in a visible evidence key
+     (ema_20, ema_200, 15m, 60m). Concatenating those periods (50200) is not evidence.
      Values below 1,000 may be the integer or one-decimal rounding of an evidence
      value (so IV 26.6 may be cited as 27). Values of a million or more may be
      cited in full or in scientific notation / with an explicit scale
@@ -195,7 +196,9 @@ _CITED = re.compile(
     r"(?<![A-Za-z_])([-+]?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?)"
     r"(?:\s*[eE]([+-]?\d+)|\s+(billion|bn|million|mn|crore|cr|lakh)\b)?"
 )
-_HORIZON_KEY = re.compile(r"(?:^|_)(\d+)m(?:_|$)")
+# 15m / 60m windows and ema_20 / ema_200 periods. Not digits glued from two keys.
+_KEY_PERIOD = re.compile(r"(?:^|_)(\d+)m?(?:_|$)")
+_REF = re.compile(r"[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*\Z")
 _SCALE = {"billion": 1e9, "bn": 1e9, "million": 1e6, "mn": 1e6, "crore": 1e7, "cr": 1e7, "lakh": 1e5}
 
 
@@ -241,15 +244,27 @@ def cited_numbers(text: str) -> list[float]:
     return out
 
 
-def horizon_minutes(view: Mapping[str, dict]) -> frozenset[float]:
-    """Integers encoded in visible keys such as pcr_oi_chg_15m. Not mixed into derivations."""
+def key_periods(view: Mapping[str, dict]) -> frozenset[float]:
+    """Integers named in visible keys, such as pcr_oi_chg_15m and ema_200.
+
+    They are not added to the derivation pool, so ema_200 does not invent a level
+    200 points from a strike, and ema_50 plus ema_200 does not invent 50200.
+    """
     found: set[float] = set()
     for body in view.values():
-        if not isinstance(body, dict):
-            continue
-        for key in body:
-            found.update(float(n) for n in _HORIZON_KEY.findall(str(key)))
+        for key in _dict_keys(body):
+            found.update(float(n) for n in _KEY_PERIOD.findall(key))
     return frozenset(found)
+
+
+def _dict_keys(obj: Any) -> Iterable[str]:
+    if isinstance(obj, dict):
+        for key, value in obj.items():
+            yield str(key)
+            yield from _dict_keys(value)
+    elif isinstance(obj, list):
+        for value in obj:
+            yield from _dict_keys(value)
 
 
 def evidence_refs(view: Mapping[str, dict]) -> set[str]:
@@ -259,6 +274,12 @@ def evidence_refs(view: Mapping[str, dict]) -> set[str]:
         if isinstance(body, dict):
             for k in body:
                 refs.add(f"{sec}.{k}")
+    # A specialist ref shown back in the turns this agent can see. Exact strings only.
+    turns = view.get("turns")
+    if isinstance(turns, dict):
+        for _, value in _leaves(turns):
+            if isinstance(value, str) and _REF.match(value):
+                refs.add(value)
     return refs
 
 
@@ -266,7 +287,7 @@ def evidence_refs(view: Mapping[str, dict]) -> set[str]:
 class Traceability:
     base: list[float]
     derived: list[float] = field(default_factory=list)
-    horizons: frozenset[float] = field(default_factory=frozenset)
+    periods: frozenset[float] = field(default_factory=frozenset)
 
     @classmethod
     def of(cls, view: Mapping[str, dict], max_pairs_base: int = 160) -> Traceability:
@@ -278,7 +299,7 @@ class Traceability:
             if b != 0:
                 derived.add(round(a / b, 6))
                 derived.add(round((a - b) / b * 100, 6))
-        return cls(base, sorted(derived), horizon_minutes(view))
+        return cls(base, sorted(derived), key_periods(view))
 
     def _near(self, x: float) -> bool:
         tol = max(0.01, 0.005 * abs(x))
@@ -310,8 +331,8 @@ class Traceability:
     def traceable(self, x: float) -> bool:
         if float(x).is_integer() and 0 <= x <= 10:
             return True  # structural counts ("2 strikes", "3 sessions")
-        if float(x).is_integer() and float(x) in self.horizons:
-            return True  # "15m" / "60m" windows named in a visible key
+        if float(x).is_integer() and float(x) in self.periods:
+            return True  # "15m" / "ema_200" periods named in a visible key
         if self._near(x) or self._rounded_non_price(x):
             return True
         return False

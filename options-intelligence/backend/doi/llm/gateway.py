@@ -19,7 +19,6 @@ import asyncio
 import hashlib
 import json
 import logging
-import re
 import secrets
 import time
 from collections.abc import Awaitable, Callable
@@ -369,19 +368,47 @@ def _text(resp: dict) -> str:
         return ""
 
 
-_JSON = re.compile(r"\{.*\}", re.S)
+def _balanced_objects(text: str) -> list[str]:
+    """Top-level {...} slices, respecting strings, so a `{` in prose does not swallow the reply."""
+    out: list[str] = []
+    start = None
+    depth = 0
+    in_str = False
+    esc = False
+    for i, ch in enumerate(text):
+        if in_str:
+            if esc:
+                esc = False
+            elif ch == "\\":
+                esc = True
+            elif ch == '"':
+                in_str = False
+            continue
+        if ch == '"':
+            in_str = True
+        elif ch == "{":
+            if depth == 0:
+                start = i
+            depth += 1
+        elif ch == "}" and depth:
+            depth -= 1
+            if depth == 0 and start is not None:
+                out.append(text[start : i + 1])
+                start = None
+    return out
 
 
 def extract_json(text: str) -> dict[str, Any] | None:
-    """First JSON object in the text (models sometimes wrap JSON in prose or code fences)."""
-    m = _JSON.search(text or "")
-    if not m:
-        return None
-    try:
-        v = json.loads(m.group(0))
-    except ValueError:
-        return None
-    return v if isinstance(v, dict) else None
+    """Last JSON object in the text (models sometimes think in prose, then answer in JSON)."""
+    found = None
+    for chunk in _balanced_objects(text or ""):
+        try:
+            value = json.loads(chunk)
+        except ValueError:
+            continue
+        if isinstance(value, dict):
+            found = value
+    return found
 
 
 AsyncFn = Callable[..., Awaitable[Any]]
