@@ -11,3 +11,4 @@ server/logs/
 .dhan_cache/
 stock_options_history.csv*
 by_symbol/
+data/

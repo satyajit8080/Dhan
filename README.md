@@ -11,6 +11,7 @@ forward recovery and an internal Black-76 pricing core. Never places orders.
 |---|---|
 | `plugin/` | Installable Claude plugin `bull50-dhan` v1.7.0: MCP server bundle, `/dhan-token`, `/sensex-snapshot`, `sensex-scalp` skill |
 | `server/` | TypeScript source of the MCP server + 204 tests |
+| `collector/` | Python historical stock-options collector (Dhan rolling options → 09:30/15:20 CSV, ZIP, validation report). See [collector/README.md](collector/README.md) |
 | `engine/` | Python `refresh_table.py` (option breakout premiums), `commodity_engine.py` (MCX), sample data |
 | `docs/` | Signal log |
 | `.claude-plugin/marketplace.json` | Lets Claude install the plugin straight from this repo |
@@ -40,6 +41,8 @@ python3 run_refresh.py   # self-check on a saved 21 Sep snapshot
 ```
 
 ## Pull stock-option history for backtests
+
+Full collector (60 stocks, 5 years, 1-min, resume, reports): `python -m collector.collect run`, see [collector/README.md](collector/README.md). Quick single-file version:
 
 ```bash
 cd engine
