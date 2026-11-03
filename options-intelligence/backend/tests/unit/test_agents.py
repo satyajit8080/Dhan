@@ -66,6 +66,47 @@ def test_validation_accepts_traceable_and_rejects_invented_numbers():
     assert Traceability.of(view).traceable(3)  # small structural integers allowed
     hashy = {"quality": {"feature_digest": "92f9ed0f0610abcd", "as_of": "2026-11-05"}}
     assert not Traceability.of(hashy).traceable(2026) and not Traceability.of(hashy).traceable(610)
+    comma = {**ok, "claims": [{"text": "call wall 24,200", "evidence_refs": ["oi.call_wall"]}]}
+    assert validate_output(comma, Opinion, view).ok
+
+
+def test_traceability_allows_horizons_rounding_and_scaled_magnitudes_not_invented_levels():
+    """Production failures: 15m/60m keys, IV 26.6 cited as 27, gamma cited as -3.373e11.
+
+    A bare -337 is still rejected, as is a neighbouring strike and a 25-handle IV.
+    """
+    gamma = -337_281_588_530.9951
+    view = {
+        "oi": {"pcr_oi": 0.92, "pcr_oi_chg_15m": 0.4, "pcr_oi_chg_60m": -0.2, "atm_strike": 24350.0},
+        "volatility": {"atm_iv_b76": 26.6, "atm_theta": -158.53, "gamma_exposure_proxy": gamma, "atm_strike": 24350.0},
+        "liquidity": {"forward_strikes_used": 15},
+    }
+    trace = Traceability.of(view)
+    assert trace.traceable(15) and trace.traceable(60)  # named windows, and 15 is also a liquidity count
+    assert trace.traceable(27) and trace.traceable(-159) and trace.traceable(4.2) is False
+    assert trace.traceable(-3.373e11) and trace.traceable(-337.3e9)
+    assert not trace.traceable(-337) and not trace.traceable(337)
+    assert not trace.traceable(24000) and not trace.traceable(25150) and not trace.traceable(25)
+
+    cited = {
+        "stance": "NEUTRAL",
+        "confidence": 3,
+        "claims": [
+            {
+                "text": "15m and 60m PCR; IV about 27; gamma -3.373e11 (-337 billion)",
+                "evidence_refs": ["oi.pcr_oi_chg_15m", "volatility.gamma_exposure_proxy"],
+            }
+        ],
+    }
+    assert validate_output(cited, Opinion, view).ok
+    bare = {
+        **cited,
+        "claims": [{"text": "gamma is -337 so spot falls 337 pts", "evidence_refs": ["volatility.gamma_exposure_proxy"]}],
+    }
+    rejected = validate_output(bare, Opinion, view)
+    assert not rejected.ok and "untraceable number -337" in rejected.errors[0]
+    assert "-3.373e+11" in rejected.errors[0] or "e+11" in rejected.errors[0]
+    assert any("337" in err and "25150" not in err for err in rejected.errors)
 
 
 def test_runner_ok_retry_and_abstain():

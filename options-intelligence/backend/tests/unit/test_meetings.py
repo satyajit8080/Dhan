@@ -70,6 +70,72 @@ def test_full_meeting_recommends_and_records_everything():
     assert d["decision"]["final_action"] == "RECOMMEND_PAPER" and d["evidence"]["sha256"] == r.pack.sha256
 
 
+def test_live_ok_meeting_passes_quorum_when_specialists_paraphrase_evidence():
+    """NIFTY committee: horizons, rounded IV/theta, and scientific gamma are traceable.
+
+    A bare truncated gamma prefix is not. The retry that quotes scientific notation
+    is what lets volatility finish OK, so the meeting is not aborted for QUORUM.
+    """
+    from doi.intelligence.feature_engine.engine import FeatureValue, FeatureVector, Provenance, Status
+
+    prov = Provenance("t", (), ("t",))
+
+    def fv(v):
+        return FeatureValue(v, Status.OK, prov)
+
+    vector = FeatureVector(
+        underlying_key="NIFTY",
+        timeframe_min=5,
+        as_of=NOW,
+        engine_version="fe-1",
+        config_version="fc-1",
+        config_hash="abc",
+        inputs_digest="d",
+        data_quality_score=100.0,
+        coverage_status="LIVE_OK",
+        values={
+            "pcr_oi": fv(0.92),
+            "pcr_oi_chg_15m": fv(0.4),
+            "pcr_oi_chg_60m": fv(-0.2),
+            "atm_strike": fv(24350.0),
+            "atm_iv_b76": fv(26.6),
+            "atm_theta": fv(-158.53),
+            "gamma_exposure_proxy": fv(-337_281_588_530.9951),
+            "forward_strikes_used": fv(15),
+            "atm_spread_pct": fv(0.8),
+            "trend_regime": fv("RANGE"),
+            "adx": fv(22.0),
+        },
+    )
+    calls = {"vol": 0}
+
+    def flow(_ev):
+        return {
+            "stance": "BULL",
+            "confidence": 3,
+            "claims": [{"text": "15-minute and 60m PCR are context, not a magnet", "evidence_refs": ["oi.pcr_oi_chg_15m"]}],
+            "prediction": {"target": "INDEX", "direction": "UP", "horizon_min": 30},
+        }
+
+    def vol(_ev):
+        calls["vol"] += 1
+        text = "gamma is -337" if calls["vol"] == 1 else "gamma proxy -3.373e11, IV about 27, theta -159"
+        return {
+            "stance": "NEUTRAL",
+            "confidence": 3,
+            "claims": [{"text": text, "evidence_refs": ["volatility.gamma_exposure_proxy", "volatility.atm_iv_b76"]}],
+            "prediction": {"target": "INDEX", "direction": "FLAT", "horizon_min": 30},
+        }
+
+    e = engine({"options_flow": flow, "volatility": vol})
+    r = run(e, ctx(features=vector))
+    r1 = {t.agent_id: t for rnd, t in e.store.turn_rows[r.meeting_id] if rnd == "R1"}
+    assert r1["options_flow"].status == "OK"
+    assert r1["volatility"].status == "OK" and len(r1["volatility"].call_ids) == 2
+    assert {r1[a].status for a in ("regime", "options_flow", "volatility", "liquidity")} == {"OK"}
+    assert r.abort_reason != "QUORUM"
+
+
 def test_data_quality_gate_aborts_without_llm_calls():
     e = engine()
     r = run(e, ctx(features=features(stale=True)))
