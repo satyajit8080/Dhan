@@ -18,7 +18,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest==8.3.4", "ruff==0.8.4", "bandit==1.8.0", "pip-audit==2.7.3"]
+dev = ["pytest==9.0.3", "ruff==0.8.4", "bandit==1.8.0", "pip-audit==2.7.3"]
 
 [tool.setuptools.packages.find]
 include = ["doi*"]
@@ -37,7 +37,7 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "RUF", "DTZ"]
-ignore = ["B008", "UP046", "E731", "RUF001", "RUF005", "RUF009"]
+ignore = ["B008", "E731", "RUF001", "RUF005", "RUF009"]
 
 [tool.ruff.lint.pycodestyle]
 max-line-length = 170

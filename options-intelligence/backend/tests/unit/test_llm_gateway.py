@@ -391,7 +391,5 @@ def test_pg_data_quality_aborts_do_not_consume_daily_trade_cap(pg_dsn):
         dq = c.execute(
             "SELECT status, skip_reason FROM ai_events WHERE skip_reason = 'DATA_QUALITY' ORDER BY created_at"
         ).fetchall()
-        real = c.execute(
-            "SELECT count(*) FROM ai_events WHERE status = 'DONE' AND skip_reason IS NULL"
-        ).fetchone()[0]
+        real = c.execute("SELECT count(*) FROM ai_events WHERE status = 'DONE' AND skip_reason IS NULL").fetchone()[0]
     assert dq == [("DONE", "DATA_QUALITY")] * 3 and real == 2

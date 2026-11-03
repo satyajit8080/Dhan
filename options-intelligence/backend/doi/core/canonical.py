@@ -14,13 +14,13 @@ from typing import Any
 def _default(o: Any) -> Any:
     if isinstance(o, Decimal):
         return str(o)
-    if isinstance(o, (datetime, date)):
+    if isinstance(o, datetime | date):
         return o.isoformat()
     if isinstance(o, Enum):
         return o.value
     if dataclasses.is_dataclass(o) and not isinstance(o, type):
         return {f.name: getattr(o, f.name) for f in dataclasses.fields(o)}
-    if isinstance(o, (set, frozenset, tuple)):
+    if isinstance(o, set | frozenset | tuple):
         return list(o)
     raise TypeError(f"not serialisable: {type(o).__name__}")
 

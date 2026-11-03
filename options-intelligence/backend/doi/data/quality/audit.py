@@ -69,7 +69,7 @@ def expected_session_timestamps(
 
 def _ohlc_ok(b: OptionBar) -> bool:
     vals = (b.open, b.high, b.low, b.close)
-    if not all(isinstance(v, (int, float)) and math.isfinite(v) for v in vals):
+    if not all(isinstance(v, int | float) and math.isfinite(v) for v in vals):
         return False
     if b.high < max(b.open, b.close) or b.low > min(b.open, b.close) or b.low <= 0:
         return False

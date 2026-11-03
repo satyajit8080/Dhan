@@ -24,7 +24,7 @@ def _first_ref(ev: dict, prefer: tuple[str, ...]) -> tuple[str, object]:
         body = ev.get(sec)
         if isinstance(body, dict):
             for k, v in body.items():
-                if isinstance(v, (int, float, str)) and not isinstance(v, bool):
+                if isinstance(v, int | float | str) and not isinstance(v, bool):
                     return f"{sec}.{k}", v
     return "event", ""
 
