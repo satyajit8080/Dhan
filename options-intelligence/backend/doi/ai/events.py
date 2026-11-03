@@ -121,21 +121,24 @@ class Admission:
     reason: str | None = None
 
 
-# MeetingEngine aborts with this reason before any LLM call. The worker then
-# finishes the event DONE (not SKIPPED) and stores the reason on skip_reason.
-_DATA_QUALITY_ABORT = "DATA_QUALITY"
+# Worker finishes these as DONE with skip_reason set to MeetingResult.abort_reason.
+# None of them got past specialist quorum, so they are not a committee outcome:
+# DATA_QUALITY never calls a model, QUORUM and AI_UNAVAILABLE stop before the CIO.
+# CIO_UNAVAILABLE is past quorum and still consumes a slot.
+_NO_COMMITTEE_OUTCOME = frozenset({"DATA_QUALITY", "QUORUM", "AI_UNAVAILABLE"})
 
 
 def counts_toward_daily_trade_cap(status: str, skip_reason: str | None) -> bool:
     """True when this trade event occupies one AdmissionPolicy.daily_trade_meetings slot.
 
-    SKIPPED never ran. A zero-LLM data-quality abort is recorded as DONE with
-    skip_reason DATA_QUALITY and must not consume the cap. Queued, running,
-    failed, and every other finished meeting still count.
+    SKIPPED never ran. A DONE event whose skip_reason is a pre-quorum abort
+    (data quality, quorum, or AI unavailable) did not produce a committee
+    outcome and must not consume the cap. Queued, running, failed, and every
+    finished meeting that reached the CIO still count.
     """
     if status == "SKIPPED":
         return False
-    return not (status == "DONE" and skip_reason == _DATA_QUALITY_ABORT)
+    return not (status == "DONE" and skip_reason in _NO_COMMITTEE_OUTCOME)
 
 
 class EventQueue:
@@ -239,13 +242,13 @@ class PgEventQueue(EventQueue):
 
     def trade_meetings_today(self, day_start) -> int:
         with psycopg.connect(self.dsn) as c:
-            # IS NOT DISTINCT FROM so a real DONE meeting (skip_reason NULL) still counts.
-            # `<>` would make NOT (status = 'DONE' AND NULL) unknown and drop that row.
+            # NULL skip_reason is a real DONE meeting and must still count. Comparing
+            # skip_reason with `=` yields unknown for NULL, which would drop that row.
             return c.execute(
                 "SELECT count(*) FROM ai_events WHERE kind = ANY(%s) AND created_at >= %s"
                 " AND status <> 'SKIPPED'"
-                " AND NOT (status = 'DONE' AND skip_reason IS NOT DISTINCT FROM %s)",
-                ([k.value for k in TRADE_EVENTS], day_start, _DATA_QUALITY_ABORT),
+                " AND (status <> 'DONE' OR skip_reason IS NULL OR skip_reason <> ALL(%s))",
+                ([k.value for k in TRADE_EVENTS], day_start, list(_NO_COMMITTEE_OUTCOME)),
             ).fetchone()[0]
 
     def claim(self, now):

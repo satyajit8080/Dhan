@@ -9,7 +9,17 @@ from decimal import Decimal as D
 import psycopg
 import pytest
 
-from doi.ai.events import AdmissionPolicy, DetectorConfig, Event, EventKind, MemoryEventQueue, PgEventQueue, admit, detect
+from doi.ai.events import (
+    Admission,
+    AdmissionPolicy,
+    DetectorConfig,
+    Event,
+    EventKind,
+    MemoryEventQueue,
+    PgEventQueue,
+    admit,
+    detect,
+)
 from doi.core.market import SessionCalendar
 from doi.intelligence.feature_engine.engine import FeatureEngine, FeatureValue, Provenance, Status
 from doi.llm.budget import BudgetExhausted, MemoryBudget, PgBudget
@@ -323,7 +333,7 @@ def _assert_data_quality_aborts_spare_the_daily_cap(q):
     assert admit(nxt, q, pol, **{**kw, "kill_switch": True}).reason == "kill switch engaged"
     assert admit(nxt, q, pol, **{**kw, "ai_available": False}).reason.startswith("AI unavailable")
     assert admit(nxt, q, pol, **kw).admitted is True
-    for i, reason in enumerate((None, "QUORUM", None)):
+    for i, reason in enumerate((None, "CIO_UNAVAILABLE", None)):
         e = _human(NOW + timedelta(minutes=20 + i), f"real-{i}")
         decision = admit(e, q, pol, **kw)
         assert decision.admitted, decision.reason
@@ -331,6 +341,34 @@ def _assert_data_quality_aborts_spare_the_daily_cap(q):
     assert q.trade_meetings_today(day) == pol.daily_trade_meetings
     blocked = _human(NOW + timedelta(minutes=40), "capped")
     assert admit(blocked, q, pol, **kw).reason == f"daily cap {pol.daily_trade_meetings} trade meetings reached"
+
+
+def _assert_pre_quorum_aborts_spare_the_daily_cap(q):
+    """QUORUM and AI_UNAVAILABLE do not fill the cap; a past-quorum abort still does."""
+    cal, pol = SessionCalendar(), AdmissionPolicy()
+    assert pol.daily_trade_meetings == 3
+    kw = dict(calendar=cal, kill_switch=False, quality=100.0, ai_available=True)
+    day = cal.at(cal.session_date(NOW), datetime.min.time())
+    prior = (
+        (EventKind.HUMAN_REQUEST, "q-hr-1", "QUORUM"),
+        (EventKind.HUMAN_REQUEST, "q-hr-2", "QUORUM"),
+        (EventKind.OI_WALL_MIGRATION, "q-wall", "QUORUM"),
+        (EventKind.HUMAN_REQUEST, "q-down", "AI_UNAVAILABLE"),
+    )
+    for i, (kind, key, reason) in enumerate(prior):
+        e = Event(kind, "NIFTY", NOW + timedelta(minutes=i), {"key": key})
+        q.finish(q.admit(e, Admission(True)), "DONE", reason)
+    assert q.trade_meetings_today(day) == 0
+    nxt = _human(NOW + timedelta(minutes=30), "after-quorum")
+    assert admit(nxt, q, pol, **{**kw, "kill_switch": True}).reason == "kill switch engaged"
+    assert admit(nxt, q, pol, **kw).admitted is True
+    cio = _human(NOW + timedelta(minutes=40), "cio-down")
+    q.finish(q.admit(cio, Admission(True)), "DONE", "CIO_UNAVAILABLE")
+    assert q.trade_meetings_today(day) == 1
+
+
+def test_quorum_aborts_do_not_consume_daily_trade_cap():
+    _assert_pre_quorum_aborts_spare_the_daily_cap(MemoryEventQueue())
 
 
 def test_data_quality_aborts_do_not_consume_daily_trade_cap():
@@ -382,6 +420,14 @@ def test_pg_queue_skip_locked_and_expiry(pg_dsn):
     assert len(got) == len(set(got)) == 6  # no event claimed twice; the expired one skipped
     with psycopg.connect(pg_dsn) as c:
         assert c.execute("SELECT count(*) FROM ai_events WHERE status = 'SKIPPED'").fetchone()[0] == 1
+
+
+def test_pg_quorum_aborts_do_not_consume_daily_trade_cap(pg_dsn):
+    q = PgEventQueue(pg_dsn)
+    _assert_pre_quorum_aborts_spare_the_daily_cap(q)
+    with psycopg.connect(pg_dsn) as c:
+        reasons = c.execute("SELECT skip_reason, count(*) FROM ai_events WHERE status = 'DONE' GROUP BY 1 ORDER BY 1").fetchall()
+    assert reasons == [("AI_UNAVAILABLE", 1), ("CIO_UNAVAILABLE", 1), ("QUORUM", 3)]
 
 
 def test_pg_data_quality_aborts_do_not_consume_daily_trade_cap(pg_dsn):
