@@ -96,12 +96,33 @@ def feed_subscriptions(engine: PaperExecution) -> set[tuple[str, str]]:
     return {(c.exchange_segment, c.security_id) for cs in engine.watch().values() for c in cs}
 
 
-async def record_index_bars_once(rt, now: datetime | None = None, timeframe_min: int = 1) -> int:
-    """Fetch today's index candles for live-enabled underlyings and record them.
-    Recording and fetch failures are logged and swallowed (isolation)."""
+async def record_chains_once(rt) -> int:
+    """Record the nearest-expiry chain of every live-enabled index, so the feature engine and the
+    AI committee have option data even with no paper position open. Failures are isolated."""
+    if rt.provider is None:
+        return 0
+    n = 0
+    for key, cfg in rt.configs.items():
+        ref = rt.universe.get(key)
+        if ref is None or not cfg.live_enabled or not ref.expiries:
+            continue
+        try:
+            snap = await rt.provider.get_option_chain(ref, ref.expiries[0].expiry, max_age_s=cfg.freshness.chain_max_age_s / 2)
+        except DoiError as e:
+            log.warning("chain record %s: %s", key, type(e).__name__)
+            continue
+        await asyncio.to_thread(rt.recorder.snapshot, snap)
+        n += 1
+    return n
+
+
+async def record_index_bars_once(rt, now: datetime | None = None, timeframe_min: int = 5, days_back: int = 0) -> int:
+    """Fetch index candles (default 5m, the feature timeframe) for live-enabled underlyings and record them.
+    `days_back` > 0 backfills warm-up history. Recording and fetch failures are logged and swallowed."""
     if rt.provider is None:
         return 0
     today = (now or datetime.now(UTC)).date()
+    start = today - timedelta(days=days_back)
     n = 0
     for key, cfg in rt.configs.items():
         ref = rt.universe.get(key)
@@ -109,7 +130,7 @@ async def record_index_bars_once(rt, now: datetime | None = None, timeframe_min:
             continue
         try:
             bars = await rt.provider.get_candles(
-                ref.security_id, ref.segment, "INDEX", str(timeframe_min), today, today + timedelta(days=1)
+                ref.security_id, ref.segment, "INDEX", str(timeframe_min), start, today + timedelta(days=1)
             )
         except DoiError as e:
             log.warning("index bars %s: %s", key, type(e).__name__)
@@ -119,14 +140,20 @@ async def record_index_bars_once(rt, now: datetime | None = None, timeframe_min:
     return n
 
 
-async def run_forever(rt, interval_s: float = 3.0, bars_every_s: float = 60.0) -> None:
-    last_bars = 0.0
+async def run_forever(rt, interval_s: float = 3.0, bars_every_s: float = 60.0, chains_every_s: float = 60.0) -> None:
+    last_bars = last_chains = -1e9
+    backfilled = False
     loop = asyncio.get_running_loop()
     while True:
         try:
             if loop.time() - last_bars >= bars_every_s:
                 last_bars = loop.time()
-                await record_index_bars_once(rt)
+                await record_index_bars_once(rt, days_back=0 if backfilled else 7)  # warm-up for indicators
+                backfilled = True
+            market_open = rt.paper.cal.is_open(datetime.now(UTC)) if rt.paper is not None else True
+            if market_open and loop.time() - last_chains >= chains_every_s:
+                last_chains = loop.time()
+                await record_chains_once(rt)
             await pump_once(rt)
             if rt.collector is not None and rt.paper is not None:
                 await rt.collector.set_subscriptions(feed_subscriptions(rt.paper))

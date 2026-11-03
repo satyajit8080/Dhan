@@ -160,3 +160,19 @@ def test_index_bar_ingestion_windows(pg_dsn):
     )
     assert len(fake.calls) == 3 and res.status is CoverageStatus.APPROVED and res.bars == 15 * 75
     assert datetime.combine(date(2026, 10, 5), datetime.min.time(), IST).astimezone(UTC) <= OPEN
+
+
+def test_chains_recorded_for_live_indices_without_positions(pg_dsn):
+    import psycopg
+
+    from doi.paper.driver import record_chains_once
+    from tests.unit.test_auth_controls import _boot
+
+    rt = _boot(pg_dsn)
+    with psycopg.connect(pg_dsn) as c:
+        before = c.execute("SELECT count(*) FROM option_chain_snapshots").fetchone()[0]
+    n = asyncio.run(record_chains_once(rt))
+    with psycopg.connect(pg_dsn) as c:
+        after = c.execute("SELECT count(*) FROM option_chain_snapshots").fetchone()[0]
+    live = [k for k, cfg in rt.configs.items() if cfg.live_enabled and k in rt.universe]
+    assert n == len(live) >= 1 and after - before == n
