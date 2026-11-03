@@ -136,6 +136,42 @@ def test_indicator_periods_in_keys_are_traceable_but_not_concatenated():
     assert not validate_output(invented_ref, Opinion, with_turns).ok
 
 
+def test_share_fields_may_be_cited_as_percentages():
+    """call_wall_share 0.1237 is 12.4 percent. Multiplying a strike by that share is not a level."""
+    view = {
+        "oi": {
+            "call_wall_share": 0.1237,
+            "put_wall_share": 0.1059,
+            "call_wall": 24300.0,
+            "put_wall": 24100.0,
+            "pcr_oi": 0.92,
+        },
+        "technical": {"body_ratio": 0.45, "close_location": 0.8},
+        "regime": {"vix_change_pct": 0.4},
+        "liquidity": {"atm_spread_pct": 1.2, "atm_two_sided_share": 0.86},
+    }
+    trace = Traceability.of(view)
+    assert trace.traceable(12.4) and trace.traceable(10.6)
+    assert trace.traceable(45) and trace.traceable(80) and trace.traceable(86)
+    assert not trace.traceable(92) and not trace.traceable(40)
+    assert not trace.traceable(120)  # spread is already a percent
+    assert not trace.traceable(1.8)  # 12.4 - 10.6 is not a derived level
+    assert not trace.traceable(round(24300 * 0.1237, 1))
+    ok = {
+        "stance": "BEAR",
+        "confidence": 3,
+        "claims": [
+            {
+                "text": "call wall share 12.4 and put wall share 10.6",
+                "evidence_refs": ["oi.call_wall_share", "oi.put_wall_share"],
+            }
+        ],
+    }
+    assert validate_output(ok, Opinion, view).ok
+    invented = {**ok, "claims": [{"text": "call wall share 40", "evidence_refs": ["oi.call_wall_share"]}]}
+    assert not validate_output(invented, Opinion, view).ok
+
+
 def test_runner_ok_retry_and_abstain():
     p = pack()
     t = asyncio.run(run_agent(REGISTRY["regime"], p, gw(scripted()), task="assess", meeting_id="M1"))

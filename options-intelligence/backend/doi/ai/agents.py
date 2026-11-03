@@ -97,6 +97,7 @@ POLICY = (
     "3. Every claim must cite evidence refs of the form 'section.key' that exist in the evidence you were given.\n"
     "4. Never invent or estimate numbers. Any number you write must appear in your evidence, or be a simple difference, ratio or % change of two such numbers. "
     "Minute windows and indicator periods named in evidence keys (15m, 60m, ema_20) may be cited as those integers. "
+    "A share or ratio stored between 0 and 1 may be cited as a percentage (0.12 as 12). "
     "Do not concatenate periods from different keys. "
     "Values of a million or more must be quoted in full or in scientific notation (for example -3.373e11), never as a truncated leading part. "
     "Figures below 1,000 may be rounded to the nearest integer or tenth.\n"

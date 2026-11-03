@@ -13,6 +13,8 @@ Validation rules for agent output:
      (difference, ratio or % change), or be a small structural integer (0-10),
      or be an indicator period or minute horizon named in a visible evidence key
      (ema_20, ema_200, 15m, 60m). Concatenating those periods (50200) is not evidence.
+     A 0-1 `_share` or `_ratio` value may be cited as a percentage (0.1237 as 12.4).
+     That percent is not mixed into differences, so it does not invent a price level.
      Values below 1,000 may be the integer or one-decimal rounding of an evidence
      value (so IV 26.6 may be cited as 27). Values of a million or more may be
      cited in full or in scientific notation / with an explicit scale
@@ -213,6 +215,25 @@ def _leaves(obj: Any, path: str = "") -> Iterable[tuple[str, Any]]:
         yield path, obj
 
 
+def share_percents(view: Mapping[str, dict]) -> list[float]:
+    """100 times a 0-1 share or ratio, so 0.1237 may be cited as 12.4.
+
+    Only keys ending in ``_share`` or ``_ratio``, plus ``close_location``.
+    ``_pct`` fields are already percentages. These values stay out of the
+    pair-derivation pool, so two shares cannot invent a strike.
+    """
+    found: set[float] = set()
+    for path, value in _leaves(dict(view)):
+        if isinstance(value, bool) or not isinstance(value, int | float) or not math.isfinite(value):
+            continue
+        if not 0 <= float(value) <= 1:
+            continue
+        key = path.rsplit(".", 1)[-1].split("[")[0]
+        if key == "close_location" or key.endswith(("_share", "_ratio")):
+            found.add(round(float(value) * 100, 6))
+    return sorted(found)
+
+
 def evidence_numbers(view: Mapping[str, dict]) -> list[float]:
     nums = []
     for _, v in _leaves(dict(view)):
@@ -288,6 +309,7 @@ class Traceability:
     base: list[float]
     derived: list[float] = field(default_factory=list)
     periods: frozenset[float] = field(default_factory=frozenset)
+    percents: list[float] = field(default_factory=list)
 
     @classmethod
     def of(cls, view: Mapping[str, dict], max_pairs_base: int = 160) -> Traceability:
@@ -299,11 +321,11 @@ class Traceability:
             if b != 0:
                 derived.add(round(a / b, 6))
                 derived.add(round((a - b) / b * 100, 6))
-        return cls(base, sorted(derived), key_periods(view))
+        return cls(base, sorted(derived), key_periods(view), share_percents(view))
 
     def _near(self, x: float) -> bool:
         tol = max(0.01, 0.005 * abs(x))
-        for arr in (self.base, self.derived):
+        for arr in (self.base, self.derived, self.percents):
             i = bisect_left(arr, x - tol)
             if i < len(arr) and arr[i] <= x + tol:
                 return True
