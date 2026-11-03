@@ -8,3 +8,6 @@ __pycache__/
 *.pyc
 server/paper-state.json
 server/logs/
+.dhan_cache/
+stock_options_history.csv*
+by_symbol/

@@ -39,6 +39,19 @@ cd engine
 python3 run_refresh.py   # self-check on a saved 21 Sep snapshot
 ```
 
+## Pull stock-option history for backtests
+
+```bash
+cd engine
+export DHAN_ACCESS_TOKEN=...  DHAN_CLIENT_ID=...
+python3 dhan_history_pull.py --from 2025-11-01 --to 2026-11-01 --zip   # NIFTY 50, ATM±3, 09:30 + 15:20
+```
+
+Writes `date,time,symbol,expiry,strike,ce_oi,pe_oi,ce_ltp,pe_ltp,spot` plus
+IV, volume and lot size. `--all-bars --interval 1` for 1-min bars. Dhan caps
+stock options at ATM±3. Raw responses are cached in `.dhan_cache/`, so an
+interrupted run resumes where it stopped.
+
 ## MCP tools
 
 `set_dhan_token`, `dhan_token_status`, `get_expiries`, `get_instrument`,
