@@ -160,8 +160,13 @@ async def download_master(url: str, timeout_s: float = 90.0) -> InstrumentMaster
 async def build_runtime(settings: Settings) -> Runtime:
     configs = load_index_configs(settings.strategy_config_dir)
     from doi.core import setup_store
+    from doi.core.secret_store import SecretDirError
 
-    chosen = setup_store.load(settings.secrets_dir).get("live_indices")
+    try:
+        chosen = setup_store.load(settings.secrets_dir).get("live_indices")
+    except SecretDirError as e:
+        log.error("%s", e)
+        chosen = None
     if chosen is not None:  # Setup Wizard choice overrides the yaml live_enabled flags
         configs = {k: c.model_copy(update={"live_enabled": k in chosen}) for k, c in configs.items()}
     rt = Runtime(configs=configs, settings=settings)

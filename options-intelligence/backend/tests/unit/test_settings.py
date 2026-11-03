@@ -123,3 +123,18 @@ def test_worker_watch_returns_on_change(tmp_path):
         await asyncio.wait_for(t, 2)
 
     asyncio.run(go())
+
+
+def test_unreadable_secrets_dir_gives_actionable_503(pg_dsn, tmp_path, monkeypatch):
+    _, c, k = _rt(pg_dsn, tmp_path)
+    from pathlib import Path
+
+    def deny(self, *a, **kw):
+        raise PermissionError(13, "denied")
+
+    monkeypatch.setattr(Path, "read_text", deny)
+    for path in ("/api/v1/admin/settings", "/api/v1/admin/setup"):
+        r = c.get(path, headers=k["admin"])
+        assert r.status_code == 503 and "chown" in r.json()["detail"], path
+    s = Settings.from_env({"SECRETS_DIR": str(tmp_path)})  # startup survives
+    assert s.secrets_dir == tmp_path

@@ -22,6 +22,10 @@ def load(directory: Path) -> dict:
         data = json.loads(path(directory).read_text())
     except (FileNotFoundError, NotADirectoryError, ValueError):
         return {}
+    except PermissionError:
+        from doi.core.secret_store import SecretDirError, _perm_hint
+
+        raise SecretDirError(_perm_hint(Path(directory))) from None
     out: dict = {}
     for k in ("ai_enabled", "dhan_feed_enabled"):
         if isinstance(data.get(k), bool):
@@ -34,8 +38,13 @@ def load(directory: Path) -> dict:
 def save(directory: Path, changes: dict) -> dict:
     cur = load(directory) | {k: v for k, v in changes.items() if v is not None}
     d = Path(directory)
-    d.mkdir(parents=True, exist_ok=True, mode=0o700)
-    fd, tmp = tempfile.mkstemp(dir=d, prefix=".tmp-")
+    try:
+        d.mkdir(parents=True, exist_ok=True, mode=0o700)
+        fd, tmp = tempfile.mkstemp(dir=d, prefix=".tmp-")
+    except PermissionError:
+        from doi.core.secret_store import SecretDirError, _perm_hint
+
+        raise SecretDirError(_perm_hint(d)) from None
     try:
         os.fchmod(fd, 0o600)
         with os.fdopen(fd, "w") as f:

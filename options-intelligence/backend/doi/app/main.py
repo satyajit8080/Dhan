@@ -300,6 +300,12 @@ def create_app(settings: Settings | None = None, runtime: Runtime | None = None)
 
     app.include_router(views_router)
     from doi.app.settings_routes import router as settings_router
+    from doi.core.secret_store import SecretDirError
 
     app.include_router(settings_router)
+
+    @app.exception_handler(SecretDirError)
+    async def _secret_dir(request: Request, exc: SecretDirError):
+        return JSONResponse({"detail": str(exc)}, status_code=503)
+
     return app

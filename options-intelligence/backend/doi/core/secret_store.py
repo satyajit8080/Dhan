@@ -44,6 +44,16 @@ class SecretError(ValueError):
     pass
 
 
+class SecretDirError(OSError):
+    """The secrets directory is not readable/writable by this process."""
+
+
+def _perm_hint(directory: Path) -> str:
+    uid = os.getuid() if hasattr(os, "getuid") else "?"
+    return (f"secrets folder {directory} is not accessible by the app (process uid {uid}). "
+            f"On the server run: sudo chown -R {uid}:{uid} secrets && chmod 700 secrets && docker compose restart api ai-worker")  # fmt: skip
+
+
 def fingerprint(value: str | None) -> str | None:
     return None if not value else "sha256:" + hashlib.sha256(value.encode()).hexdigest()[:10]
 
@@ -60,6 +70,8 @@ class SecretStore:
             return self.path(name).read_text().strip() or None
         except (FileNotFoundError, NotADirectoryError):
             return None
+        except PermissionError:
+            raise SecretDirError(_perm_hint(self.dir)) from None
 
     def write(self, name: str, value: str) -> Path:
         spec = SPECS.get(name)
@@ -68,8 +80,11 @@ class SecretStore:
         value = value.strip()
         if not re.fullmatch(spec.pattern, value):
             raise SecretError(f"{spec.label}: invalid format")
-        self.dir.mkdir(parents=True, exist_ok=True, mode=0o700)
-        fd, tmp = tempfile.mkstemp(dir=self.dir, prefix=".tmp-")
+        try:
+            self.dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+            fd, tmp = tempfile.mkstemp(dir=self.dir, prefix=".tmp-")
+        except PermissionError:
+            raise SecretDirError(_perm_hint(self.dir)) from None
         try:
             os.fchmod(fd, 0o600)
             with os.fdopen(fd, "w") as f:
@@ -82,9 +97,12 @@ class SecretStore:
 
     def delete(self, name: str) -> bool:
         p = self.path(name)
-        if p.exists():
-            p.unlink()
-            return True
+        try:
+            if p.exists():
+                p.unlink()
+                return True
+        except PermissionError:
+            raise SecretDirError(_perm_hint(self.dir)) from None
         return False
 
     def status(self, name: str, env: dict[str, str] | None = None) -> dict:

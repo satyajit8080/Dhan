@@ -80,17 +80,21 @@ class Settings(BaseModel):
         }
         data = {f: env[k] for f, k in fields.items() if env.get(k)}
         # Keys saved from the Settings page; environment variables take precedence.
-        from doi.core.secret_store import SecretStore
+        from doi.core import setup_store
+        from doi.core.secret_store import SecretDirError, SecretStore
 
         store = SecretStore(Path(data.get("secrets_dir", "./secrets")))
-        for field_name, secret in (("dhan_client_id", "dhan_client_id"), ("xai_api_key", "xai_api_key")):
-            if field_name not in data and (v := store.read(secret)):
-                data[field_name] = v
-        from doi.core import setup_store
+        try:
+            for field_name, secret in (("dhan_client_id", "dhan_client_id"), ("xai_api_key", "xai_api_key")):
+                if field_name not in data and (v := store.read(secret)):
+                    data[field_name] = v
+            for k, v in setup_store.load(store.dir).items():
+                if k in ("ai_enabled", "dhan_feed_enabled") and k not in data:
+                    data[k] = v
+        except SecretDirError as e:  # start anyway; the Settings page shows the fix
+            import logging
 
-        for k, v in setup_store.load(store.dir).items():
-            if k in ("ai_enabled", "dhan_feed_enabled") and k not in data:
-                data[k] = v
+            logging.getLogger(__name__).error("%s", e)
         if "dhan_access_token" not in data and "dhan_token_file" not in data:
             data["dhan_token_file"] = str(store.path("dhan_access_token"))
         return cls(**data)
