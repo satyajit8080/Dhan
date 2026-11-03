@@ -71,6 +71,8 @@ def test_full_research_to_paper_flow(pg_dsn):
     assert sum(float(a["cost_inr"]) for a in u["by_agent"]) > 0 and isinstance(u["recent_errors"], list)
     port = c.get("/api/v1/paper/portfolio", headers=k["viewer"]).json()["positions"][0]
     assert port["side"] == "LONG" and port["option_type"] == "CE" and "unrealized" in port and "charges" in port
+    assert c.get("/api/v1/ai/strong-calls", headers=k["viewer"]).json() == []  # confidence 3 is not a strong call
+    assert c.get("/api/v1/ai/strong-calls").status_code == 401
     for path in (
         "/api/v1/ai/predictions",
         "/api/v1/research/strategies",
@@ -109,6 +111,7 @@ def test_dashboard_is_static_and_safe(pg_dsn):
         assert sec in r.text
     assert 'id="ks"' in r.text and 'id="h-meter"' in r.text and "PAPER MODE — NO LIVE EXECUTION" in r.text  # global shell
     assert "Set API key" in r.text and "AI Committee" in r.text and "Option chain" in r.text and "#/04" in r.text
+    assert "Strong calls" in r.text and "/api/v1/ai/strong-calls" in r.text
     assert "XAI_API_KEY" not in r.text and "access-token" not in r.text and "/live" not in r.text
 
 

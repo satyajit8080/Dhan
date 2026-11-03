@@ -156,7 +156,7 @@ const NAV = [
   ["Live", [["01","Overview","OV"],["02","Market","MK"],["03","Option chain","OC"]]],
   ["Research", [["06","Strategies","ST"],["07","Backtests","BT"],["08","Predictions","PR"],["12","Data & replay","DA"],["13","Reports","RP"]]],
   ["Paper", [["09","Paper trading","PA"],["10","Portfolio","PF"]]],
-  ["AI Committee", [["04","Committee","AI"],["05","Agents","AG"],["11","Leaderboard","LB"]]],
+  ["AI Committee", [["signals","Strong calls","SC"],["04","Committee","AI"],["05","Agents","AG"],["11","Leaderboard","LB"]]],
   ["Ops", [["14","Monitoring","OP"],["15","Administration","AD"],["settings","Settings","SET"]]],
 ];
 const HARD_CAP = 3000;
@@ -274,7 +274,7 @@ const pending = () => S.recs.filter((r) => r.status === "PENDING_HUMAN");
 const needsLock = () => !key && gate === "locked";
 function route() {
   const [sec = "01", arg] = location.hash.replace(/^#\/?/, "").split("/");
-  const id = sec === "settings" || SECTIONS.some(([n]) => n === sec) ? sec : "01";
+  const id = sec === "settings" || sec === "signals" || SECTIONS.some(([n]) => n === sec) ? sec : "01";
   return { id, arg };
 }
 const isPublic = (id) => id === "02" || id === "03";
@@ -465,8 +465,28 @@ V["01"] = () => {
     panel("Regime and India VIX", "/market/features · NIFTY", async () => featKv(await api("/api/v1/market/features?underlying=NIFTY"), ["trend_regime", "vol_regime", "market_structure", "vix", "vix_change_pct", "adx", "rsi", "realized_vol_pct", "opening_range_state"]), { cls: "quiet" }),
     panel("Alerts", "from system status", async () => { const a = alerts(); return a.length ? table(a, [{ h: "type", v: (r) => tag(r[0], r[0] === "KILL" || r[0] === "DB" || r[0] === "DATA" ? "dn" : ""), l: true }, { h: "alert", v: (r) => r[1], l: true, w: true }]) : state("EMPTY", "No active alerts"); }, { cls: "quiet" }),
   ];
-  return [hero, grid("c2", ...desk)];
+  return [hero, strongCallsPanel(), grid("c2", ...desk)];
 };
+function strongCallsPanel() {
+  return panel("Strong calls", "/ai/strong-calls · committee-verified only", async () => {
+    const rows = await api("/api/v1/ai/strong-calls");
+    if (!rows.length) return null;
+    return el("div", {},
+      el("p", { class: "mu" }, "Paper buys only. A row appears after the committee marks it strong and the risk gate has approved the contract. Approve runs that gate again, then the paper engine. No live broker order is sent."),
+      table(rows, [
+        { h: "Underlying", v: "underlying", l: true },
+        { h: "Signal", v: (r) => tag(r.signal, r.option_type === "PE" ? "dn" : "up"), l: true },
+        { h: "Side", v: "side", l: true },
+        { h: "CE/PE", v: "option_type" },
+        { h: "Confidence", v: (r) => r.confidence + "/5" },
+        { h: "Contract", v: (r) => f(r.strike, 0) + " " + (r.expiry || ""), l: true },
+        { h: "Status", v: (r) => tag(r.status, r.status === "SUBMITTED" ? "up" : r.status === "REJECTED" || r.status === "RISK_REJECTED" ? "dn" : "") },
+        { h: "Meeting", v: (r) => el("a", { href: "#/04/" + r.meeting_id, class: "quiet" }, "Open"), l: true },
+        { h: "", v: (r) => r.status === "PENDING_HUMAN" ? el("span", { class: "frm" }, el("button", { class: "pri", onclick: () => decide(r, "approve") }, "Approve"), el("button", { class: "dng", onclick: () => decide(r, "reject") }, "Reject")) : "" },
+      ]));
+  }, { tight: true, empty: "No strong calls yet. The committee has not verified a high-confidence CE or PE buy.", cta: { label: "Open the committee", href: "#/04" } });
+}
+V.signals = () => [strongCallsPanel()];
 V["02"] = () => [panel("Underlying Universe", "/market/underlyings · instrument master", async () => { S.und = await api("/api/v1/market/underlyings"); return table(S.und, [{ h: "index", v: "key", l: true }, { h: "exch", v: "exchange_family", l: true }, { h: "sec id", v: "security_id" }, { h: "segment", v: "derivative_segment", l: true }, { h: "resolved", v: (r) => tag(r.resolved ? "YES" : "NO", r.resolved ? "up" : "dn") }, { h: "live", v: (r) => tag(r.live_enabled ? "ENABLED" : "DISABLED", r.live_enabled ? "am" : "") }, { h: "history", v: "historical_status", l: true }, { h: "next expiries · lot", v: (r) => r.expiries.map((e) => `${e.expiry}·${e.lot_size}`).join("  "), l: true }, { h: "error", v: (r) => r.error || "", l: true }]); }, { tight: true }),
   el("div", { id: "mi" })];
 V["02"].after = async () => { const box = $("mi"); try { if (!S.und) S.und = await api("/api/v1/market/underlyings"); } catch (e) { box.replaceChildren(errState(e)); return; }
@@ -674,7 +694,7 @@ function show() {
   for (const a of $("nav").querySelectorAll("a")) a.classList.toggle("act", a.dataset.s === id);
   for (const g of $("nav").querySelectorAll(".mode")) g.classList.toggle("on", (g.dataset.items || "").split(",").includes(id));
   LIVE = [];
-  const name = id === "settings" ? "Settings & Keys" : SECTIONS.find(([n]) => n === id)[1];
+  const name = id === "settings" ? "Settings & Keys" : id === "signals" ? "Strong calls" : SECTIONS.find(([n]) => n === id)[1];
   const locked = needsLock() && !isPublic(id) && id !== "01";
   const body = locked ? [lockCard()] : V[id](arg);
   $("main").replaceChildren(el("div", { class: "sh" }, el("h1", {}, el("span", { class: "mode-k" }, modeOf(id)), name), el("div", { class: "ctl" }, el("span", { class: "paper" }, "Paper only"), el("button", { onclick: refreshAll }, "Refresh"))), ...body);
@@ -684,7 +704,7 @@ function show() {
 for (const [mode, items] of NAV) {
   $("nav").append(el("div", { class: "mode", "data-items": items.map(([n]) => n).join(",") }, mode));
   for (const [n, t, short] of items) {
-    const full = n === "settings" ? "Settings & Keys" : SECTIONS.find(([id]) => id === n)[1];
+    const full = n === "settings" ? "Settings & Keys" : n === "signals" ? "Strong calls" : SECTIONS.find(([id]) => id === n)[1];
     $("nav").append(el("a", { href: "#/" + n, "data-s": n, title: full }, el("span", { class: "nn" }, short), el("span", { class: "nl" }, t)));
   }
 }
