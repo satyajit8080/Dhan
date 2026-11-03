@@ -9,6 +9,7 @@ import re
 import tempfile
 import unittest
 import urllib.error
+from datetime import date
 from pathlib import Path
 
 from collector import decode_cloud_log
@@ -26,18 +27,21 @@ MASTER = (b"SEM_EXM_EXCH_ID,SEM_SEGMENT,SEM_SMST_SECURITY_ID,SEM_INSTRUMENT_NAME
 
 
 class StrictDhan(FakeDhan):
-    """Like the real first cloud run: a string interval gets HTTP 400 DH-905."""
+    """Mimics the real cloud runs: HTTP 400 DH-905 for a string interval or a window longer
+    than max_days (or for everything with reject_all)."""
 
-    def __init__(self, reject_all=False, **kw):
+    def __init__(self, reject_all=False, max_days=1, **kw):
         super().__init__(**kw)
-        self.reject_all = reject_all
+        self.reject_all, self.max_days = reject_all, max_days
         self.bodies = []
 
     def __call__(self, url, body, headers, timeout):
         import json as _j
+        from datetime import date as _d
         req = _j.loads(body)
         self.bodies.append(req)
-        if self.reject_all or isinstance(req.get("interval"), str):
+        span = (_d.fromisoformat(req["toDate"]) - _d.fromisoformat(req["fromDate"])).days
+        if self.reject_all or isinstance(req.get("interval"), str) or span > self.max_days:
             self.calls += 1
             return 400, b'{"errorType":"Input_Exception","errorCode":"DH-905","errorMessage":"Missing required fields, bad values for parameters etc."}'
         return super().__call__(url, body, headers, timeout)
@@ -98,8 +102,12 @@ class CloudRoundTrip(unittest.TestCase):
         self.assertEqual(rc, 0, logtext[-2000:])
         self.assertNotIn(TOKEN, logtext)
         self.assertNotIn("1100000000", logtext)
-        self.assertIn('"event": "probe_selected", "variant": "int-interval/all-fields"', logtext)
-        self.assertTrue(all(isinstance(b["interval"], int) for b in fake.bodies[1:]))
+        self.assertIn('"event": "probe_selected", "format": "2-day/step-1/toDate-inclusive/secId-str/'
+                      'open,high,low,close,iv,volume,strike,oi,spot"', logtext)
+        self.assertTrue(all(isinstance(b["interval"], int) for b in fake.bodies))
+        run = [b for b in fake.bodies if b["exchangeSegment"] == "NSE_FNO"][-50:]
+        self.assertTrue(all((date.fromisoformat(b["toDate"]) - date.fromisoformat(b["fromDate"])).days <= 1
+                            for b in run))
         self.assertNotIn("BAJAJ-AUTO (NOT_IN_FNO)", logtext)
 
         with tempfile.TemporaryDirectory() as d:
@@ -120,6 +128,30 @@ class CloudRoundTrip(unittest.TestCase):
             self.assertIn("NOT_IN_FNO", report)
             self.assertTrue((data / "exports" / "bull50_stock_options_2026-03-01_2026-04-15.zip").exists())
 
+    def test_30_day_windows_when_accepted(self):
+        import urllib.request as ur
+        orig = ur.urlopen
+        try:
+            fake = StrictDhan(max_days=30)
+            mod = load_cloud(fake)
+            mod.SYMBOLS = ["RELIANCE"]
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                rc = mod.main()
+        finally:
+            ur.urlopen = orig
+        self.assertEqual(rc, 0)
+        self.assertIn('"format": "30-day/step-30/toDate-exclusive/', buf.getvalue())
+        with tempfile.TemporaryDirectory() as d:
+            logf = Path(d) / "run.log"
+            logf.write_text(buf.getvalue())
+            data = Path(d) / "data"
+            with contextlib.redirect_stdout(io.StringIO()):
+                decode_cloud_log.main([str(logf), "--data-dir", str(data)])
+            rows = list(csv.DictReader((data / "exports" / "2026-03-01_2026-04-15" / "all_symbols.csv")
+                                       .open(encoding="utf-8")))
+            self.assertEqual(len(rows), 31 * 2 * 7)
+
     def test_stops_when_every_format_is_refused(self):
         import urllib.request as ur
         orig = ur.urlopen
@@ -132,7 +164,8 @@ class CloudRoundTrip(unittest.TestCase):
         finally:
             ur.urlopen = orig
         self.assertEqual(rc, 2)
-        self.assertEqual(fake.calls, len(mod.VARIANTS))      # only the probe, nothing else
+        expected = 1 + len(mod.PROBE_DAYS) * 2 + 2 * 2         # control + stage B, nothing else
+        self.assertEqual(fake.calls, expected)
         self.assertIn("Missing required fields", buf.getvalue())
 
     def test_cloud_source_avoids_blocked_patterns(self):

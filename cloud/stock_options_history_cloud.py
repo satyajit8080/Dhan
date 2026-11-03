@@ -33,7 +33,6 @@ START_AT_SYMBOL = ""              # resume: skip symbols before this one (blank 
 STRIKES = ["ATM-3", "ATM-2", "ATM-1", "ATM", "ATM+1", "ATM+2", "ATM+3"]   # Dhan max for stocks: +/-3
 EXPIRY_CODE = 1                   # 1 = near month (0 is refused by Dhan)
 INTERVAL = 1                      # minutes
-WINDOW_DAYS = 30                  # Dhan: at most 30 days per request
 KEEP = "SNAPSHOTS"                # "SNAPSHOTS": keep only bars within KEEP_TOLERANCE_MIN of 09:30/15:20
                                   # (values untouched, ~40x smaller log); "FULL": every 1-min bar
 SNAPSHOT_TIMES = ["09:30", "15:20"]
@@ -61,7 +60,7 @@ import urllib.request
 from datetime import date, datetime, timedelta, timezone
 
 PROGRAM = "stock-options-history"
-VERSION = "1.1"
+VERSION = "1.2"
 BASE_URL = "https://api.dhan.co/v2"
 ROLLING_PATH = "/charts/rollingoption"
 INSTRUMENT_FILE = "https://images.dhan.co/api-data/api-scrip-master.csv"
@@ -235,45 +234,94 @@ class Client:
         return "failed", http_status, err or ecode, "", None, 6
 
 
-# Request formats tried by the start-up probe, first accepted one is used for the run.
-# (Dhan answered HTTP 400 DH-905 to every request of the first cloud run.)
-SENSEX_FIELDS = ["open", "high", "low", "close", "oi", "spot", "strike"]   # format the SENSEX run uses
-VARIANTS = [
-    {"name": "int-interval/all-fields", "intInterval": True, "fields": FIELDS},
-    {"name": "int-interval/no-iv", "intInterval": True, "fields": [f for f in FIELDS if f != "iv"]},
-    {"name": "int-interval/no-volume", "intInterval": True, "fields": [f for f in FIELDS if f != "volume"]},
-    {"name": "int-interval/sensex-fields", "intInterval": True, "fields": SENSEX_FIELDS},
-    {"name": "str-interval/all-fields", "intInterval": False, "fields": FIELDS},
-    {"name": "str-interval/sensex-fields", "intInterval": False, "fields": SENSEX_FIELDS},
-]
+# Start-up probe. Dhan answered HTTP 400 DH-905 ("Missing required fields, bad values for
+# parameters") to 30-day windows in every field/interval format, so the probe now also
+# tries shorter windows (the SENSEX history run uses 1-day windows) and both toDate
+# conventions, and checks the account with the SENSEX request first.
+SENSEX_FIELDS = ["open", "high", "low", "close", "oi", "spot", "strike"]   # SENSEX run's fields
+PROBE_DAYS = [30, 10, 5, 2, 1]
 
 
-def make_body(variant, sec, strike, opt, a, b):
-    body = {"securityId": str(sec), "exchangeSegment": "NSE_FNO", "instrument": "OPTSTK",
-            "expiryFlag": "MONTH", "expiryCode": int(EXPIRY_CODE), "strike": strike,
-            "drvOptionType": opt, "requiredData": list(variant["fields"]),
-            "fromDate": a.isoformat(), "toDate": b.isoformat(),
-            "interval": int(INTERVAL) if variant["intInterval"] else str(INTERVAL)}
-    return body
+def make_body(fmt, sec, strike, opt, a, b, segment="NSE_FNO", instrument="OPTSTK", flag="MONTH"):
+    return {"securityId": int(sec) if fmt.get("secIdInt") else str(sec),
+            "exchangeSegment": segment, "instrument": instrument, "expiryFlag": flag,
+            "expiryCode": int(EXPIRY_CODE), "strike": strike, "drvOptionType": opt,
+            "requiredData": list(fmt["fields"]), "fromDate": a.isoformat(), "toDate": b.isoformat(),
+            "interval": int(INTERVAL) if fmt.get("intInterval", True) else str(INTERVAL)}
 
 
-def probe(client, sec, sym, wins):
-    """Try each request format on one recent window. Returns the first Dhan accepts."""
-    a, b = wins[-2] if len(wins) > 1 else wins[-1]
-    accepted_empty = None
-    for v in VARIANTS:
-        st, http_status, ecode, emsg, payload, att = client.rolling(make_body(v, sec, "ATM", "CALL", a, b))
-        bars = 0
-        if isinstance(payload, dict) and isinstance(payload.get("ce"), dict):
-            bars = len(payload["ce"].get("timestamp") or [])
-        log("info", "probe", variant=v["name"], symbol=sym, fromDate=a.isoformat(),
-            toDate=b.isoformat(), status=st, httpStatus=http_status, errorCode=ecode,
-            errorMessage=emsg, bars=bars)
-        if st == "ok":
-            return v
-        if st == "no_data" and accepted_empty is None:
-            accepted_empty = v
-    return accepted_empty
+def window_end(a, days, inclusive):
+    return a + timedelta(days=days - 1) if inclusive else a + timedelta(days=days)
+
+
+def _try(client, label, body):
+    """Returns (status, set of IST dates that came back)."""
+    st, http_status, ecode, emsg, payload, att = client.rolling(body)
+    bars, days = 0, set()
+    for side in ("ce", "pe"):
+        leg = payload.get(side) if isinstance(payload, dict) else None
+        if isinstance(leg, dict):
+            ts = leg.get("timestamp") or []
+            bars += len(ts)
+            days |= {datetime.fromtimestamp(int(t), IST).date().isoformat() for t in ts}
+    log("info", "probe", test=label, fromDate=body["fromDate"], toDate=body["toDate"],
+        status=st, httpStatus=http_status, errorCode=ecode, errorMessage=emsg, bars=bars,
+        datesReturned=sorted(days))
+    return st, days
+
+
+def probe(client, sec, sym, frm, to):
+    """Find a request shape Dhan accepts for stock options. Returns a format dict or None."""
+    ref = to - timedelta(days=10)
+    while ref.weekday() >= 5:
+        ref -= timedelta(days=1)
+    if ref < frm:
+        ref = frm
+    base = {"intInterval": True, "fields": SENSEX_FIELDS, "secIdInt": False}
+    # A. control: exactly the SENSEX history request shape (1 day, from == to)
+    _try(client, "control SENSEX 51 OPTIDX WEEK 1-day",
+         make_body(base, 51, "ATM", "CALL", ref, ref, "BSE_FNO", "OPTIDX", "WEEK"))
+    # B. stock, window length x toDate convention (x securityId type as a last resort)
+    found, empty = None, None
+    for sec_int in (False, True):
+        for days in (PROBE_DAYS if not sec_int else [30, 1]):
+            for inclusive in (False, True):
+                fmt = dict(base, secIdInt=sec_int, days=days, inclusive=inclusive)
+                a = ref - timedelta(days=days - 1)
+                b = window_end(a, days, inclusive)
+                label = "%s %d-day toDate-%s secId-%s" % (sym, days, "inclusive" if inclusive
+                                                         else "exclusive", "int" if sec_int else "str")
+                st, got = _try(client, label, make_body(fmt, sec, "ATM", "CALL", a, b))
+                if st == "ok":
+                    # Step = days really covered. If an "inclusive" window did not return its
+                    # last day, toDate is exclusive after all: overlap windows by one day so no
+                    # day is skipped (overlapping bars are dropped later as duplicates).
+                    step = days if (not inclusive or b.isoformat() in got) else days - 1
+                    if step < 1:
+                        continue
+                    found = dict(fmt, step=step)
+                    break
+                if st == "no_data" and empty is None:
+                    empty = dict(fmt, step=days - 1 if inclusive and days > 1 else 1)
+            if found:
+                break
+        if found:
+            break
+    fmt = found or empty
+    if fmt is None:
+        return None
+    # C. can we also get iv and volume?
+    a = ref - timedelta(days=fmt["days"] - 1)
+    b = window_end(a, fmt["days"], fmt["inclusive"])
+    for fields in (FIELDS, [f for f in FIELDS if f != "iv"], [f for f in FIELDS if f != "volume"]):
+        trial = dict(fmt, fields=fields)
+        if _try(client, "fields " + ",".join(fields), make_body(trial, sec, "ATM", "CALL", a, b))[0] == "ok":
+            fmt = trial
+            break
+    fmt["name"] = "%d-day/step-%d/toDate-%s/secId-%s/%s" % (
+        fmt["days"], fmt["step"], "inclusive" if fmt["inclusive"] else "exclusive",
+        "int" if fmt["secIdInt"] else "str", ",".join(fmt["fields"]))
+    return fmt
 
 
 def trim(leg, keep_minutes):
@@ -289,12 +337,17 @@ def trim(leg, keep_minutes):
     return out
 
 
-def windows(frm, to):
+def windows(frm, to, days, inclusive, step):
     out, d = [], frm
     while d < to:
-        e = min(d + timedelta(days=WINDOW_DAYS), to)
-        out.append((d, e))
-        d = e
+        # toDate really inclusive -> last window ends the day before `to` (to is exclusive);
+        # really exclusive (exclusive format, or inclusive-shaped with step < days) -> at `to`.
+        really_inclusive = inclusive and step >= days
+        e = min(window_end(d, days, inclusive), to - timedelta(days=1) if really_inclusive else to)
+        if not (days <= 2 and all((d + timedelta(days=k)).weekday() >= 5
+                                  for k in range((e - d).days + (1 if inclusive else 0)))):
+            out.append((d, e))
+        d = d + timedelta(days=step)
     return out
 
 
@@ -309,7 +362,6 @@ def history():
     to = date.fromisoformat(TO_DATE) if TO_DATE else today
     frm = date.fromisoformat(FROM_DATE) if FROM_DATE else \
         today.replace(year=today.year - 5) + timedelta(days=1)
-    wins = windows(frm, to)
     symbols = list(dict.fromkeys(s.strip().upper() for s in SYMBOLS if s.strip()))
     if START_AT_SYMBOL and START_AT_SYMBOL.upper() in symbols:
         symbols = symbols[symbols.index(START_AT_SYMBOL.upper()):]
@@ -318,16 +370,6 @@ def history():
         h, m = (int(x) for x in t.split(":"))
         for d in range(-KEEP_TOLERANCE_MIN, KEEP_TOLERANCE_MIN + 1):
             keep.add(h * 60 + m + d)
-
-    meta = {"program": PROGRAM, "version": VERSION, "from": frm.isoformat(), "to": to.isoformat(),
-            "windowDays": WINDOW_DAYS, "interval": INTERVAL, "expiryCode": EXPIRY_CODE,
-            "strikes": STRIKES, "keep": KEEP, "snapshotTimes": SNAPSHOT_TIMES,
-            "keepToleranceMin": KEEP_TOLERANCE_MIN, "symbols": symbols,
-            "python": "%d.%d.%d" % tuple(sys.version_info[:3]), "orders": "NONE"}
-    emit("STKMETA", "meta", meta)
-    log("info", "history_start", fromDate=frm.isoformat(), toDate=to.isoformat(),
-        symbols=len(symbols), windows=len(wins),
-        requests=len(symbols) * len(wins) * len(STRIKES) * 2)
 
     try:
         inst = resolve_instruments(symbols)
@@ -339,26 +381,38 @@ def history():
     if skipped:
         log("warn", "symbols_skipped", symbols=skipped)
 
-    total = sum(1 for s in symbols if inst[s]["security_id"]) * len(wins) * len(STRIKES) * 2
-    done, t0 = 0, time.monotonic()
     s = next((x for x in symbols if inst[x]["security_id"]), None)
     if s is None:
         log("error", "history_stopped", reason="no symbol resolved to a security id")
         return 2
     try:
-        variant = probe(client, inst[s]["security_id"], s, wins)
+        fmt = probe(client, inst[s]["security_id"], s, frm, to)
     except Stop as e:
         log("error", "history_stopped", reason=str(e))
         return 3
-    if variant is None:
-        log("error", "history_stopped", reason="Dhan refused every request format in the probe "
-            "(see the probe lines above for its error messages). Nothing else was requested.")
+    if fmt is None:
+        log("error", "history_stopped", reason="Dhan refused every request shape in the probe "
+            "(see the probe lines above). Nothing else was requested. If the SENSEX control "
+            "line also failed, check the Data API plan / account, not this script.")
         return 2
-    missing = [f for f in FIELDS if f not in variant["fields"]]
-    log("info", "probe_selected", variant=variant["name"], fieldsNotRequested=missing,
+    wins = windows(frm, to, fmt["days"], fmt["inclusive"], fmt["step"])
+    missing = [f for f in FIELDS if f not in fmt["fields"]]
+    total = sum(1 for x in symbols if inst[x]["security_id"]) * len(wins) * len(STRIKES) * 2
+    log("info", "probe_selected", format=fmt["name"], fieldsNotRequested=missing,
+        windows=len(wins), requests=total,
+        hoursAt4PerS=round(total / 4.0 / 3600, 1), daysAt95kPerDay=round(total / 95000.0, 1),
         note="fields not requested stay blank in the CSV" if missing else "all fields requested")
-    emit("STKMETA", "format", {"variant": variant["name"], "fields": variant["fields"],
-                               "intInterval": variant["intInterval"]})
+    meta = {"program": PROGRAM, "version": VERSION, "from": frm.isoformat(), "to": to.isoformat(),
+            "windowDays": fmt["days"], "windowStep": fmt["step"], "inclusiveToDate": fmt["inclusive"],
+            "windows": [[a.isoformat(), b.isoformat()] for a, b in wins],
+            "interval": INTERVAL, "expiryCode": EXPIRY_CODE, "strikes": STRIKES, "keep": KEEP,
+            "snapshotTimes": SNAPSHOT_TIMES, "keepToleranceMin": KEEP_TOLERANCE_MIN,
+            "symbols": symbols, "format": fmt, "python": "%d.%d.%d" % tuple(sys.version_info[:3]),
+            "orders": "NONE"}
+    emit("STKMETA", "meta", meta)
+    log("info", "history_start", fromDate=frm.isoformat(), toDate=to.isoformat(),
+        symbols=len(symbols), windows=len(wins), requests=total)
+    done, t0 = 0, time.monotonic()
     bad_windows = 0
     try:
         for si, s in enumerate(symbols, 1):
@@ -370,7 +424,7 @@ def history():
                 legs = []
                 for strike in STRIKES:
                     for opt in ("CALL", "PUT"):
-                        body = make_body(variant, sec, strike, opt, a, b)
+                        body = make_body(fmt, sec, strike, opt, a, b)
                         st, http_status, ecode, emsg, payload, att = client.rolling(body)
                         side = "ce" if opt == "CALL" else "pe"
                         leg = (payload or {}).get(side) if isinstance(payload, dict) else None

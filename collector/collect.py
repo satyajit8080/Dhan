@@ -266,6 +266,9 @@ def main(argv=None) -> int:
     store = RawStore(data_dir)
     symbols = read_symbols(args)
     wins = windows(args.frm, args.to)
+    wfile = data_dir / "windows" / f"{args.frm}_{args.to}.json"
+    if wfile.exists():                     # written by decode_cloud_log: the cloud run's windows
+        wins = [tuple(w) for w in json.loads(wfile.read_text())]
     log(f"Bull50 options collector | {len(symbols)} symbols | {args.frm} -> {args.to} | "
         f"{len(wins)} x {config.WINDOW_DAYS}-day windows | data dir {data_dir}")
     try:

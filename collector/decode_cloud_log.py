@@ -108,6 +108,13 @@ def main(argv=None) -> int:
     if broken:
         print(f"WARNING {len(broken)} incomplete records (log cut off?): " + "; ".join(broken[:10]))
 
+    for m in metas:
+        if m.get("windows"):
+            wf = data_dir / "windows" / f"{m['from']}_{m['to']}.json"
+            wf.parent.mkdir(parents=True, exist_ok=True)
+            wf.write_text(json.dumps(m["windows"]))
+        if m.get("format"):
+            print(f"request format used by the cloud run: {m['format'].get('name')}")
     ranges: dict = {}
     for m in metas:
         r = ranges.setdefault((m["from"], m["to"]), {"symbols": [], "tol": m["keepToleranceMin"]})
