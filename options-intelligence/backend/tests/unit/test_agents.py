@@ -87,7 +87,6 @@ def test_traceability_allows_horizons_rounding_and_scaled_magnitudes_not_invente
     assert trace.traceable(-3.373e11) and trace.traceable(-337.3e9)
     assert not trace.traceable(-337) and not trace.traceable(337)
     assert not trace.traceable(24000) and not trace.traceable(25150) and not trace.traceable(25)
-
     cited = {
         "stance": "NEUTRAL",
         "confidence": 3,
@@ -107,6 +106,34 @@ def test_traceability_allows_horizons_rounding_and_scaled_magnitudes_not_invente
     assert not rejected.ok and "untraceable number -337" in rejected.errors[0]
     assert "-3.373e+11" in rejected.errors[0] or "e+11" in rejected.errors[0]
     assert any("337" in err and "25150" not in err for err in rejected.errors)
+
+
+def test_indicator_periods_in_keys_are_traceable_but_not_concatenated():
+    view = {"technical": {"ema_20": 24310.0, "ema_50": 24280.0, "ema_200": 24100.0, "macd_hist": 12.4}}
+    trace = Traceability.of(view)
+    assert trace.traceable(20) and trace.traceable(50) and trace.traceable(200)
+    assert not trace.traceable(50200) and not trace.traceable(23900)  # 24100 - 200 is not a derived level
+    ok = {
+        "stance": "BULL",
+        "confidence": 3,
+        "claims": [{"text": "EMA 20, 50 and 200 are stacked", "evidence_refs": ["technical.ema_20", "technical.ema_200"]}],
+    }
+    assert validate_output(ok, Opinion, view).ok
+    mashed = {**ok, "claims": [{"text": "level 50200", "evidence_refs": ["technical.ema_50"]}]}
+    assert not validate_output(mashed, Opinion, view).ok
+    # A specialist ref shown in the turns is citable even when that section is not in this view.
+    with_turns = {
+        "regime": {"adx": 22.0},
+        "turns": {"t0": {"output": {"claims": [{"text": "hist", "evidence_refs": ["technical.macd_hist"]}]}}},
+    }
+    cited = {
+        "stance": "NEUTRAL",
+        "confidence": 3,
+        "claims": [{"text": "adx 22", "evidence_refs": ["technical.macd_hist"]}],
+    }
+    assert validate_output(cited, Opinion, with_turns).ok
+    invented_ref = {**cited, "claims": [{"text": "adx 22", "evidence_refs": ["technical.not_a_feature"]}]}
+    assert not validate_output(invented_ref, Opinion, with_turns).ok
 
 
 def test_runner_ok_retry_and_abstain():

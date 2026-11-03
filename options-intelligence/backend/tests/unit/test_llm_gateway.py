@@ -110,6 +110,8 @@ def test_routing_downgrades_then_stops():
 def test_extract_json():
     assert extract_json('Sure:\n```json\n{"a": 1}\n```') == {"a": 1}
     assert extract_json("no json") is None and extract_json("[1,2]") is None
+    # A brace in the preamble must not swallow the JSON object that follows.
+    assert extract_json('thinking {not json}\n{"action": "WATCH", "confidence": 3}') == {"action": "WATCH", "confidence": 3}
 
 
 # ---------------- gateway ----------------

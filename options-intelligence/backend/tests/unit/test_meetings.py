@@ -136,6 +136,41 @@ def test_live_ok_meeting_passes_quorum_when_specialists_paraphrase_evidence():
     assert r.abort_reason != "QUORUM"
 
 
+def test_cio_repair_avoids_unavailable_after_bad_ref_or_empty_json():
+    """A single bad evidence ref or a non-JSON reply is retried; the meeting still decides."""
+    from tests.ai_fakes import claim
+
+    def decide(first):
+        state = {"n": 0}
+
+        def cio(ev):
+            state["n"] += 1
+            cited = claim(ev, ("regime", "risk", "proposal"))
+            good = {
+                "action": "RECOMMEND_PAPER",
+                "confidence": 4,
+                "rationale": [cited],
+                "dissent_addressed": [],
+                "prediction": {"target": "INDEX", "direction": "UP", "horizon_min": 30},
+            }
+            return first if state["n"] == 1 else good
+
+        result = run(engine({"cio": cio}))
+        assert result.abort_reason != "CIO_UNAVAILABLE"
+        assert result.status == "DECIDED" and result.final_action == "RECOMMEND_PAPER" and result.recommendation_id
+        return result
+
+    decide("I will answer in prose only")
+    decide(
+        {
+            "action": "WATCH",
+            "confidence": 3,
+            "rationale": [{"text": "macd", "evidence_refs": ["technical.not_a_feature"]}],
+            "dissent_addressed": [],
+        }
+    )
+
+
 def test_data_quality_gate_aborts_without_llm_calls():
     e = engine()
     r = run(e, ctx(features=features(stale=True)))
