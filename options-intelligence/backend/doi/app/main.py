@@ -107,7 +107,10 @@ def create_app(settings: Settings | None = None, runtime: Runtime | None = None)
         rt = app.state.runtime
         tasks = []
         if rt.paper is not None and rt.provider is not None:
-            tasks.append(asyncio.create_task(run_forever(rt, (settings or Settings.from_env()).paper_feed_interval_s)))
+            st = settings or Settings.from_env()
+            tasks.append(
+                asyncio.create_task(run_forever(rt, st.paper_feed_interval_s, chains_every_s=st.chain_record_interval_s))
+            )
         if rt.collector is not None:
             tasks.append(asyncio.create_task(rt.collector.run()))
         yield

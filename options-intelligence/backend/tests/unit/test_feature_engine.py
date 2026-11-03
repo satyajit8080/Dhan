@@ -224,3 +224,13 @@ def test_feature_store_immutable(pg_dsn):
     other = FeatureEngine().calculate(inp(bars=bars(70, drift=2.0), snapshots=(snapshot(AS_OF - timedelta(seconds=2)),)), AS_OF)
     with pytest.raises(FeatureConflict):
         store.save(other)
+
+
+def test_quality_scored_near_the_money_not_on_unquoted_far_strikes():
+    s = snapshot(AS_OF - timedelta(seconds=2))
+    far = tuple(
+        ChainRow(25000.0 + 50 * i, replace(s.rows[0].ce, bid=None, ask=None), replace(s.rows[0].pe, bid=None, ask=None))
+        for i in range(1, 60)
+    )
+    v = FeatureEngine().calculate(inp(snapshots=(replace(s, rows=s.rows + far),)), AS_OF)
+    assert v.coverage_status == "LIVE_OK" and v.data_quality_score == 100.0  # 59 dead far strikes do not fail the gate

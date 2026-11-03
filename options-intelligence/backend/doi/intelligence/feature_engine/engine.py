@@ -486,8 +486,9 @@ class FeatureEngine:
         sv("atm_two_sided_share", lq.two_sided_share if lq.legs else None, "two_sided_share@1", params=lp, null="no legs")
         out["snapshot_age_s"] = v(round(age, 3), "snapshot_age@1", src)
 
-        full = opt.liquidity(cur.snap.rows)
-        score = 0.0 if stale else round(full.two_sided_share * 100, 2)
+        # Quality is judged where trading happens: ATM ± pcr_strike_window. Far strikes are routinely unquoted.
+        near = opt.liquidity(cur.win or cur.snap.rows)
+        score = 0.0 if stale else round(near.two_sided_share * 100, 2)
         return score, ("STALE" if stale else "LIVE_OK")
 
     def _vol(self, out: dict, cur: _ChainCtx, sv, lot_size: int | None) -> None:

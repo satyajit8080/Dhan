@@ -31,6 +31,7 @@ class Settings(BaseModel):
     paper_starting_capital: float = 500000.0
     paper_ledger_path: Path | None = None
     paper_feed_interval_s: float = 3.0
+    chain_record_interval_s: float = 15.0  # live-index chain recording during market hours (feature freshness)
     dhan_feed_enabled: bool = False
     holidays_file: Path | None = DEFAULT_HOLIDAYS
     # Phase 7 AI research (off unless explicitly enabled AND a key is configured)
@@ -65,6 +66,7 @@ class Settings(BaseModel):
             "paper_starting_capital": "PAPER_STARTING_CAPITAL",
             "paper_ledger_path": "PAPER_LEDGER_PATH",
             "paper_feed_interval_s": "PAPER_FEED_INTERVAL_S",
+            "chain_record_interval_s": "CHAIN_RECORD_INTERVAL_S",
             "dhan_feed_enabled": "DHAN_FEED_ENABLED",
             "holidays_file": "HOLIDAYS_FILE",
             "ai_enabled": "AI_ENABLED",

@@ -94,6 +94,18 @@ async def usage(request: Request, who: Principal = Depends(requires("viewer"))):
     return jsonable_encoder(await asyncio.to_thread(_usage, rt.ai.budget.dsn))
 
 
+async def _fresh_chain(rt, key: str) -> None:
+    """Read-only Dhan chain fetch + record for the meeting's underlying (API process only; failures isolated)."""
+    ref, cfg = rt.universe.get(key), rt.configs.get(key)
+    if rt.provider is None or ref is None or cfg is None or not cfg.live_enabled or not ref.expiries or rt.kill_switch:
+        return
+    try:
+        snap = await rt.provider.get_option_chain(ref, ref.expiries[0].expiry, max_age_s=1.0)
+    except Exception:  # the meeting then aborts on data quality, which is the correct outcome
+        return
+    await asyncio.to_thread(rt.recorder.snapshot, snap)
+
+
 @router.post("/meetings", status_code=202)
 async def request_meeting(request: Request, body: MeetingIn, who: Principal = Depends(requires("approver"))):
     rt = _ai(request)
@@ -106,6 +118,7 @@ async def request_meeting(request: Request, body: MeetingIn, who: Principal = De
     event_id = worker.enqueue(ev, None, now)
     out = {"event_id": event_id}
     if body.run_now:
+        await _fresh_chain(rt, key)  # the data-quality gate needs a snapshot < max age; record one now
         res = await worker.process_one(datetime.now(UTC))
         out["meeting"] = None if res is None else {"id": res.meeting_id, "status": res.status, "final_action": res.final_action,
                                                    "abort_reason": res.abort_reason, "recommendation_id": res.recommendation_id}  # fmt: skip
