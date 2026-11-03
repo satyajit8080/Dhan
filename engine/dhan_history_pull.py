@@ -32,6 +32,7 @@ import io
 import json
 import os
 import sys
+import tempfile
 import time
 import urllib.error
 import urllib.request
@@ -39,7 +40,19 @@ import zipfile
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
+# ---- Dhan Cloud config: fill these as {{VAR}} Variables (env vars also work locally) ----
+CLOUD_ACCESS_TOKEN = "{{DHAN_ACCESS_TOKEN}}"
+CLOUD_CLIENT_ID = "{{DHAN_CLIENT_ID}}"
+CLOUD_TG_BOT_TOKEN = "{{TG_BOT_TOKEN}}"   # optional: Telegram bot to receive the zip
+CLOUD_TG_CHAT_ID = "{{TG_CHAT_ID}}"
+CLOUD_FROM = ""                           # e.g. "2025-11-01"; blank = 1 year ago
+CLOUD_TO = ""                             # blank = today
+CLOUD_SYMBOLS = ""                        # e.g. "RELIANCE,TCS"; blank = NIFTY 50
+PRINT_CSV_ROWS = 20                       # rows echoed to the log as a preview
+# ------------------------------------------------------------------------------------
+
 API = "https://api.dhan.co/v2/charts/rollingoption"
+TG_MAX_BYTES = 45 * 1024 * 1024
 SCRIP_MASTER = "https://images.dhan.co/api-data/api-scrip-master.csv"
 IST = timezone(timedelta(hours=5, minutes=30))
 FIELDS = ["open", "high", "low", "close", "iv", "volume", "strike", "oi", "spot"]
@@ -68,7 +81,52 @@ OUT_COLS = ["date", "time", "symbol", "expiry", "strike", "ce_oi", "pe_oi", "ce_
 
 
 def log(msg: str) -> None:
-    print(msg, file=sys.stderr, flush=True)
+    print(msg, flush=True)
+
+
+def cfg(env: str, cloud: str) -> str:
+    """Env var first, else the Dhan Cloud {{VAR}} value if it was substituted."""
+    v = os.environ.get(env, "").strip()
+    if v:
+        return v
+    return "" if cloud.startswith("{{") else cloud.strip()
+
+
+def writable_dir(preferred: Path) -> Path:
+    """Use `preferred` if we can write there, else the system temp dir (Dhan Cloud)."""
+    for base in (preferred, Path(tempfile.gettempdir()) / "dhan_history"):
+        try:
+            base.mkdir(parents=True, exist_ok=True)
+            probe = base / ".probe"
+            probe.write_text("ok")
+            probe.unlink()
+            return base
+        except OSError:
+            continue
+    sys.exit("no writable directory found")
+
+
+def telegram_send(bot: str, chat: str, path: Path, caption: str) -> None:
+    data = path.read_bytes()
+    if len(data) > TG_MAX_BYTES:
+        log(f"zip is {len(data) >> 20} MB, over Telegram's limit; pull fewer symbols/days")
+        return
+    boundary = "----dhanpull" + str(int(time.time()))
+    parts = [
+        f"--{boundary}\r\nContent-Disposition: form-data; name=\"chat_id\"\r\n\r\n{chat}\r\n",
+        f"--{boundary}\r\nContent-Disposition: form-data; name=\"caption\"\r\n\r\n{caption}\r\n",
+        f"--{boundary}\r\nContent-Disposition: form-data; name=\"document\"; "
+        f"filename=\"{path.name}\"\r\nContent-Type: application/zip\r\n\r\n",
+    ]
+    body = "".join(parts).encode() + data + f"\r\n--{boundary}--\r\n".encode()
+    req = urllib.request.Request(f"https://api.telegram.org/bot{bot}/sendDocument", data=body,
+                                 headers={"Content-Type": f"multipart/form-data; boundary={boundary}"})
+    try:
+        with urllib.request.urlopen(req, timeout=300) as r:
+            ok = json.loads(r.read()).get("ok")
+        log("telegram: sent" if ok else "telegram: send failed")
+    except Exception as e:  # noqa: BLE001 - report and carry on
+        log(f"telegram: send failed ({type(e).__name__})")
 
 
 # ------------------------------------------------------------------ expiry calendar
@@ -268,6 +326,14 @@ def write_rows(writer, rows):
 
 def main(argv=None) -> int:
     today = datetime.now(IST).date()
+    if argv is None and len(sys.argv) == 1:      # Dhan Cloud: no CLI args, use config block
+        argv = ["--zip"]
+        if CLOUD_FROM:
+            argv += ["--from", CLOUD_FROM]
+        if CLOUD_TO:
+            argv += ["--to", CLOUD_TO]
+        if CLOUD_SYMBOLS:
+            argv += ["--symbols", CLOUD_SYMBOLS]
     p = argparse.ArgumentParser(description="Pull Dhan historical stock-option chains to CSV.")
     p.add_argument("--from", dest="frm", type=date.fromisoformat,
                    default=today - timedelta(days=365), help="YYYY-MM-DD (default: 1y ago)")
@@ -282,7 +348,8 @@ def main(argv=None) -> int:
                    help="1=near month, 2=next, 3=far")
     p.add_argument("--all-bars", action="store_true", help="keep every bar, not just 09:30/15:20")
     p.add_argument("--holidays", help="file of YYYY-MM-DD NSE holidays (shifts expiry dates)")
-    p.add_argument("--out", default="stock_options_history.csv")
+    p.add_argument("--out", default="stock_options_history.csv",
+                   help="file name (relative names go in a writable dir; /tmp on Dhan Cloud)")
     p.add_argument("--zip", action="store_true", help="also write <out>.zip")
     p.add_argument("--per-symbol", action="store_true", help="also write one CSV per symbol")
     p.add_argument("--cache", default=".dhan_cache", help="raw-response cache dir (resumable)")
@@ -307,8 +374,11 @@ def main(argv=None) -> int:
         holidays = {date.fromisoformat(x.strip()) for x in Path(args.holidays).read_text().split()
                     if x.strip()}
 
-    cache = Path(args.cache)
+    work = writable_dir(Path.cwd())
+    cache = Path(args.cache) if Path(args.cache).is_absolute() else work / args.cache
     cache.mkdir(parents=True, exist_ok=True)
+    out = Path(args.out) if Path(args.out).is_absolute() else work / args.out
+    log(f"working dir: {work}")
 
     if args.dry_run:
         ids = {s: f"<{s}_secid>" for s in symbols}
@@ -316,10 +386,10 @@ def main(argv=None) -> int:
         api = None
     else:
         token = (Path(args.token_file).read_text().strip() if args.token_file
-                 else os.environ.get("DHAN_ACCESS_TOKEN", "").strip())
-        client_id = os.environ.get("DHAN_CLIENT_ID", "").strip()
+                 else cfg("DHAN_ACCESS_TOKEN", CLOUD_ACCESS_TOKEN))
+        client_id = cfg("DHAN_CLIENT_ID", CLOUD_CLIENT_ID)
         if not token or not client_id:
-            sys.exit("set DHAN_ACCESS_TOKEN (or --token-file) and DHAN_CLIENT_ID")
+            sys.exit("set DHAN_ACCESS_TOKEN and DHAN_CLIENT_ID (env vars or Dhan Cloud Variables)")
         log(f"token ...{token[-4:]}  client {client_id}")
         ids, lots = load_scrip_master(cache)
         api = Dhan(token, client_id)
@@ -328,8 +398,7 @@ def main(argv=None) -> int:
     log(f"{len(symbols)} symbols x {n_windows} windows x {2 * (2 * args.width + 1)} legs "
         f"= {len(symbols) * n_windows * 2 * (2 * args.width + 1)} calls (cached calls skipped)")
 
-    out = Path(args.out)
-    total, missing = 0, []
+    total, missing, preview = 0, [], []
     with out.open("w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=OUT_COLS)
         w.writeheader()
@@ -345,6 +414,7 @@ def main(argv=None) -> int:
                 continue
             write_rows(w, rows)
             f.flush()
+            preview.extend(rows[: max(0, PRINT_CSV_ROWS - len(preview))])
             total += len(rows)
             log(f"    {len(rows)} rows")
             if args.per_symbol and rows:
@@ -357,14 +427,26 @@ def main(argv=None) -> int:
 
     if args.dry_run:
         return 0
-    if args.zip:
-        z = out.with_suffix(out.suffix + ".zip")
-        with zipfile.ZipFile(z, "w", zipfile.ZIP_DEFLATED) as zf:
-            zf.write(out, out.name)
-        log(f"zip -> {z}")
+    if preview:
+        buf = io.StringIO()
+        pw = csv.DictWriter(buf, fieldnames=OUT_COLS)
+        pw.writeheader()
+        write_rows(pw, preview)
+        log("preview:\n" + buf.getvalue())
     log(f"done: {total} rows -> {out}  ({api.calls} API calls)")
     if missing:
         log(f"not found (check symbol): {', '.join(missing)}")
+    bot = cfg("TG_BOT_TOKEN", CLOUD_TG_BOT_TOKEN)
+    chat = cfg("TG_CHAT_ID", CLOUD_TG_CHAT_ID)
+    if args.zip or bot:
+        z = out.with_suffix(out.suffix + ".zip")
+        with zipfile.ZipFile(z, "w", zipfile.ZIP_DEFLATED) as zf:
+            zf.write(out, out.name)
+        log(f"zip -> {z} ({z.stat().st_size >> 10} KB)")
+        if bot and chat:
+            telegram_send(bot, chat, z, f"{total} rows, {args.frm}..{args.to}")
+        elif not os.access(Path.cwd(), os.W_OK):
+            log("no Telegram configured — files in temp dir are lost when the run ends")
     return 0
 
 
