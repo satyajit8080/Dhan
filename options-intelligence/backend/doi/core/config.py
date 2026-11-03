@@ -86,6 +86,11 @@ class Settings(BaseModel):
         for field_name, secret in (("dhan_client_id", "dhan_client_id"), ("xai_api_key", "xai_api_key")):
             if field_name not in data and (v := store.read(secret)):
                 data[field_name] = v
+        from doi.core import setup_store
+
+        for k, v in setup_store.load(store.dir).items():
+            if k in ("ai_enabled", "dhan_feed_enabled") and k not in data:
+                data[k] = v
         if "dhan_access_token" not in data and "dhan_token_file" not in data:
             data["dhan_token_file"] = str(store.path("dhan_access_token"))
         return cls(**data)

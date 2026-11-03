@@ -103,6 +103,9 @@ python -m doi.ai.worker                                                  # AI wo
 
 The detailed guide is `docs/phase7-deployment.md`, and the current verification status is `docs/phase8-validation.md`.
 
+## Setup Wizard (recommended)
+Open `/dashboard` → **⚙ Settings & Keys** → **Setup Wizard** and follow the steps: Dhan client ID → Dhan token (Test) → indices → Grok key (Test, free) → enable AI → optional live feed → **↻ Apply & restart**. Choices are saved in `secrets/setup.json`; values in `.env` override them (shown as SET IN .env).
+
 ## Keys from the dashboard
 Open `/dashboard` → **⚙ Settings & Keys** (admin key required, HTTPS only):
 - Dhan client ID, Dhan access token, Grok API key: write-only, saved as 0600 files in `SECRETS_DIR` (mount it as a volume). The Dhan token and an existing Grok key apply live; the Dhan client ID or a first Grok key need `docker compose restart api ai-worker`.

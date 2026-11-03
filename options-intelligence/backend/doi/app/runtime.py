@@ -159,6 +159,11 @@ async def download_master(url: str, timeout_s: float = 90.0) -> InstrumentMaster
 
 async def build_runtime(settings: Settings) -> Runtime:
     configs = load_index_configs(settings.strategy_config_dir)
+    from doi.core import setup_store
+
+    chosen = setup_store.load(settings.secrets_dir).get("live_indices")
+    if chosen is not None:  # Setup Wizard choice overrides the yaml live_enabled flags
+        configs = {k: c.model_copy(update={"live_enabled": k in chosen}) for k, c in configs.items()}
     rt = Runtime(configs=configs, settings=settings)
     await init_paper(rt, settings, datetime.now(UTC))
     from doi.ai.service import build_ai

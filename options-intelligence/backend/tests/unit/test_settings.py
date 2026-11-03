@@ -77,3 +77,49 @@ def test_from_env_reads_saved_files_env_wins(tmp_path):
     assert s.dhan_token_file == tmp_path / "dhan.token"
     s2 = Settings.from_env({"SECRETS_DIR": str(tmp_path), "DHAN_CLIENT_ID": "999999"})
     assert s2.dhan_client_id == "999999"
+
+
+def test_setup_wizard_save_checklist_and_restart(pg_dsn, tmp_path, monkeypatch):
+    rt, c, k = _rt(pg_dsn, tmp_path)
+    w = c.get("/api/v1/admin/setup", headers=k["admin"]).json()
+    assert [s["id"] for s in w["steps"]][:3] == ["admin", "dhan_client_id", "dhan_access_token"] and w["restart_pending"] is False
+    assert c.put("/api/v1/admin/setup", json={"live_indices": ["NOPE"]}, headers=k["admin"]).status_code == 422
+    r = c.put("/api/v1/admin/setup", json={"live_indices": ["NIFTY", "SENSEX"], "ai_enabled": True}, headers=k["admin"])
+    assert r.status_code == 200 and r.json()["saved"] == {"ai_enabled": True, "live_indices": ["NIFTY", "SENSEX"]}
+    assert c.get("/api/v1/admin/setup", headers=k["admin"]).json()["restart_pending"] is True
+    assert any(x.action == "SETUP_CHANGE" for x in rt.approvals.records())
+    s = Settings.from_env({"SECRETS_DIR": str(tmp_path / "secrets")})
+    assert (
+        s.ai_enabled is True
+        and Settings.from_env({"SECRETS_DIR": str(tmp_path / "secrets"), "AI_ENABLED": "false"}).ai_enabled is False
+    )
+    kills = []
+    monkeypatch.setattr("doi.app.settings_routes.os.kill", lambda pid, sig: kills.append(sig))
+    assert c.post("/api/v1/admin/restart", headers=k["viewer"]).status_code == 403
+    assert c.post("/api/v1/admin/restart", headers=k["admin"]).json()["restarting"] is True
+
+
+def test_runtime_applies_saved_indices(tmp_path):
+    import asyncio
+
+    from doi.app.runtime import build_runtime
+    from doi.core import setup_store
+
+    setup_store.save(tmp_path, {"live_indices": ["BANKEX"]})
+    rt = asyncio.run(build_runtime(Settings(secrets_dir=tmp_path)))
+    assert {k for k, c in rt.configs.items() if c.live_enabled} == {"BANKEX"}
+
+
+def test_worker_watch_returns_on_change(tmp_path):
+    import asyncio
+
+    from doi.ai.worker import watch_settings
+
+    async def go():
+        t = asyncio.create_task(watch_settings(tmp_path, interval_s=0.05))
+        await asyncio.sleep(0.1)
+        assert not t.done()
+        (tmp_path / "setup.json").write_text("{}")
+        await asyncio.wait_for(t, 2)
+
+    asyncio.run(go())

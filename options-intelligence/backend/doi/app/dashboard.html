@@ -442,6 +442,50 @@ V["15"] = () => { const on = el("input", { type: "checkbox" }), fl = el("input",
     panel("Session Key", "this tab only (sessionStorage)", async () => el("div", { class: "frm" }, el("button", { onclick: keyDialog }, "Change key"), el("button", { class: "dng", onclick: () => { key = ""; sessionStorage.removeItem("doi_key"); refreshAll(); } }, "Forget key")), { live: false }),
     panel("Safety Guarantees", "enforced by backend", async () => el("div", {}, ["No live broker execution route exists; the API has no order route outside the paper simulator.", "AI agents cannot submit orders. Recommendations wait for a human approver, then the deterministic RiskGate re-checks before the paper engine.", "Grok spend is reserved before each call and capped in the database (₹3,000/month hard limit).", "Kill switch persists across restarts and halts polling, AI meetings and new paper orders."].map((t) => el("div", { class: "cl" }, tag("ENFORCED", "am"), " ", t))), { live: false }))]; };
 
+async function saveSecret(name, label, v) {
+  if (!v) { toast("value is empty", true); return null; }
+  const r = await act(() => api("/api/v1/admin/settings/" + name, { method: "PUT", body: JSON.stringify({ value: v }) }), label + " saved");
+  if (r) toast(`${label}: ${r.applied === "live" ? "applied live" : "saved — press Apply & restart"}${r.env_overrides_file ? " · NOTE: .env value overrides this" : ""}`);
+  return r;
+}
+async function waitBack() {
+  toast("restarting… the page reconnects automatically");
+  await new Promise((r) => setTimeout(r, 4000));
+  for (let i = 0; i < 40; i++) { try { const r = await fetch("/healthz", { cache: "no-store" }); if (r.ok) { toast("server is back"); S.und = null; refreshAll(); show(); return; } } catch { /* still down */ } await new Promise((r) => setTimeout(r, 2000)); }
+  toast("server did not come back in 80s — check `docker compose ps` / logs", true);
+}
+function setupWizard(secure) {
+  return panel("Setup Wizard", "/admin/setup · step by step · admin", async () => {
+    const w = await api("/api/v1/admin/setup");
+    const sec = (name, label, ph) => { const i = el("input", { type: "password", autocomplete: "new-password", spellcheck: "false", placeholder: ph, style: "width:300px" });
+      return [i, el("button", { class: "pri", disabled: !secure, onclick: async () => { const v = i.value.trim(); i.value = ""; if (await saveSecret(name, label, v)) refreshAll(); } }, "Save")]; };
+    const link = (href, t) => el("a", { href, target: "_blank", rel: "noopener noreferrer", class: "am" }, t);
+    const idx = w.universe.map((u) => el("label", {}, el("input", { type: "checkbox", value: u, checked: w.effective.live_indices.includes(u) }), u));
+    const ai = el("input", { type: "checkbox", checked: w.saved.ai_enabled ?? (w.effective.ai_enabled || w.steps.some((x) => x.id === "ai" && x.done)), disabled: w.env_locked.ai_enabled });
+    const feed = el("input", { type: "checkbox", checked: w.saved.dhan_feed_enabled ?? w.effective.dhan_feed_enabled, disabled: w.env_locked.dhan_feed_enabled });
+    const saveSetup = (body, what) => act(() => api("/api/v1/admin/setup", { method: "PUT", body: JSON.stringify(body) }), what + " saved — press Apply & restart");
+    const testDhan = el("button", { onclick: async () => { try { const r = await api("/api/v1/market/expiries?underlying=" + (w.effective.live_indices[0] || "NIFTY")); toast("Dhan OK · expiries " + r.expiries.slice(0, 3).join(", ")); } catch (e) { toast("Dhan test: " + e.message, true); } } }, "Test");
+    const testGrok = el("button", { onclick: async () => { const r = await act(() => post("/api/v1/admin/settings/xai_api_key/test"), "tested"); if (r) toast(r.ok ? `Grok key OK · ${r.models.length} models · no spend` : "Grok key failed: " + r.error, !r.ok); } }, "Test (free)");
+    const how = {
+      dhan_client_id: [el("div", { class: "mu" }, "web.dhan.co → profile → Client ID (numbers only). ", link("https://web.dhan.co", "open Dhan")), el("div", { class: "frm" }, ...sec("dhan_client_id", "Dhan client ID", "e.g. 1100123456"))],
+      dhan_access_token: [el("div", { class: "mu" }, "web.dhan.co → My Profile → DhanHQ Trading APIs → Generate access token. Rotate daily here; applies live, no restart. Used read-only (market data); orders are never sent. ", link("https://dhanhq.co/docs/v2/", "docs")), el("div", { class: "frm" }, ...sec("dhan_access_token", "Dhan access token", "paste access token"), testDhan)],
+      indices: [el("div", { class: "frm" }, ...idx, el("button", { class: "pri", disabled: !secure, onclick: () => saveSetup({ live_indices: idx.map((l) => l.firstChild).filter((c) => c.checked).map((c) => c.value) }, "indices") }, "Save"))],
+      market_data: [el("div", { class: "mu" }, "Starts automatically after client ID + token are saved and the server restarts.")],
+      xai_api_key: [el("div", { class: "mu" }, "console.x.ai → API Keys → Create. Spend is hard-capped at ₹" + f(w.budget_cap_inr, 0) + "/month by the server. ", link("https://console.x.ai", "open xAI console")), el("div", { class: "frm" }, ...sec("xai_api_key", "Grok API key", "xai-…"), testGrok)],
+      ai: [el("div", { class: "frm" }, el("label", {}, ai, "enable AI committee (Grok)"), w.env_locked.ai_enabled ? tag("SET IN .env", "am") : null, el("button", { class: "pri", disabled: !secure || w.env_locked.ai_enabled, onclick: () => saveSetup({ ai_enabled: ai.checked }, "AI setting") }, "Save")), el("div", { class: "mu" }, "AI can never place orders: recommendations wait for human approval and the risk gate.")],
+      feed: [el("div", { class: "frm" }, el("label", {}, feed, "enable Dhan live WebSocket feed"), w.env_locked.dhan_feed_enabled ? tag("SET IN .env", "am") : null, el("button", { class: "pri", disabled: !secure || w.env_locked.dhan_feed_enabled, onclick: () => saveSetup({ dhan_feed_enabled: feed.checked }, "feed setting") }, "Save"))],
+    };
+    const done = w.steps.filter((x) => x.done || x.optional).length;
+    const steps = w.steps.map((x, i) => el("div", { class: "tr", style: "grid-template-columns:34px 220px 1fr;align-items:start" },
+      el("span", { class: "mono " + (x.done ? "up" : "am") }, x.done ? "✓" : String(i + 1).padStart(2, "0")),
+      el("div", {}, el("div", { class: x.done ? "" : "am" }, x.title), el("div", { class: "mono mu3" }, x.detail || "—")),
+      el("div", { class: "frm", style: "flex-direction:column;align-items:flex-start" }, ...(how[x.id] || []))));
+    const restartBtn = el("button", { class: w.restart_pending ? "pri" : "", disabled: !secure, onclick: () => dialog("Apply & restart", [el("div", { class: "mu" }, "Restarts the API (≈15 s) so saved keys and setup take effect. The AI worker restarts itself. Paper state is persisted in PostgreSQL.")], [el("button", { class: "pri", onclick: async () => { closeDlg(); const r = await act(() => post("/api/v1/admin/restart"), "restart requested"); if (r) waitBack(); } }, "Restart now")]) }, "↻ Apply & restart");
+    return el("div", { style: "padding:0 9px" },
+      el("div", { class: "frm", style: "padding:6px 0" }, tag(`${done}/${w.steps.length} COMPLETE`, done === w.steps.length ? "up" : "am"), w.restart_pending ? tag("RESTART PENDING", "fill") : tag("UP TO DATE"), restartBtn, secure ? null : tag("HTTPS REQUIRED", "dn")),
+      ...steps);
+  }, { tight: true, live: false });
+}
 V.settings = () => {
   const secure = location.protocol === "https:" || ["localhost", "127.0.0.1"].includes(location.hostname);
   const keysPanel = panel("Integration Keys", "/admin/settings · admin · write-only, stored server-side (0600)", async () => {
@@ -470,7 +514,7 @@ V.settings = () => {
       { h: "status", v: (k) => k.revoked_at ? tag("REVOKED") : tag("ACTIVE", "up") }, { h: "", v: (k) => k.revoked_at ? "" : el("button", { class: "dng", onclick: () => dialog("Revoke " + k.id, [el("div", { class: "mu" }, `${k.email} · ${k.role}. Anyone using this key loses access immediately.`)], [el("button", { class: "dng", onclick: () => { closeDlg(); act(() => post(`/api/v1/admin/api-keys/${encodeURIComponent(k.id)}/revoke`), "revoked"); } }, "Revoke")]) }, "Revoke") }]) || state("EMPTY", "no keys")), { tight: true, live: false });
   function showOnce(r) { const box = el("input", { value: r.token, readonly: true, style: "width:100%" });
     dialog("New API key — copy it now", [el("div", { class: "dn" }, "Shown once. The server stores only a hash."), box, el("div", { class: "mu" }, r.id)], [el("button", { class: "pri", onclick: () => { navigator.clipboard && navigator.clipboard.writeText(r.token).then(() => toast("copied"), () => { box.select(); }); } }, "Copy")]); setTimeout(() => box.select(), 0); }
-  return [keysPanel, apiKeys, grid("c2",
+  return [setupWizard(secure), keysPanel, apiKeys, grid("c2",
     panel("This Browser", "sessionStorage · this tab only", async () => el("div", { class: "frm" }, el("span", { class: "mu" }, S.who ? `signed in as ${S.who.actor} (${S.who.role})` : "no valid key in this tab"), el("button", { onclick: keyDialog }, "Change key"), el("button", { class: "dng", onclick: () => { key = ""; sessionStorage.removeItem("doi_key"); refreshAll(); } }, "Forget key")), { live: false }),
     panel("Fixed Safety Settings", "not editable here", async () => kv([["Live broker execution", "DISABLED", "dn sm"], ["Grok monthly cap", "₹3,000 (Administration)", "am sm"], ["Mode", "RESEARCH + PAPER", "sm"], ["Order routes", "paper simulator only", "sm"]]), { live: false }))];
 };

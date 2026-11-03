@@ -8,10 +8,12 @@ services:
     volumes:
       - dbdata:/var/lib/postgresql/data
     ports: ["127.0.0.1:5432:5432"]
+    restart: unless-stopped
 
   redis:
     image: redis:7.4-alpine
     ports: ["127.0.0.1:6379:6379"]
+    restart: unless-stopped
 
   api:
     build:
@@ -25,6 +27,7 @@ services:
       - ./secrets:/run/doi-secrets  # writable: the Settings page saves keys here (0600)
     ports: ["127.0.0.1:8000:8000"]
     depends_on: [db, redis]
+    restart: unless-stopped  # lets the Setup Wizard "Apply & restart" button reload keys
 
   # Phase 7 AI research worker: separate process, reads recorded data from PostgreSQL,
   # never calls Dhan and never submits paper orders (humans approve via the API).
