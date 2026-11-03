@@ -18,11 +18,34 @@ Downloads historical NSE stock-option chains from Dhan for backtesting and turns
 CSV columns:
 `date,time,symbol,expiry,strike,ce_oi,pe_oi,ce_ltp,pe_ltp,spot,ce_iv,pe_iv,ce_volume,pe_volume,lot_size`
 
-## Run it (on your PC, not Dhan Cloud)
+## Option A: run on Dhan Cloud, decode on your PC
 
-Dhan Cloud blocks file writes, `os.environ` and `pathlib`, so it can't store raw responses
-or checkpoints. Run this on a Windows, Mac or Linux machine with Python 3.9+. It uses only
-the standard library, so there's nothing to `pip install`.
+Dhan Cloud can't save files, so the cloud script writes its data into the run log and a
+decoder on your PC turns the log into the CSVs, ZIP and report.
+
+1. Paste `cloud/stock_options_history_cloud.py` into Dhan Cloud `main.py`. Add **no** Env
+   Variables: Dhan Cloud fills `{{CLIENT_ID}}` and `{{ACCESS_TOKEN}}` itself with your
+   account's managed credentials (same as the SENSEX observer).
+2. In the CONFIG block, try a short range first: `SYMBOLS = ["RELIANCE"]`,
+   `FROM_DATE = "2026-09-01"`, `TO_DATE = "2026-11-01"`. Then run the full list (blank
+   dates = 5 years).
+3. Download the run log and, on your PC in this repo:
+   ```
+   python -m collector.decode_cloud_log path\to\run.log
+   ```
+   If a run stopped (token expired, request budget), it logs `START_AT_SYMBOL = '...'`.
+   Set that, run again, then decode all the logs together:
+   `python -m collector.decode_cloud_log run1.log run2.log`.
+
+By default the cloud run keeps only the bars within ±2 min of 09:30 and 15:20, with values
+unchanged (`KEEP = "SNAPSHOTS"`). That's about 60 MB of log for 60 stocks × 5 years;
+`KEEP = "FULL"` (every 1-min bar) would be about 7 GB. Each record also logs how many bars
+Dhan returned, for audit.
+
+## Option B: run everything on your PC
+
+Run on a Windows, Mac or Linux machine with Python 3.9+. It uses only the standard
+library, so there's nothing to `pip install`. This keeps the complete raw 1-min responses.
 
 1. Get the repo: `git clone https://github.com/satyajit8080/Dhan` (branch `claude/dhan-history-pull`).
 2. Set credentials. These are the same variables the Bull50 MCP server uses. Pick one way:
@@ -126,8 +149,12 @@ Two checks in the report:
 ## Tests
 
 ```
-python -m unittest collector.tests.test_collector
+python -m unittest collector.tests.test_collector collector.tests.test_cloud_roundtrip
 ```
+
+The round-trip test runs the cloud script against the fake server, decodes its log and
+checks that the cloud file has none of the patterns Dhan Cloud's scanner blocked
+(`os`, `pathlib`, `os.environ`, `sys.exit(`, file `open(`).
 
 The tests run offline against a fake Dhan server that serves synthetic bars, with injected
 429/5xx/auth errors, a holiday, a missing 09:30 bar and a missing IV. They cover resume, the
