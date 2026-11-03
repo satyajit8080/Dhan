@@ -300,6 +300,46 @@ def test_admission_controls():
     assert admit(_event(EventKind.HUMAN_REQUEST, NOW.replace(hour=12)), q, pol, **kw).reason.startswith("daily cap")
 
 
+def _human(at, key):
+    return Event(EventKind.HUMAN_REQUEST, "NIFTY", at, {"key": key})
+
+
+def _assert_data_quality_aborts_spare_the_daily_cap(q):
+    """Three DONE/DATA_QUALITY finishes leave the cap free; three real finishes fill it."""
+    cal, pol = SessionCalendar(), AdmissionPolicy()
+    assert pol.daily_trade_meetings == 3
+    kw = dict(calendar=cal, kill_switch=False, quality=100.0, ai_available=True)
+    day = cal.at(cal.session_date(NOW), datetime.min.time())
+    for i in range(pol.daily_trade_meetings):
+        e = _human(NOW + timedelta(minutes=i), f"dq-{i}")
+        eid = q.admit(e, admit(e, q, pol, **kw))
+        assert q.trade_meetings_today(day) == 1  # queued, so it still reserves a slot
+        got = q.claim(e.at)
+        assert got["id"] == eid
+        assert q.trade_meetings_today(day) == 1  # RUNNING still reserves a slot
+        q.finish(eid, "DONE", "DATA_QUALITY")  # worker records the zero-LLM abort as DONE
+        assert q.trade_meetings_today(day) == 0  # prior aborts do not accumulate
+    nxt = _human(NOW + timedelta(minutes=10), "after-dq")
+    assert admit(nxt, q, pol, **{**kw, "kill_switch": True}).reason == "kill switch engaged"
+    assert admit(nxt, q, pol, **{**kw, "ai_available": False}).reason.startswith("AI unavailable")
+    assert admit(nxt, q, pol, **kw).admitted is True
+    for i, reason in enumerate((None, "QUORUM", None)):
+        e = _human(NOW + timedelta(minutes=20 + i), f"real-{i}")
+        decision = admit(e, q, pol, **kw)
+        assert decision.admitted, decision.reason
+        q.finish(q.admit(e, decision), "DONE", reason)
+    assert q.trade_meetings_today(day) == pol.daily_trade_meetings
+    blocked = _human(NOW + timedelta(minutes=40), "capped")
+    assert admit(blocked, q, pol, **kw).reason == f"daily cap {pol.daily_trade_meetings} trade meetings reached"
+
+
+def test_data_quality_aborts_do_not_consume_daily_trade_cap():
+    q = MemoryEventQueue()
+    _assert_data_quality_aborts_spare_the_daily_cap(q)
+    dq = [r for r in q.rows.values() if r["skip_reason"] == "DATA_QUALITY"]
+    assert len(dq) == 3 and {r["status"] for r in dq} == {"DONE"}
+
+
 def test_fingerprint_dedupe_and_claim_order():
     q = MemoryEventQueue()
     e = _event()
@@ -342,3 +382,16 @@ def test_pg_queue_skip_locked_and_expiry(pg_dsn):
     assert len(got) == len(set(got)) == 6  # no event claimed twice; the expired one skipped
     with psycopg.connect(pg_dsn) as c:
         assert c.execute("SELECT count(*) FROM ai_events WHERE status = 'SKIPPED'").fetchone()[0] == 1
+
+
+def test_pg_data_quality_aborts_do_not_consume_daily_trade_cap(pg_dsn):
+    q = PgEventQueue(pg_dsn)
+    _assert_data_quality_aborts_spare_the_daily_cap(q)
+    with psycopg.connect(pg_dsn) as c:
+        dq = c.execute(
+            "SELECT status, skip_reason FROM ai_events WHERE skip_reason = 'DATA_QUALITY' ORDER BY created_at"
+        ).fetchall()
+        real = c.execute(
+            "SELECT count(*) FROM ai_events WHERE status = 'DONE' AND skip_reason IS NULL"
+        ).fetchone()[0]
+    assert dq == [("DONE", "DATA_QUALITY")] * 3 and real == 2
