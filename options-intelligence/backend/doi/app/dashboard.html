@@ -6,109 +6,135 @@
 <meta name="referrer" content="no-referrer">
 <title>Bull50 Research Desk</title>
 <style>
-:root{--bg:#06090F;--pn:#0E131C;--pn2:#0A0F17;--ln:#1A2332;--ln2:#243046;--tx:#E8EEF7;--t2:#8B9BB4;--t3:#5A6A84;--am:#FFB300;--amd:rgba(255,179,0,.12);--up:#1FC77E;--dn:#F0444F;--bar:#2B4A72;--bar2:#5B3B6E;
+:root{--bg:#070b12;--pn:#101722;--pn2:#0c121b;--ln:rgba(232,238,247,.08);--ln2:rgba(232,238,247,.14);--tx:#E8EEF7;--t2:#9AABBE;--t3:#6D7E96;--am:#FFB300;--amd:rgba(255,179,0,.12);--up:#1FC77E;--dn:#F0444F;--bar:#2B4A72;--bar2:#5B3B6E;--link:#B7C7DA;
 --mono:"JetBrains Mono","IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;--sans:"Inter","IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif}
-*{box-sizing:border-box;border-radius:0!important}
-html,body{margin:0;height:100%;background:var(--bg);color:var(--tx);font:12px/1.35 var(--sans);overflow:hidden}
-button,input,select,textarea{font:inherit;color:var(--tx);background:var(--pn2);border:1px solid var(--ln2);padding:3px 7px}
-button{cursor:pointer;text-transform:uppercase;letter-spacing:.06em;font-size:10.5px;font-weight:600}
-button:hover:not(:disabled){border-color:var(--t2)}button:disabled{opacity:.35;cursor:not-allowed}
-button.pri{border-color:var(--am);color:var(--am)}button.dng{border-color:var(--dn);color:var(--dn)}
-input:focus,select:focus,textarea:focus,button:focus-visible{outline:1px solid var(--am);outline-offset:-1px}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--tx);font:14px/1.45 var(--sans);overflow:hidden}
+button,input,select,textarea{font:inherit;color:var(--tx);background:var(--pn2);border:1px solid var(--ln2);border-radius:8px;padding:6px 10px}
+button{cursor:pointer;font-size:13px;font-weight:600}
+button:hover:not(:disabled){border-color:var(--t2)}button:disabled{opacity:.4;cursor:not-allowed}
+button.pri{background:var(--am);border-color:var(--am);color:#1a1404}
+button.dng{border-color:rgba(240,68,79,.5);color:var(--dn);background:transparent}
+button.alert{border-color:rgba(240,68,79,.55);color:var(--dn)}
+input:focus,select:focus,textarea:focus,button:focus-visible{outline:2px solid var(--am);outline-offset:1px}
+a.quiet{color:var(--link);text-decoration:none}
 .n,td,.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
-#app{display:grid;grid-template-rows:40px auto 1fr 20px;grid-template-columns:auto 1fr;height:100vh}
-header{grid-column:1/3;display:flex;align-items:stretch;border-bottom:1px solid var(--ln);background:var(--pn2);white-space:nowrap;overflow:hidden}
-header>*{display:flex;align-items:center;padding:0 9px;border-right:1px solid var(--ln);gap:6px;flex-shrink:0}
-.logo{font:700 14px var(--mono);letter-spacing:.08em}.logo b{color:var(--am)}
-.lbl{color:var(--t3);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase}
-.tk .n{font-size:12.5px;font-weight:600}
-.dot{width:7px;height:7px;display:inline-block;background:var(--t3)}.dot.ok{background:var(--up)}.dot.bad{background:var(--dn)}.dot.ai{background:var(--am)}
-.tag{font:600 9.5px var(--mono);letter-spacing:.08em;padding:1px 5px;border:1px solid var(--ln2);color:var(--t2);text-transform:uppercase}
-.tag.am{border-color:var(--am);color:var(--am)}.tag.up{border-color:var(--up);color:var(--up)}.tag.dn{border-color:var(--dn);color:var(--dn)}.tag.fill{background:var(--am);color:#000;border-color:var(--am)}
-.paper{color:#000;background:var(--t2);font:700 10px var(--mono);letter-spacing:.12em;padding:2px 6px}
-.meter{width:80px;height:5px;background:var(--ln);position:relative}.meter>i{position:absolute;left:0;top:0;bottom:0;background:var(--am)}.meter.stop>i{background:var(--dn)}
-.sp{flex:1 1 0;min-width:0;border-right:0;padding:0}
-header>div:last-of-type{border-right:0}
-#h-user{max-width:120px;overflow:hidden;text-overflow:ellipsis}
+#app{display:grid;grid-template-rows:auto auto 1fr 28px;grid-template-columns:auto 1fr;height:100vh}
+header{grid-column:1/3;display:flex;flex-wrap:wrap;align-items:center;gap:2px;border-bottom:1px solid var(--ln);background:var(--pn2);padding:8px 6px 4px}
+header>*{display:flex;align-items:center;padding:0 8px;gap:8px;flex-shrink:0;order:1}
+header .chips{order:2;flex:1 0 100%;padding:4px 8px 6px}
+.logo{font:700 15px var(--mono);letter-spacing:.06em}.logo b{color:var(--am)}.logo .sub{margin-left:8px;color:var(--t3);font:600 12px var(--sans);letter-spacing:0}
+.lbl{color:var(--t3);font-size:11px;letter-spacing:.08em;text-transform:uppercase}
+.tk .n{font-size:15px;font-weight:600}
+.chip{font:600 12px var(--sans);letter-spacing:.01em;padding:3px 8px;border-radius:999px;border:1px solid var(--ln2);color:var(--t2)}
+.chip.up{color:var(--up);border-color:rgba(31,199,126,.45);background:rgba(31,199,126,.08)}
+.chip.dn{color:var(--dn);border-color:rgba(240,68,79,.5);background:rgba(240,68,79,.1)}
+.chip.mute{color:var(--t3);border-color:transparent;background:rgba(255,255,255,.03)}
+.chips{gap:6px}
+.tag{font:600 11px var(--sans);letter-spacing:.03em;padding:2px 7px;border-radius:999px;border:1px solid var(--ln2);color:var(--t2)}
+.tag.am{color:var(--tx);border-color:var(--ln2)}.tag.up{border-color:rgba(31,199,126,.45);color:var(--up)}.tag.dn{border-color:rgba(240,68,79,.5);color:var(--dn)}.tag.fill{background:rgba(255,255,255,.08);color:var(--tx);border-color:transparent}
+.paper{color:var(--t2);border:1px solid var(--ln2);border-radius:999px;font:600 11px var(--sans);letter-spacing:.08em;padding:3px 8px}
+.meter{width:72px;height:4px;background:var(--ln);border-radius:99px;position:relative;overflow:hidden}.meter>i{position:absolute;left:0;top:0;bottom:0;background:var(--t2)}.meter.stop>i{background:var(--dn)}
+.sp{flex:1 1 0;min-width:0;padding:0}
+#h-user{max-width:160px;overflow:hidden;text-overflow:ellipsis}
 @media(max-width:1750px){.hx{display:none}}
-#ks{flex-shrink:0;font:700 10.5px var(--mono);padding:0 14px;border:0;border-left:1px solid var(--ln);background:transparent;letter-spacing:.1em}
-#ks.on{background:var(--dn);color:#fff}#ks.off{color:var(--dn)}
+#ks{flex-shrink:0;font:700 12px var(--sans);padding:6px 12px;border-radius:999px;border:1px solid rgba(240,68,79,.45);background:transparent;color:var(--dn)}
+#ks.on{background:var(--dn);color:#fff;border-color:var(--dn)}#ks.off{color:var(--t2);border-color:var(--ln2)}
 #bnr{grid-column:1/3}
-.bn{padding:4px 12px;font:600 11px var(--mono);letter-spacing:.04em;border-bottom:1px solid var(--ln)}.bn.dn{background:rgba(240,68,79,.14);color:var(--dn)}.bn.am{background:var(--amd);color:var(--am)}
-nav{border-right:1px solid var(--ln);background:var(--pn2);width:208px;overflow-y:auto;display:flex;flex-direction:column}
-nav.c{width:44px}nav.c .nl{display:none}
-nav a{display:flex;gap:9px;padding:6px 12px;color:var(--t2);text-decoration:none;border-left:2px solid transparent;font-size:11.5px}
-nav a .nn{font:600 10.5px var(--mono);color:var(--t3);min-width:18px}
-nav a:hover{color:var(--tx);background:var(--pn)}nav a.act{color:var(--tx);background:var(--pn);border-left-color:var(--am)}nav a.act .nn{color:var(--am)}
-#rail{border:0;border-bottom:1px solid var(--ln);text-align:left;padding:7px 14px;color:var(--t3);background:transparent}
+.bn{padding:8px 14px;font:600 13px var(--sans);border-bottom:1px solid var(--ln)}.bn.dn{background:rgba(240,68,79,.12);color:var(--dn)}.bn.am{background:rgba(255,255,255,.03);color:var(--t2)}
+nav{border-right:1px solid var(--ln);background:var(--pn2);width:220px;overflow-y:auto;display:flex;flex-direction:column;padding:6px}
+nav.c{width:52px;padding:6px 4px}nav.c .nl,nav.c .mode{display:none}
+.mode{color:var(--t3);font:600 11px var(--sans);letter-spacing:.12em;text-transform:uppercase;padding:14px 10px 4px}
+.mode.on{color:var(--t2)}
+nav a{display:flex;gap:8px;padding:8px 10px;margin:1px 0;color:var(--t2);text-decoration:none;border-radius:8px;font-size:13.5px}
+nav a .nn{display:none;font:600 11px var(--mono);color:var(--t3);min-width:18px}
+nav.c a{justify-content:center;padding:8px 0}nav.c a .nn{display:inline}
+nav a:hover{color:var(--tx);background:rgba(255,255,255,.04)}nav a.act{color:var(--tx);background:rgba(255,255,255,.07)}
+#rail{border:0;text-align:left;padding:8px 10px;color:var(--t3);background:transparent}
 main{overflow:auto;position:relative}
-.sh{display:flex;align-items:center;gap:10px;padding:7px 10px;border-bottom:1px solid var(--ln);background:var(--pn2);position:sticky;top:0;z-index:3}
-.sh h1{margin:0;font:700 12px var(--mono);letter-spacing:.12em;text-transform:uppercase}.sh h1 span{color:var(--am);margin-right:8px}
-.sh .ctl{margin-left:auto;display:flex;gap:6px;align-items:center}
-.g{display:grid;gap:1px;background:var(--ln);border-bottom:1px solid var(--ln)}
+.sh{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--ln);background:rgba(12,18,27,.92);position:sticky;top:0;z-index:3;backdrop-filter:blur(8px)}
+.sh h1{margin:0;font-size:16px;font-weight:650;letter-spacing:0}.sh h1 .mode-k{color:var(--t3);font-weight:600;font-size:12px;letter-spacing:.1em;text-transform:uppercase;margin-right:8px}
+.sh .ctl{margin-left:auto;display:flex;gap:8px;align-items:center}
+.g{display:grid;gap:12px;padding:12px 14px 18px}
 .c2{grid-template-columns:repeat(2,minmax(0,1fr))}.c3{grid-template-columns:repeat(3,minmax(0,1fr))}.c4{grid-template-columns:repeat(4,minmax(0,1fr))}.c6{grid-template-columns:repeat(6,minmax(0,1fr))}
 .s2{grid-column:span 2}.s3{grid-column:span 3}.sall{grid-column:1/-1}
-@media(max-width:1100px){.c3,.c4,.c6{grid-template-columns:repeat(2,minmax(0,1fr))}.s3{grid-column:1/-1}}
-@media(max-width:700px){.c2,.c3,.c4,.c6{grid-template-columns:minmax(0,1fr)}.s2,.s3{grid-column:auto}nav{width:44px}nav .nl{display:none}header .hm{display:none}}
-.pn{background:var(--pn);min-width:0;display:flex;flex-direction:column}
-.ph{display:flex;align-items:center;gap:8px;padding:5px 9px;border-bottom:1px solid var(--ln);min-height:26px}
-.pt{font:700 10.5px var(--mono);letter-spacing:.1em;text-transform:uppercase}.ps{color:var(--t3);font:10px var(--mono);margin-left:auto;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.pb{padding:6px 9px;overflow:auto;flex:1}.pb.tight{padding:0}.pb.tight>.st{padding:10px 9px}
-.st{font:600 10.5px var(--mono);letter-spacing:.08em;padding:10px 2px;color:var(--t3)}.st.err{color:var(--dn)}.st.dis{color:var(--t2)}.st.ld::after{content:"";display:inline-block;width:24px;height:2px;margin-left:8px;vertical-align:middle;background:linear-gradient(90deg,var(--am) 30%,transparent 30%);background-size:12px 2px;animation:ld .8s linear infinite}
+@media(max-width:1100px){.c3,.c4,.c6{grid-template-columns:repeat(2,minmax(0,1fr))}.s3{grid-column:1/-1}.hero{grid-template-columns:1fr}}
+@media(max-width:700px){.c2,.c3,.c4,.c6{grid-template-columns:minmax(0,1fr)}.s2,.s3{grid-column:auto}nav{width:52px}nav .nl,nav .mode{display:none}nav a .nn{display:inline}header .hm{display:none}}
+.pn{background:var(--pn);min-width:0;display:flex;flex-direction:column;border:1px solid var(--ln);border-radius:12px;overflow:hidden}
+.pn.quiet{background:transparent}
+.pn.quiet .pt{color:var(--t3);font-weight:600}
+.ph{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--ln);min-height:40px}
+.pt{font:600 13px var(--sans);letter-spacing:.01em;color:var(--t2)}.ps{color:var(--t3);font:12px var(--sans);margin-left:auto;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pb{padding:10px 12px;overflow:auto;flex:1}.pb.tight{padding:0}.pb.tight>.st,.pb.tight>.empty{padding:16px 12px}
+.st{font:500 13px var(--sans);padding:12px 4px;color:var(--t3)}.st.err{color:var(--dn)}.st.dis{color:var(--t2)}.st.ld::after{content:"";display:inline-block;width:24px;height:2px;margin-left:8px;vertical-align:middle;background:linear-gradient(90deg,var(--t2) 30%,transparent 30%);background-size:12px 2px;animation:ld .8s linear infinite}
 @keyframes ld{to{background-position:12px 0}}
-.kv{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));border-top:1px solid var(--ln);border-left:1px solid var(--ln)}
-.kv>div{padding:5px 7px;border-right:1px solid var(--ln);border-bottom:1px solid var(--ln)}.kv .v{font:600 15px var(--mono);font-variant-numeric:tabular-nums;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.kv .v.sm{font-size:12px}
-table{width:100%;border-collapse:collapse}th{font:600 9.5px var(--mono);color:var(--t3);letter-spacing:.06em;text-transform:uppercase;text-align:right;padding:4px 6px;border-bottom:1px solid var(--ln2);position:sticky;top:0;background:var(--pn);z-index:1;white-space:nowrap}
-td{padding:2px 6px;border-bottom:1px solid var(--ln);text-align:right;white-space:nowrap;font-size:11.5px}th.l,td.l{text-align:left}td.w{white-space:normal;font-family:var(--sans);min-width:220px}
+.empty{padding:28px 16px;text-align:center}.empty p{margin:0 0 12px;color:var(--t2);font-size:15px}
+.lock{max-width:440px;margin:28px auto;padding:28px 24px;text-align:center;background:var(--pn);border:1px solid var(--ln);border-radius:16px}
+.lock h2{margin:8px 0;font-size:20px;font-weight:650}.lock p{margin:0 0 16px;color:var(--t2)}
+.hero-pn{margin:14px 14px 0;background:linear-gradient(180deg,rgba(255,255,255,.035),transparent)}
+.hero{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.hero-card .spot{font:600 34px/1.05 var(--mono);letter-spacing:-.03em;margin:2px 0 8px}
+.metrics{display:flex;flex-wrap:wrap;gap:16px 22px}.metrics b{display:block;font:600 16px var(--mono);color:var(--tx);font-weight:600}
+.feedline{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+.kv{display:grid;grid-template-columns:repeat(auto-fill,minmax(132px,1fr));gap:8px}
+.kv>div{padding:8px 2px}.kv .v{font:600 18px var(--mono);font-variant-numeric:tabular-nums;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.kv .v.sm{font-size:13px}
+.pn.quiet .kv .v{font-size:16px}
+table{width:100%;border-collapse:collapse}th{font:600 11px var(--sans);color:var(--t3);letter-spacing:.04em;text-transform:uppercase;text-align:right;padding:8px;border-bottom:1px solid var(--ln);position:sticky;top:0;background:var(--pn);z-index:1;white-space:nowrap}
+td{padding:7px 8px;border-bottom:1px solid var(--ln);text-align:right;white-space:nowrap;font-size:13px}th.l,td.l{text-align:left}td.w{white-space:normal;font-family:var(--sans);min-width:220px}
 tr:hover td{background:rgba(255,255,255,.025)}
-.up{color:var(--up)}.dn{color:var(--dn)}.am{color:var(--am)}.mu{color:var(--t2)}.mu3{color:var(--t3)}
-.oc td{padding:1px 5px;font-size:11px}.oc td.k{background:var(--pn2);color:var(--tx);font-weight:700;text-align:center;border-left:1px solid var(--ln2);border-right:1px solid var(--ln2)}
-.oc tr.atm td{background:var(--amd)}.oc tr.atm td.k{color:var(--am);background:rgba(255,179,0,.2)}
-.oc td.wall{box-shadow:inset 0 -2px 0 var(--am)}
+.up{color:var(--up)}.dn{color:var(--dn)}.am{color:var(--link)}.mu{color:var(--t2)}.mu3{color:var(--t3)}
+.oc td{padding:3px 6px;font-size:12.5px}.oc td.k{background:var(--pn2);color:var(--tx);font-weight:700;text-align:center;border-left:1px solid var(--ln2);border-right:1px solid var(--ln2)}
+.oc tr.atm td{background:rgba(255,255,255,.04)}.oc tr.atm td.k{color:var(--tx);background:rgba(255,255,255,.08)}
+.oc td.wall{box-shadow:inset 0 -2px 0 var(--link)}
 .oc .ob{position:relative}.oc .ob>i{position:absolute;top:2px;bottom:2px;background:var(--bar);opacity:.45}.oc .ce>i{right:0}.oc .pe>i{left:0;background:var(--bar2)}.oc .ob>span{position:relative}
 .oc th.ceh{color:#7FA6D6}.oc th.peh{color:#B58BCB}
 .ag{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:1px;background:var(--ln);border:1px solid var(--ln)}
 @media(max-width:900px){.ag{grid-template-columns:repeat(3,minmax(0,1fr))}}
 .ag>div{background:var(--pn);padding:5px 7px;min-height:52px;border-top:2px solid transparent}.ag .nm{font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.ag .x{display:flex;gap:4px;margin-top:4px;flex-wrap:wrap}
-.ag>div.hl{border-top-color:var(--am)}.ag>div.dis{background:#141218}
+.ag>div.hl{border-top-color:var(--link)}.ag>div.dis{background:#141218}
 .dec{display:grid;grid-template-columns:200px 1fr;gap:1px;background:var(--ln)}.dec>div{background:var(--pn);padding:8px 10px}
-.dl{font:700 20px var(--mono);color:var(--am);letter-spacing:.04em}
+.dl{font:700 22px var(--mono);color:var(--tx);letter-spacing:.02em}
 .tr{border-bottom:1px solid var(--ln);padding:5px 0;display:grid;grid-template-columns:30px 80px 230px 1fr;gap:8px}.tr .m{font:10.5px var(--mono);color:var(--t3)}
-.cl{margin:1px 0}.cl .ev{font:10px var(--mono);color:var(--am);margin-left:6px}
+.cl{margin:1px 0}.cl .ev{font:11px var(--mono);color:var(--link);margin-left:6px}
 pre{margin:0;white-space:pre-wrap;word-break:break-word;font:11px/1.45 var(--mono);color:var(--t2)}
 .frm{display:flex;flex-wrap:wrap;gap:6px;align-items:center}.frm label{display:flex;gap:5px;align-items:center;color:var(--t2);font-size:11px}
 textarea{width:100%;min-height:120px;font:11px var(--mono)}
 #wm{position:fixed;inset:0;pointer-events:none;display:none;align-items:center;justify-content:center;z-index:2}
 #wm span{transform:rotate(-24deg);font:800 56px var(--mono);letter-spacing:.08em;color:rgba(139,155,180,.07);white-space:nowrap}
-footer{grid-column:1/3;border-top:1px solid var(--ln);background:var(--pn2);display:flex;gap:14px;align-items:center;padding:0 10px;font:10px var(--mono);color:var(--t3);white-space:nowrap;overflow:hidden}
+footer{grid-column:1/3;border-top:1px solid var(--ln);background:var(--pn2);display:flex;gap:14px;align-items:center;padding:0 12px;font:11px var(--sans);color:var(--t3);white-space:nowrap;overflow:hidden}
 #dlg{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:50}
-#dlg .box{background:var(--pn);border:1px solid var(--ln2);width:min(460px,92vw);padding:0}
+#dlg .box{background:var(--pn);border:1px solid var(--ln2);border-radius:14px;width:min(460px,92vw);padding:0;overflow:hidden}
 #dlg .bb{padding:10px;display:flex;flex-direction:column;gap:8px}#dlg .bf{display:flex;gap:6px;justify-content:flex-end;padding:8px 10px;border-top:1px solid var(--ln)}
-#ntf{position:fixed;top:40px;right:120px;width:340px;max-height:60vh;overflow:auto;background:var(--pn);border:1px solid var(--ln2);display:none;z-index:40}
+#ntf{position:fixed;top:64px;right:16px;width:360px;max-height:60vh;overflow:auto;background:var(--pn);border:1px solid var(--ln2);border-radius:12px;display:none;z-index:40}
 #ntf div{padding:6px 9px;border-bottom:1px solid var(--ln);font-size:11px}
 #toast{position:fixed;bottom:28px;right:12px;z-index:60;display:flex;flex-direction:column;gap:4px}
-#toast div{background:var(--pn);border:1px solid var(--ln2);border-left:2px solid var(--am);padding:6px 10px;font:11px var(--mono);max-width:420px}
+#toast div{background:var(--pn);border:1px solid var(--ln2);border-left:3px solid var(--link);border-radius:10px;padding:8px 12px;font:12px var(--sans);max-width:420px}
 #toast div.e{border-left-color:var(--dn)}
 .spark{width:100%;height:150px;display:block}
-.hbar{height:4px;background:var(--ln);margin-top:3px}.hbar>i{display:block;height:100%;background:var(--am)}
+.hbar{height:4px;background:var(--ln);margin-top:8px;border-radius:99px;overflow:hidden}.hbar>i{display:block;height:100%;background:var(--t2)}
 </style>
 </head>
 <body>
 <div id="app">
 <header>
-  <div class="logo">BULL<b>50</b><span class="lbl hx" style="margin-left:6px">Research Desk</span></div>
-  <div><span class="lbl">Session</span><span id="h-ses" class="tag">—</span><span id="h-ist" class="n mu hx"></span></div>
-  <div class="tk" id="h-NIFTY"><span class="lbl">NIFTY</span><span class="n">—</span><span class="n mu3" title="previous close is not exposed by the API">CHG —</span></div>
-  <div class="tk" id="h-BANKNIFTY"><span class="lbl">BANKNIFTY</span><span class="n">—</span><span class="n mu3" title="previous close is not exposed by the API">CHG —</span></div>
-  <div class="hm"><span class="lbl">Dhan</span><span id="h-dhan" class="dot"></span><span id="h-dhant" class="n mu">—</span></div>
-  <div class="hm"><span class="lbl">Grok</span><span id="h-grok" class="dot"></span><span id="h-grokt" class="n mu">—</span></div>
-  <div><span class="paper">PAPER MODE</span></div>
-  <div title="Grok spend this month vs hard cap (enforced server-side)"><span class="lbl">AI Budget</span><span id="h-bud" class="n">—</span><span id="h-meter" class="meter"><i style="width:0"></i></span></div>
+  <div class="logo">BULL<b>50</b><span class="sub hx">Research Desk</span></div>
+  <div class="tk" id="h-NIFTY"><span class="lbl">Nifty</span><span class="n">—</span></div>
+  <div class="tk" id="h-BANKNIFTY"><span class="lbl">Bank Nifty</span><span class="n">—</span></div>
+  <div class="chips">
+    <span id="h-ses" class="chip mute">Session —</span>
+    <span id="h-ist" class="n mu hx"></span>
+    <span id="h-feed" class="chip mute">Feed —</span>
+    <span id="h-chain" class="chip mute">Chain —</span>
+    <span id="h-dhan" class="chip mute">Dhan —</span>
+    <span id="h-grok" class="chip mute">Grok —</span>
+  </div>
   <div class="sp"></div>
-  <div><button id="h-ntf" title="Notifications">ALERTS <span id="h-ntfn" class="n">0</span></button></div>
-  <div><button id="h-set" title="Settings &amp; keys">⚙</button></div>
-  <div><button id="h-user" title="API key and identity">KEY</button></div>
-  <button id="ks" class="off" title="Kill switch (admin)">KILL SWITCH —</button>
+  <div class="bud hm" title="Grok spend this month vs hard cap (enforced server-side)"><span class="lbl">AI budget</span><span id="h-bud" class="n">—</span><span id="h-meter" class="meter"><i style="width:0"></i></span></div>
+  <div><span class="paper">Paper</span></div>
+  <div><button id="h-ntf" title="Notifications">Alerts <span id="h-ntfn" class="n">0</span></button></div>
+  <div><button id="h-set" title="Settings and keys">Settings</button></div>
+  <div><button id="h-user" title="API key and identity">Set key</button></div>
+  <button id="ks" class="off" title="Kill switch (admin)">Kill switch —</button>
 </header>
 <div id="bnr"></div>
 <nav id="nav"><button id="rail" title="Collapse navigation">◂ <span class="nl">Collapse</span></button></nav>
@@ -126,9 +152,17 @@ footer{grid-column:1/3;border-top:1px solid var(--ln);background:var(--pn2);disp
 // All analytics (Greeks, PCR, Max Pain, P&L, risk, committee labels) are computed by the backend; this page only displays.
 const $ = (id) => document.getElementById(id);
 const SECTIONS = [["01","Command Center"],["02","Market Intelligence"],["03","Options Intelligence"],["04","AI Investment Committee"],["05","AI Agent Control Room"],["06","Strategy Research Lab"],["07","Backtesting"],["08","AI Predictions"],["09","Paper Trading"],["10","Portfolio Analytics"],["11","Agent Leaderboard"],["12","Historical Data & Replay"],["13","Reports & Analytics"],["14","System Monitoring"],["15","Administration"]];
+const NAV = [
+  ["Live", [["01","Overview","OV"],["02","Market","MK"],["03","Option chain","OC"]]],
+  ["Research", [["06","Strategies","ST"],["07","Backtests","BT"],["08","Predictions","PR"],["12","Data & replay","DA"],["13","Reports","RP"]]],
+  ["Paper", [["09","Paper trading","PA"],["10","Portfolio","PF"]]],
+  ["AI Committee", [["signals","Strong calls","SC"],["04","Committee","AI"],["05","Agents","AG"],["11","Leaderboard","LB"]]],
+  ["Ops", [["14","Monitoring","OP"],["15","Administration","AD"],["settings","Settings","SET"]]],
+];
 const HARD_CAP = 3000;
 let key = sessionStorage.getItem("doi_key") || "";
-const S = { status:null, budget:null, budgetErr:null, who:null, recs:[], tick:{}, und:null };
+let gate = "unknown"; // unknown | open | locked — locked only after the server rejects a missing key
+const S = { status:null, budget:null, budgetErr:null, who:null, recs:[], tick:{}, und:null, health:null };
 
 function el(tag, props, ...kids) {
   const n = document.createElement(tag);
@@ -167,11 +201,22 @@ const tag = (t, c = "") => el("span", { class: "tag " + c }, t);
 
 // ---------- panels with loading / empty / error / disconnected states
 let LIVE = [];
-function state(kind, msg) { const cls = { LOADING: "st ld", EMPTY: "st", ERROR: "st err", DISCONNECTED: "st dis", AUTH: "st err" }[kind]; return el("div", { class: cls }, kind + (msg ? " · " + msg : "")); }
+let relock = false;
+function emptyState(msg, cta) {
+  const btn = cta ? el("button", { class: "pri", onclick: () => { if (cta.href) location.hash = cta.href; else if (cta.on) cta.on(); } }, cta.label) : null;
+  return el("div", { class: "empty" }, el("p", {}, msg || "Nothing here yet"), btn);
+}
+function state(kind, msg, cta) {
+  if (kind === "EMPTY") return emptyState(msg, cta);
+  const cls = { LOADING: "st ld", ERROR: "st err", DISCONNECTED: "st dis" }[kind] || "st";
+  const label = { LOADING: "Loading", ERROR: "Something went wrong", DISCONNECTED: "Disconnected" }[kind] || kind;
+  return el("div", { class: cls }, label + (msg ? " — " + msg : ""));
+}
 function errState(e) {
   if (e instanceof ApiError) {
-    if (e.status === 401) return state("AUTH", "API key required — set it with KEY");
-    if (e.status === 403) return state("AUTH", "your role cannot view this");
+    if (e.status === 401 && !key) { gate = "locked"; if (!relock) { relock = true; queueMicrotask(() => { relock = false; show(); }); } return el("div", { class: "st" }); }
+    if (e.status === 401) return state("ERROR", "API key was rejected — set a valid key");
+    if (e.status === 403) return state("ERROR", "your role cannot view this");
     if (e.status === 503) return state("DISCONNECTED", e.message);
   }
   if (e instanceof TypeError) return state("DISCONNECTED", "backend unreachable");
@@ -184,13 +229,20 @@ function panel(title, src, load, o = {}) {
   let busy = false;
   p.refresh = async () => {
     if (busy) return; busy = true;
-    try { const out = await load(); body.replaceChildren(out === null || out === undefined || (Array.isArray(out) && !out.length) ? state("EMPTY", o.empty || "no records") : out); }
+    try { const out = await load(); body.replaceChildren(out === null || out === undefined || (Array.isArray(out) && !out.length) ? emptyState(o.empty || "Nothing here yet", o.cta) : out); }
     catch (e) { body.replaceChildren(errState(e)); }
     finally { busy = false; }
   };
   if (o.live !== false) LIVE.push(p);
   p.refresh();
   return p;
+}
+function lockCard() {
+  return el("section", { class: "lock" },
+    el("div", { class: "lbl" }, "Locked"),
+    el("h2", {}, "This desk needs an API key"),
+    el("p", {}, "The live option chain stays open. Paper, research, the AI committee, and ops use the key kept in this tab only."),
+    el("button", { class: "pri", onclick: keyDialog }, "Set API key"));
 }
 function table(rows, cols, o = {}) {
   if (!rows || !rows.length) return null;
@@ -217,19 +269,54 @@ async function act(fn, ok) { try { const r = await fn(); toast(ok || "done"); re
 
 // ---------- global shell state
 const aiStop = () => { const b = S.budget; if (!b) return true; return b.frozen || Number(b.spent_inr) >= Number(b.hard_limit_inr || HARD_CAP) || Number(b.spent_inr) + Number(b.reserved_inr) >= Number(b.usable_inr) || b.utilisation >= ((b.routing || {}).stop_at ?? 0.97); };
-const killOn = () => !!(S.status && S.status.kill_switch);
+const killOn = () => !!((S.status && S.status.kill_switch) || (S.health && S.health.kill_switch));
 const pending = () => S.recs.filter((r) => r.status === "PENDING_HUMAN");
+const needsLock = () => !key && gate === "locked";
+function route() {
+  const [sec = "01", arg] = location.hash.replace(/^#\/?/, "").split("/");
+  const id = sec === "settings" || sec === "signals" || SECTIONS.some(([n]) => n === sec) ? sec : "01";
+  return { id, arg };
+}
+const isPublic = (id) => id === "02" || id === "03";
+function modeOf(id) { for (const [m, items] of NAV) if (items.some(([n]) => n === id)) return m; return ""; }
+function chip(id, text, kind) { const n = $(id); n.textContent = text; n.className = "chip" + (kind ? " " + kind : ""); }
+function istNow() { return new Date().toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour12: false }); }
+function localSession() {
+  const parts = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Kolkata", weekday: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(new Date());
+  const o = {}; for (const p of parts) o[p.type] = p.value;
+  if (o.weekday === "Sat" || o.weekday === "Sun") return "CLOSED";
+  const hm = Number(o.hour) * 60 + Number(o.minute);
+  if (hm >= 540 && hm < 555) return "PRE-OPEN";
+  if (hm >= 555 && hm < 930) return "OPEN";
+  return "CLOSED";
+}
+function feedInfo() {
+  const s = S.status;
+  const fc = (s && s.market_data && s.market_data.feed_collector) || (S.health && S.health.market_feed) || null;
+  if (!fc) return ["Feed off", "mute"];
+  const st = String(fc.state || "off").toLowerCase();
+  if (st === "streaming") return ["Feed live", "up"];
+  if (st === "backoff") return ["Feed backoff", "dn"];
+  if (st === "connecting") return ["Feed connecting", ""];
+  return ["Feed " + st, st === "stopped" ? "dn" : "mute"];
+}
+function chainInfo() {
+  const ticks = Object.values(S.tick);
+  if (!ticks.length) return ["Chain wait", "mute"];
+  if (ticks.some((t) => t.stale)) return ["Chain stale", "dn"];
+  return ["Chain live", "up"];
+}
 function alerts() {
   const a = [], s = S.status;
-  if (!key) a.push(["AUTH", "No API key set for this tab"]);
+  if (key && !S.who) a.push(["AUTH", "API key was rejected"]);
+  if (killOn()) a.push(["KILL", "Kill switch engaged — chain polling and new paper orders stopped"]);
   if (!s) return a;
-  if (s.kill_switch) a.push(["KILL", "Kill switch engaged — chain polling and new orders stopped"]);
-  const tk = (s.market_data || {}).token; if (tk && tk.state !== "VALID") a.push(["DHAN", "Dhan token state: " + tk.state]);
+  const tk = (s.market_data || {}).token; if (tk && String(tk.state).toUpperCase() !== "VALID") a.push(["DHAN", "Dhan token state: " + tk.state]);
   if (!(s.market_data || {}).provider_configured) a.push(["DHAN", "Market data provider not configured"]);
   const rec = (s.market_data || {}).recorder || {}; if (rec.failures) a.push(["DATA", rec.failures + " recorder write failures"]);
   if (s.database && s.database.reachable === false) a.push(["DB", "PostgreSQL unreachable: " + s.database.error]);
   if (S.budget && aiStop()) a.push(["AI", "Grok budget hard stop — new AI meetings disabled"]);
-  else if (S.budget && S.budget.utilisation >= 0.8) a.push(["AI", "Grok budget above 80% — specialists on fast tier"]);
+  else if (S.budget && S.budget.utilisation >= 0.8) a.push(["AI", "Grok budget above 80% — specialists on the fast tier"]);
   if (S.budgetErr) a.push(["AI", "AI budget: " + S.budgetErr]);
   for (const [k, t] of Object.entries(S.tick)) if (t.stale) a.push(["DATA", k + " chain stale (" + f(t.age, 1) + "s)"]);
   if (pending().length) a.push(["APPROVAL", pending().length + " recommendation(s) awaiting human approval"]);
@@ -239,37 +326,58 @@ async function nearestExpiry(u) { if (!S.und) S.und = await api("/api/v1/market/
 async function chain(u, exp) { const c = await api(`/api/v1/market/option-chain?underlying=${encodeURIComponent(u)}&expiry=${encodeURIComponent(exp)}`); S.tick[u] = { ltp: c.underlying_ltp, age: c.quality.age_s, stale: c.quality.is_stale, at: c.received_at }; return c; }
 async function headerTick(u) {
   const box = $("h-" + u).children[1];
-  try { const e = await nearestExpiry(u); if (!e) { box.textContent = "OFF"; box.className = "n mu3"; box.title = "not live-enabled"; return; } await chain(u, e); box.textContent = f(S.tick[u].ltp, 2); box.className = "n" + (S.tick[u].stale ? " mu3" : ""); box.title = "age " + f(S.tick[u].age, 1) + "s"; }
-  catch (e) { box.textContent = e.status === 503 ? "DISC" : "ERR"; box.className = "n dn"; box.title = e.message; }
+  try {
+    const e = await nearestExpiry(u);
+    if (!e) { box.textContent = "Off"; box.className = "n mu3"; box.title = "not live-enabled"; }
+    else { await chain(u, e); box.textContent = f(S.tick[u].ltp, 2); box.className = "n" + (S.tick[u].stale ? " mu3" : ""); box.title = "age " + f(S.tick[u].age, 1) + "s"; }
+  } catch (e) { box.textContent = e.status === 503 ? "Down" : "Error"; box.className = "n dn"; box.title = e.message; }
+  const [ct, ck] = chainInfo(); chip("h-chain", ct, ck);
 }
-async function refreshShell() {
-  const [st, bu, wh, rc] = await Promise.allSettled([api("/api/v1/system/status"), api("/api/v1/ai/budget"), api("/api/v1/auth/whoami"), api("/api/v1/ai/recommendations?status=PENDING_HUMAN")]);
-  S.status = st.status === "fulfilled" ? st.value : null; S.budget = bu.status === "fulfilled" ? bu.value : null; S.budgetErr = bu.status === "rejected" ? bu.reason.message : null;
-  S.who = wh.status === "fulfilled" ? wh.value : null; S.recs = rc.status === "fulfilled" ? rc.value : [];
+function paintHeader() {
   const s = S.status;
-  const ses = s && s.session ? s.session.state : "—"; $("h-ses").textContent = ses; $("h-ses").className = "tag " + (ses === "OPEN" ? "up" : ses === "PRE-OPEN" ? "am" : "");
-  $("h-ist").textContent = s && s.session ? s.session.ist.slice(11, 19) + " IST" : "";
-  const tk = s && s.market_data && s.market_data.token;
-  $("h-dhan").className = "dot " + (!s ? "bad" : tk && tk.state === "VALID" ? "ok" : "bad"); $("h-dhant").textContent = !s ? "DISC" : tk ? tk.state : (s.market_data.provider_configured ? "NO TOKEN" : "OFF");
+  const ses = s && s.session ? s.session.state : (S.health ? localSession() : "—");
+  chip("h-ses", ses === "—" ? "Session —" : ses, ses === "OPEN" ? "up" : ses === "CLOSED" ? "mute" : "");
+  $("h-ses").title = s && s.session ? "Exchange session" : "Local clock — sign in for the holiday calendar";
+  $("h-ist").textContent = s && s.session ? s.session.ist.slice(11, 19) + " IST" : (S.health ? istNow() + " IST" : "");
+  const tk = (s && s.market_data && s.market_data.token) || (S.health && S.health.token) || null;
+  const dhanState = tk ? String(tk.state || "—") : (s && s.market_data && s.market_data.provider_configured ? "no token" : "off");
+  chip("h-dhan", "Dhan " + dhanState, tk && String(tk.state).toUpperCase() === "VALID" ? "up" : tk ? "dn" : "mute");
   const b = S.budget;
-  $("h-grok").className = "dot " + (b ? (aiStop() ? "bad" : b.provider_live ? "ai" : "") : "bad");
-  $("h-grokt").textContent = b ? (aiStop() ? "HARD STOP" : b.provider_live ? "LIVE · " + String(b.routing.current_tier_for_specialists).toUpperCase() : "OFFLINE") : "OFF";
+  const [ft, fk] = feedInfo(); chip("h-feed", ft, fk);
+  const [ct, ck] = chainInfo(); chip("h-chain", ct, ck);
+  if (b) chip("h-grok", aiStop() ? "Grok stop" : b.provider_live ? "Grok live" : "Grok offline", aiStop() ? "dn" : b.provider_live ? "up" : "mute");
+  else chip("h-grok", "Grok —", "mute");
   const cap = b ? Number(b.hard_limit_inr) : HARD_CAP;
   $("h-bud").textContent = b ? `₹${f(b.spent_inr)} / ₹${f(cap, 0)}` : `— / ₹${f(HARD_CAP, 0)}`;
   $("h-meter").className = "meter" + (b && aiStop() ? " stop" : ""); $("h-meter").firstChild.style.width = (b ? Math.min(100, (Number(b.spent_inr) + Number(b.reserved_inr)) / cap * 100) : 0) + "%";
   $("h-meter").title = b ? `spent ₹${f(b.spent_inr)} + reserved ₹${f(b.reserved_inr)} · usable ₹${f(b.usable_inr)} · cap ₹${f(cap, 0)}` : "AI budget unavailable";
-  const ks = $("ks"); ks.textContent = "KILL SWITCH " + (s ? (s.kill_switch ? "ON" : "OFF") : "—"); ks.className = s && s.kill_switch ? "on" : "off";
-  $("h-user").textContent = S.who ? `${S.who.actor} · ${S.who.role}` : key ? "KEY ✕" : "SET KEY";
-  const al = alerts(); $("h-ntfn").textContent = al.length; $("h-ntf").className = al.length ? "pri" : "";
-  $("ntf").replaceChildren(...(al.length ? al.map(([k, m]) => el("div", {}, tag(k, k === "KILL" || k === "DB" ? "dn" : "am"), " ", m)) : [el("div", { class: "mu" }, "No alerts")]));
+  const ks = $("ks"); ks.textContent = "Kill switch " + (killOn() ? "on" : (s || S.health ? "off" : "—")); ks.className = killOn() ? "on" : "off";
+  $("h-user").textContent = S.who ? `${S.who.actor} · ${S.who.role}` : key ? "Key rejected" : "Set key";
+  const al = alerts(); $("h-ntfn").textContent = al.length; $("h-ntf").className = al.length ? "alert" : "";
+  $("ntf").replaceChildren(...(al.length ? al.map(([k, m]) => el("div", {}, tag(k, k === "KILL" || k === "DB" || k === "DATA" ? "dn" : ""), " ", m)) : [el("div", { class: "mu" }, "No alerts")]));
   const bn = [];
-  if (killOn()) bn.push(el("div", { class: "bn dn" }, "■ KILL SWITCH ENGAGED — market polling, AI meetings and new paper orders are halted."));
-  if (b && aiStop()) bn.push(el("div", { class: "bn dn" }, `■ AI HARD STOP — Grok budget ₹${f(b.spent_inr)} of ₹${f(cap, 0)} committed${b.frozen ? " (month frozen: " + (b.frozen_reason || "") + ")" : ""}. New AI meetings disabled. Deterministic data and paper engine continue.`));
+  if (killOn()) bn.push(el("div", { class: "bn dn" }, "Kill switch is on. Market polling, AI meetings, and new paper orders are halted."));
+  if (b && aiStop()) bn.push(el("div", { class: "bn dn" }, `AI hard stop — Grok budget ₹${f(b.spent_inr)} of ₹${f(cap, 0)} committed${b.frozen ? " (month frozen: " + (b.frozen_reason || "") + ")" : ""}. New AI meetings are disabled. Market data and the paper engine continue.`));
   $("bnr").replaceChildren(...bn);
-  $("f-upd").textContent = "updated " + new Date().toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour12: false }) + " IST";
+  $("f-upd").textContent = "Updated " + istNow() + " IST";
+}
+async function loadAuthed() {
+  if (!key && gate === "locked") { S.status = null; S.budget = null; S.budgetErr = null; S.who = null; S.recs = []; return; }
+  const [st, bu, wh, rc] = await Promise.allSettled([api("/api/v1/system/status"), api("/api/v1/ai/budget"), api("/api/v1/auth/whoami"), api("/api/v1/ai/recommendations?status=PENDING_HUMAN")]);
+  S.status = st.status === "fulfilled" ? st.value : null; S.budget = bu.status === "fulfilled" ? bu.value : null; S.budgetErr = bu.status === "rejected" ? bu.reason.message : null;
+  S.who = wh.status === "fulfilled" ? wh.value : null; S.recs = rc.status === "fulfilled" ? rc.value : [];
+  if (!key && wh.status === "fulfilled") gate = "open";
+  if (!key && wh.status === "rejected" && wh.reason instanceof ApiError && (wh.reason.status === 401 || wh.reason.status === 403)) gate = "locked";
+}
+async function refreshShell() {
+  try { S.health = await api("/healthz"); } catch { S.health = null; }
+  await loadAuthed();
+  paintHeader();
   headerTick("NIFTY"); headerTick("BANKNIFTY");
 }
-function refreshAll() { refreshShell(); for (const p of LIVE) if (p.isConnected) p.refresh(); }
+function refreshAll() {
+  refreshShell().then(() => { const { id } = route(); if (needsLock() && !isPublic(id)) show(); else for (const p of LIVE) if (p.isConnected) p.refresh(); });
+}
 
 // ---------- shared blocks
 function chainMetrics(c) {
@@ -280,7 +388,7 @@ function chainMetrics(c) {
 function featKv(fv, names) { const v = fv.values; return el("div", {}, kv(names.map((n) => { const x = v[n] || {}; const val = typeof x.value === "number" ? f(x.value, n.includes("pct") ? 2 : 2) : x.value; return [n.replace(/_/g, " "), nil(val) ? (x.status || "N/A") : val, typeof x.value === "number" ? "" : "sm am"]; })), el("div", { class: "mono mu3", style: "margin-top:4px" }, `as of ${ts(fv.as_of)} · ${fv.coverage_status} · quality ${f(fv.data_quality_score, 2)} · ${fv.timeframe_min}m`)); }
 const claimsOf = (o) => !o ? [] : ["claims", "rationale", "risks", "flaws", "kill_criteria", "dissent_addressed"].flatMap((k) => (o[k] || []).map((c) => [k, c])).concat(o.rebuttal_to_contrarian ? [["rebuttal", o.rebuttal_to_contrarian]] : []);
 const claimNode = ([k, c]) => el("div", { class: "cl" }, el("span", { class: "mu3 mono" }, k.toUpperCase() + " "), c.text, ...(c.evidence_refs || []).map((r) => el("span", { class: "ev" }, "[" + r + "]")));
-const meetingBtn = () => el("button", { class: "pri", disabled: killOn() || aiStop() || !S.budget, title: killOn() ? "kill switch engaged" : aiStop() ? "AI budget hard stop" : "queue a real committee meeting", onclick: startMeeting }, "▶ Start Meeting");
+const meetingBtn = () => el("button", { class: "pri", disabled: killOn() || aiStop() || !S.budget, title: killOn() ? "kill switch engaged" : aiStop() ? "AI budget hard stop" : "queue a real committee meeting", onclick: startMeeting }, "Start meeting");
 function startMeeting() {
   const u = el("select", {}, ["NIFTY", "BANKNIFTY", "FINNIFTY", "SENSEX", "BANKEX"].map((x) => el("option", { value: x }, x)));
   const now = el("input", { type: "checkbox", checked: true });
@@ -308,24 +416,84 @@ function equitySvg(pts, start) {
 
 // ---------- sections
 const V = {};
+function metric(k, v, cls) { return el("div", {}, el("div", { class: "lbl" }, k), el("b", { class: cls || "" }, v)); }
+function heroCard(u, expiry, c) {
+  const a = c.analytics, q = c.quality, stale = !!q.is_stale;
+  return el("div", { class: "hero-card" },
+    el("div", { class: "lbl" }, u + " · " + expiry),
+    el("div", { class: "spot" }, f(c.underlying_ltp)),
+    el("div", { class: "metrics" },
+      metric("IV", pct(a.atm_iv)),
+      metric("PCR", nil(a.pcr_oi) ? "N/A" : f(a.pcr_oi, 2)),
+      metric("Max pain", f(a.max_pain, 0)),
+      metric("Chain", stale ? "Stale " + f(q.age_s, 0) + "s" : "Live " + f(q.age_s, 0) + "s", stale ? "dn" : "up")));
+}
+function feedLine() {
+  const [ct, ck] = chainInfo(), [ft, fk] = feedInfo();
+  return el("div", { class: "feedline" },
+    el("span", { class: "chip " + ck }, ct),
+    el("span", { class: "chip " + fk }, ft),
+    el("span", { class: "chip " + (killOn() ? "dn" : "mute") }, killOn() ? "Kill switch on" : "Kill switch off"));
+}
+function heroPanel() {
+  const body = el("div", { class: "pb" }, state("LOADING"));
+  const p = el("section", { class: "pn hero-pn" }, body);
+  p.refresh = async () => {
+    try { if (!S.und) S.und = await api("/api/v1/market/underlyings"); }
+    catch (e) { body.replaceChildren(errState(e)); return; }
+    const cards = [];
+    for (const u of ["NIFTY", "BANKNIFTY"]) {
+      try {
+        const e = await nearestExpiry(u);
+        if (!e) cards.push(el("div", { class: "hero-card" }, el("div", { class: "lbl" }, u), el("div", { class: "spot mu" }, "Off")));
+        else cards.push(heroCard(u, e, await chain(u, e)));
+      } catch (e) { cards.push(el("div", { class: "hero-card" }, el("div", { class: "lbl" }, u), el("div", { class: "mu" }, e.status === 503 ? e.message : "Chain unavailable"))); }
+    }
+    body.replaceChildren(el("div", { class: "hero" }, ...cards), feedLine());
+  };
+  LIVE.push(p); p.refresh();
+  return p;
+}
 V["01"] = () => {
-  const tickers = ["NIFTY", "BANKNIFTY"].map((u) => panel(u, "option-chain · nearest expiry", async () => { const e = await nearestExpiry(u); if (!e) return state("DISCONNECTED", u + " not live-enabled"); const c = await chain(u, e); return el("div", {}, el("div", { class: "kv" }, el("div", {}, el("div", { class: "lbl" }, "Spot · " + e), el("div", { class: "v", style: "font-size:22px" }, f(c.underlying_ltp)), el("div", { class: "mu3 mono", title: "previous close is not exposed by the API" }, "CHG —"))), chainMetrics(c)); }, { cls: "s2" }));
-  return [grid("c4", ...tickers,
-    panel("Paper Portfolio", "/paper/portfolio", async () => { const p = await api("/api/v1/paper/portfolio"); return kv([["Equity", inr(p.equity)], ["Day P&L", pnl(p.day_pnl)], ["Unrealized", pnl(p.unrealized)], ["Realized net", pnl(p.realized_net)], ["Open risk", inr(p.open_risk)], ["Positions", int(p.positions.length)], ["Working", int(p.working_orders.length)], ["Cash", inr(p.cash)]]); }, { cls: "s2" }),
-    panel("Latest Committee Decision", "/ai/meetings", async () => { const ms = await api("/api/v1/ai/meetings?limit=1"); if (!ms.length) return null; const d = await api("/api/v1/ai/meetings/" + encodeURIComponent(ms[0].id)); const s = d.summary;
-      return el("div", {}, el("div", { class: "frm" }, el("span", { class: "dl" }, s.label), tag(s.final_action || d.meeting.status, "am"), tag(`CONSENSUS ${s.consensus}/${s.panel_size}`), s.vetoes.risk_officer ? tag("RISK VETO", "dn") : null, s.vetoes.contrarian ? tag("CONTRARIAN VETO", "dn") : null),
-        el("div", { class: "mu mono", style: "margin:4px 0" }, `${ts(d.meeting.started_at)} · conf ${s.cio_confidence ?? "—"}/5 · ₹${f(d.meeting.cost_inr)} · ${d.meeting.abort_reason || ""}`), ...claimsOf((d.turns.find((t) => t.agent_id === "cio") || {}).output).slice(0, 3).map(claimNode), el("a", { href: "#/04/" + ms[0].id, class: "am" }, "open committee →")); }, { cls: "s2", empty: "no meetings yet", tools: [meetingBtn()] })),
-    grid("c3", panel("Market Regime · India VIX", "/market/features · NIFTY · deterministic", async () => featKv(await api("/api/v1/market/features?underlying=NIFTY"), ["trend_regime", "vol_regime", "market_structure", "vix", "vix_change_pct", "adx", "rsi", "realized_vol_pct", "opening_range_state"])),
-      panel("Market Alerts", "derived from system status", async () => { const a = alerts(); return a.length ? table(a, [{ h: "type", v: (r) => tag(r[0], r[0] === "KILL" || r[0] === "DB" ? "dn" : "am"), l: true }, { h: "alert", v: (r) => r[1], l: true, w: true }]) : state("EMPTY", "no active alerts"); }),
-      panel("System Health", "/system/status", async () => { const s = await api("/api/v1/system/status"); const d = s.database || {}; const fc = s.market_data.feed_collector;
-        return kv([["Mode", s.mode, "sm"], ["Live broker exec", s.live_broker_execution, "sm dn"], ["Auth", s.auth, "sm"], ["PostgreSQL", d.reachable ? "UP" : "DOWN", d.reachable ? "up sm" : "dn sm"], ["Feed", fc ? fc.state : "DISABLED", "sm"], ["Recorder fails", int(s.market_data.recorder.failures)], ["Snapshots", int(d.recorded_snapshots)], ["Migrations", d.migration_version || "—", "sm"]]); }))];
+  const hero = heroPanel();
+  if (needsLock()) return [hero, lockCard()];
+  const desk = [
+    panel("Paper portfolio", "/paper/portfolio", async () => { const p = await api("/api/v1/paper/portfolio"); return kv([["Equity", inr(p.equity)], ["Day P&L", pnl(p.day_pnl)], ["Unrealized", pnl(p.unrealized)], ["Realized net", pnl(p.realized_net)], ["Open risk", inr(p.open_risk)], ["Positions", int(p.positions.length)], ["Working", int(p.working_orders.length)], ["Cash", inr(p.cash)]]); }, { cls: "quiet", empty: "No paper account yet" }),
+    panel("Latest committee decision", "/ai/meetings", async () => { const ms = await api("/api/v1/ai/meetings?limit=1"); if (!ms.length) return null; const d = await api("/api/v1/ai/meetings/" + encodeURIComponent(ms[0].id)); const s = d.summary;
+      return el("div", {}, el("div", { class: "frm" }, el("span", { class: "dl" }, s.label), tag(s.final_action || d.meeting.status), tag(`Consensus ${s.consensus}/${s.panel_size}`), s.vetoes.risk_officer ? tag("Risk veto", "dn") : null, s.vetoes.contrarian ? tag("Contrarian veto", "dn") : null),
+        el("div", { class: "mu", style: "margin:8px 0" }, `${ts(d.meeting.started_at)} · confidence ${s.cio_confidence ?? "—"}/5 · ₹${f(d.meeting.cost_inr)}`), ...claimsOf((d.turns.find((t) => t.agent_id === "cio") || {}).output).slice(0, 3).map(claimNode), el("a", { href: "#/04/" + ms[0].id, class: "quiet" }, "Open the committee")); }, { cls: "quiet", empty: "No committee meetings yet", tools: [meetingBtn()] }),
+    panel("Regime and India VIX", "/market/features · NIFTY", async () => featKv(await api("/api/v1/market/features?underlying=NIFTY"), ["trend_regime", "vol_regime", "market_structure", "vix", "vix_change_pct", "adx", "rsi", "realized_vol_pct", "opening_range_state"]), { cls: "quiet" }),
+    panel("Alerts", "from system status", async () => { const a = alerts(); return a.length ? table(a, [{ h: "type", v: (r) => tag(r[0], r[0] === "KILL" || r[0] === "DB" || r[0] === "DATA" ? "dn" : ""), l: true }, { h: "alert", v: (r) => r[1], l: true, w: true }]) : state("EMPTY", "No active alerts"); }, { cls: "quiet" }),
+  ];
+  return [hero, strongCallsPanel(), grid("c2", ...desk)];
 };
+function strongCallsPanel() {
+  return panel("Strong calls", "/ai/strong-calls · committee-verified only", async () => {
+    const rows = await api("/api/v1/ai/strong-calls");
+    if (!rows.length) return null;
+    return el("div", {},
+      el("p", { class: "mu" }, "Paper buys only. A row appears after the committee marks it strong and the risk gate has approved the contract. Approve runs that gate again, then the paper engine. No live broker order is sent."),
+      table(rows, [
+        { h: "Underlying", v: "underlying", l: true },
+        { h: "Signal", v: (r) => tag(r.signal, r.option_type === "PE" ? "dn" : "up"), l: true },
+        { h: "Side", v: "side", l: true },
+        { h: "CE/PE", v: "option_type" },
+        { h: "Confidence", v: (r) => r.confidence + "/5" },
+        { h: "Contract", v: (r) => f(r.strike, 0) + " " + (r.expiry || ""), l: true },
+        { h: "Status", v: (r) => tag(r.status, r.status === "SUBMITTED" ? "up" : r.status === "REJECTED" || r.status === "RISK_REJECTED" ? "dn" : "") },
+        { h: "Meeting", v: (r) => el("a", { href: "#/04/" + r.meeting_id, class: "quiet" }, "Open"), l: true },
+        { h: "", v: (r) => r.status === "PENDING_HUMAN" ? el("span", { class: "frm" }, el("button", { class: "pri", onclick: () => decide(r, "approve") }, "Approve"), el("button", { class: "dng", onclick: () => decide(r, "reject") }, "Reject")) : "" },
+      ]));
+  }, { tight: true, empty: "No strong calls yet. The committee has not verified a high-confidence CE or PE buy.", cta: { label: "Open the committee", href: "#/04" } });
+}
+V.signals = () => [strongCallsPanel()];
 V["02"] = () => [panel("Underlying Universe", "/market/underlyings · instrument master", async () => { S.und = await api("/api/v1/market/underlyings"); return table(S.und, [{ h: "index", v: "key", l: true }, { h: "exch", v: "exchange_family", l: true }, { h: "sec id", v: "security_id" }, { h: "segment", v: "derivative_segment", l: true }, { h: "resolved", v: (r) => tag(r.resolved ? "YES" : "NO", r.resolved ? "up" : "dn") }, { h: "live", v: (r) => tag(r.live_enabled ? "ENABLED" : "DISABLED", r.live_enabled ? "am" : "") }, { h: "history", v: "historical_status", l: true }, { h: "next expiries · lot", v: (r) => r.expiries.map((e) => `${e.expiry}·${e.lot_size}`).join("  "), l: true }, { h: "error", v: (r) => r.error || "", l: true }]); }, { tight: true }),
   el("div", { id: "mi" })];
 V["02"].after = async () => { const box = $("mi"); try { if (!S.und) S.und = await api("/api/v1/market/underlyings"); } catch (e) { box.replaceChildren(errState(e)); return; }
   const live = S.und.filter((u) => u.live_enabled && u.resolved && u.expiries.length); if (!live.length) { box.replaceChildren(el("div", { class: "pn" }, el("div", { class: "pb" }, state("EMPTY", "no live-enabled underlyings")))); return; }
   box.replaceChildren(grid("c2", ...live.map((u) => panel(u.key + " · " + u.expiries[0].expiry, "option-chain analytics (Black-76, backend)", async () => { const c = await chain(u.key, u.expiries[0].expiry); const a = c.analytics;
-    return el("div", {}, chainMetrics(c), await api("/api/v1/market/features?underlying=" + u.key).then((fv) => featKv(fv, ["trend_regime", "vol_regime", "market_structure", "vix", "adx", "rsi", "vwap_distance_pct", "relative_volume", "iv_skew", "pcr_oi_chg_session"])).catch(errState), table([...a.ce_walls.map((w) => ["CALL WALL", w]), ...a.pe_walls.map((w) => ["PUT WALL", w])], [{ h: "wall", v: (r) => r[0], l: true }, { h: "strike", v: (r) => f(r[1].strike, 0) }, { h: "oi", v: (r) => big(r[1].oi) }])); })))); };
+    const feats = needsLock() ? null : await api("/api/v1/market/features?underlying=" + u.key).then((fv) => featKv(fv, ["trend_regime", "vol_regime", "market_structure", "vix", "adx", "rsi", "vwap_distance_pct", "relative_volume", "iv_skew", "pcr_oi_chg_session"])).catch(errState);
+    return el("div", {}, chainMetrics(c), feats, table([...a.ce_walls.map((w) => ["CALL WALL", w]), ...a.pe_walls.map((w) => ["PUT WALL", w])], [{ h: "wall", v: (r) => r[0], l: true }, { h: "strike", v: (r) => f(r[1].strike, 0) }, { h: "oi", v: (r) => big(r[1].oi) }])); })))); };
 V["03"] = () => {
   const us = el("select"), ex = el("select"), win = el("select", {}, [["10", "ATM ±10"], ["5", "ATM ±5"], ["15", "ATM ±15"], ["25", "ATM ±25"], ["0", "ALL"]].map(([v, t]) => el("option", { value: v }, t)));
   const from = el("input", { placeholder: "strike ≥", size: 8 }), to = el("input", { placeholder: "strike ≤", size: 8 });
@@ -352,11 +520,11 @@ V["03"] = () => {
     body.replaceChildren(rows.length ? t : state("EMPTY", "no strikes in filter")); return el("div", {}, head, body);
   }, { tight: true, tools: [us, ex, win, from, to] });
   us.addEventListener("change", () => { fillEx(); p.refresh(); }); for (const x of [ex, win]) x.addEventListener("change", () => p.refresh()); for (const x of [from, to]) x.addEventListener("change", () => p.refresh());
-  return [p, el("div", { class: "pn" }, el("div", { class: "pb mu" }, "ATM row highlighted · amber underline = top-3 OI walls · PCR = Total Put OI / Total Call OI (N/A when call OI is zero) · OI in units · Max Pain/OI/PCR are explanatory features, never triggers."))];
+  return [p, el("div", { class: "pn" }, el("div", { class: "pb mu" }, "ATM row highlighted · underline marks the top open-interest walls · PCR is total put OI divided by total call OI (N/A when call OI is zero). These are explanatory features, never trade triggers."))];
 };
 V["04"] = (id) => {
   const detail = el("div");
-  const list = panel("Meetings", "/ai/meetings", async () => { const ms = await api("/api/v1/ai/meetings?limit=40"); if (!id && ms.length) id = ms[0].id; showMeeting(); return table(ms, [{ h: "started", v: (m) => ts(m.started_at), l: true }, { h: "kind", v: "kind", l: true }, { h: "status", v: (m) => tag(m.status, m.status === "OPEN" ? "am" : "") }, { h: "action", v: (m) => m.final_action ? tag(m.final_action, "am") : "—" }, { h: "abort", v: (m) => m.abort_reason || "", l: true }, { h: "₹", v: (m) => f(m.cost_inr) }, { h: "", v: (m) => el("button", { class: m.id === id ? "pri" : "", onclick: () => { location.hash = "#/04/" + m.id; } }, "open") }]); }, { tight: true, empty: "no meetings yet", tools: [meetingBtn()] });
+  const list = panel("Meetings", "/ai/meetings", async () => { const ms = await api("/api/v1/ai/meetings?limit=40"); if (!id && ms.length) id = ms[0].id; showMeeting(); return table(ms, [{ h: "started", v: (m) => ts(m.started_at), l: true }, { h: "kind", v: "kind", l: true }, { h: "status", v: (m) => tag(m.status, m.status === "OPEN" ? "" : "") }, { h: "action", v: (m) => m.final_action ? tag(m.final_action) : "—" }, { h: "abort", v: (m) => m.abort_reason || "", l: true }, { h: "₹", v: (m) => f(m.cost_inr) }, { h: "", v: (m) => el("button", { class: m.id === id ? "pri" : "", onclick: () => { location.hash = "#/04/" + m.id; } }, "Open") }]); }, { tight: true, empty: "No committee meetings yet", tools: [meetingBtn()] });
   async function showMeeting() {
     if (!id) return; const cur = id;
     detail.replaceChildren(panel("Committee " + short(cur, 14), "/ai/meetings/{id} · summary computed by backend", async () => {
@@ -376,7 +544,7 @@ V["04"] = (id) => {
         el("div", { class: "ph", style: "border-top:1px solid var(--ln)" }, el("span", { class: "pt" }, "Transcript"), el("span", { class: "ps" }, `meeting ${ts(d.meeting.started_at)} → ${ts(d.meeting.ended_at)} · ${d.meeting.llm_calls ?? "—"} calls · ₹${f(d.meeting.cost_inr)}`)), el("div", { style: "padding:0 9px" }, tr));
     }));
   }
-  return [grid("c3", el("div", { class: "pn" }, list), el("div", { class: "pn s2" }, detail)), panel("Pending Human Approvals", "/ai/recommendations", async () => recTable(await api("/api/v1/ai/recommendations?status=PENDING_HUMAN")), { tight: true, empty: "nothing awaiting approval" })];
+  return [grid("c3", el("div", { class: "pn" }, list), el("div", { class: "pn s2" }, detail)), panel("Pending human approvals", "/ai/recommendations", async () => recTable(await api("/api/v1/ai/recommendations?status=PENDING_HUMAN")), { tight: true, empty: "Nothing is waiting for approval" })];
 };
 V["05"] = () => [grid("c4",
   panel("Model Routing", "/ai/budget", async () => { const b = await api("/api/v1/ai/budget"), r = b.routing; return kv([["Provider", b.provider_live ? "LIVE" : "OFFLINE", "am sm"], ["CIO tier", r.current_tier_for_cio, "am sm"], ["Specialist tier", r.current_tier_for_specialists, "am sm"], ["Downgrade at", pct(r.specialists_downgrade_at, 0)], ["All fast at", pct(r.all_fast_at, 0)], ["Hard stop at", pct(r.stop_at, 0)]]); }, { cls: "s4 sall" })),
@@ -388,7 +556,7 @@ V["06"] = () => {
   const sid = el("input", { placeholder: "strategy id" }), hist = el("div");
   const exp = el("input", { placeholder: "experiment id" }), note = el("input", { placeholder: "note" }), rbS = el("input", { placeholder: "strategy id" }), rbV = el("input", { placeholder: "to version id" });
   return [grid("c2",
-    panel("Strategies", "/research/strategies", async () => table(await api("/api/v1/research/strategies"), [{ h: "id", v: (s) => el("button", { onclick: () => { sid.value = s.id; loadHist(); } }, short(s.id, 12)), l: true }, { h: "name", v: "name", l: true }, { h: "versions", v: "versions" }, { h: "latest", v: "latest_version" }, { h: "active", v: (s) => s.active_version_id ? tag(short(s.active_version_id, 10), "am") : "—" }, { h: "created", v: (s) => ts(s.created_at), l: true }]), { tight: true, empty: "no strategies" }),
+    panel("Strategies", "/research/strategies", async () => table(await api("/api/v1/research/strategies"), [{ h: "id", v: (s) => el("button", { onclick: () => { sid.value = s.id; loadHist(); } }, short(s.id, 12)), l: true }, { h: "name", v: "name", l: true }, { h: "versions", v: "versions" }, { h: "latest", v: "latest_version" }, { h: "active", v: (s) => s.active_version_id ? tag(short(s.active_version_id, 10)) : "—" }, { h: "created", v: (s) => ts(s.created_at), l: true }]), { tight: true, empty: "No strategies have been saved", cta: { label: "Create a version", on: () => spec.focus() } }),
     panel("Version History", "/research/strategies/{id}", async () => hist.childNodes.length ? hist : state("EMPTY", "pick a strategy"), { live: false, tools: [sid, el("button", { onclick: () => loadHist() }, "Load")] }),
     panel("New Strategy Version", "POST /research/strategies · approver", async () => el("div", { class: "frm" }, spec, parent, el("button", { class: "pri", onclick: () => { let j; try { j = JSON.parse(spec.value); } catch { toast("spec is not valid JSON", true); return; } act(() => post("/api/v1/research/strategies", { spec: j, parent_version_id: parent.value || null }), "version created"); } }, "Create version")), { live: false }),
     panel("Promote / Rollback", "admin · audited", async () => el("div", {}, el("div", { class: "frm" }, exp, note, el("button", { class: "pri", onclick: () => act(() => post(`/api/v1/research/experiments/${encodeURIComponent(exp.value)}/promote`, { note: note.value || null }), "promoted") }, "Promote")), el("div", { class: "frm", style: "margin-top:6px" }, rbS, rbV, el("button", { class: "dng", onclick: () => act(() => post(`/api/v1/research/strategies/${encodeURIComponent(rbS.value)}/rollback`, { to_version_id: rbV.value, note: note.value || null }), "rolled back") }, "Rollback")), el("div", { class: "mu", style: "margin-top:6px" }, "Promotion requires passed holdout and paper validation (enforced by the lab).")), { live: false }))];
@@ -401,23 +569,23 @@ V["07"] = () => {
     panel("Run Experiment", "POST /research/experiments · 60/20/20 · walk-forward · cost stress", async () => el("div", {}, el("div", { class: "frm" }, ver, ds, el("label", {}, gaps, "allow gaps"), el("button", { class: "pri", onclick: () => act(() => post("/api/v1/research/experiments", { version_id: ver.value, dataset_id: ds.value, allow_gaps: gaps.checked }), "experiment complete") }, "Run")),
       el("div", { class: "frm", style: "margin-top:6px" }, eid, hds, el("button", { onclick: () => act(() => post(`/api/v1/research/experiments/${encodeURIComponent(eid.value)}/holdout?dataset_id=${encodeURIComponent(hds.value)}`), "holdout evaluated (once only)") }, "Open holdout (once)"), el("button", { onclick: () => act(() => post(`/api/v1/research/experiments/${encodeURIComponent(eid.value)}/paper-validation`), "paper validation evaluated") }, "Paper validation"))), { live: false }),
     panel("Dataset Coverage", "/research/coverage", async () => table(await api("/api/v1/research/coverage"), [{ h: "und", v: "underlying", l: true }, { h: "class", v: "class", l: true }, { h: "gran", v: "granularity" }, { h: "from", v: (r) => String(r.from).slice(0, 10) }, { h: "to", v: (r) => String(r.to).slice(0, 10) }, { h: "status", v: (r) => tag(r.status) }, { h: "missing", v: (r) => nil(r.missing_pct) ? "—" : f(r.missing_pct, 2) + "%" }]), { tight: true, empty: "no datasets" })),
-    panel("Experiments", "/research/experiments", async () => table(await api("/api/v1/research/experiments"), [{ h: "id", v: (r) => short(r.id, 12), l: true }, { h: "version", v: (r) => short(r.strategy_version_id, 10), l: true }, { h: "dataset", v: (r) => short(r.dataset_id, 10), l: true }, { h: "status", v: (r) => tag(r.status, /PASS/.test(r.status) ? "up" : /FAIL/.test(r.status) ? "dn" : "am") }, { h: "stages", v: stages, l: true }, { h: "manifest", v: (r) => short(r.manifest_sha256, 10) }, { h: "created", v: (r) => ts(r.created_at), l: true }]), { tight: true, empty: "no experiments" }),
+    panel("Experiments", "/research/experiments", async () => table(await api("/api/v1/research/experiments"), [{ h: "id", v: (r) => short(r.id, 12), l: true }, { h: "version", v: (r) => short(r.strategy_version_id, 10), l: true }, { h: "dataset", v: (r) => short(r.dataset_id, 10), l: true }, { h: "status", v: (r) => tag(r.status, /PASS/.test(r.status) ? "up" : /FAIL/.test(r.status) ? "dn" : "") }, { h: "stages", v: stages, l: true }, { h: "manifest", v: (r) => short(r.manifest_sha256, 10) }, { h: "created", v: (r) => ts(r.created_at), l: true }]), { tight: true, empty: "No experiments have been run", cta: { label: "Run an experiment", on: () => ver.focus() } }),
     panel("Option-Premium Backtests", "/research/option-backtests · after full Indian charges", async () => table(await api("/api/v1/research/option-backtests"), [{ h: "id", v: (r) => short(r.id, 12), l: true }, { h: "data", v: (r) => tag(r.data_class, r.data_class === "SIMULATED" ? "dn" : "am") }, { h: "trades", v: (r) => int(r.metrics.trades) }, { h: "net ₹", v: (r) => pnl(r.metrics.net_pnl) }, { h: "charges ₹", v: (r) => f(r.metrics.charges) }, { h: "win", v: (r) => pct(r.metrics.win_rate) }, { h: "max dd", v: (r) => f(r.metrics.max_drawdown) }, { h: "metrics", v: (r) => compact(r.metrics), l: true, w: true }]), { tight: true, empty: "no backtests" })];
 };
-V["08"] = () => [panel("Pre-registered Predictions", "/ai/predictions · outcomes resolved deterministically", async () => table(await api("/api/v1/ai/predictions?limit=300"), [{ h: "created", v: (r) => ts(r.created_at), l: true }, { h: "agent", v: "agent_id", l: true }, { h: "und", v: "underlying_key", l: true }, { h: "dir", v: (r) => tag(r.direction, r.direction === "UP" ? "up" : r.direction === "DOWN" ? "dn" : "") }, { h: "conf", v: "confidence" }, { h: "horizon", v: (r) => r.horizon_min + "m" }, { h: "ref", v: (r) => f(r.ref_value) }, { h: "resolve at", v: (r) => ts(r.resolve_at), l: true }, { h: "realized", v: (r) => f(r.realized_value) }, { h: "ret", v: (r) => el("span", { class: sgn(r.signed_return) }, pct(r.signed_return, 3)) }, { h: "hit", v: (r) => nil(r.hit) ? tag("PENDING") : tag(r.hit ? "HIT" : "MISS", r.hit ? "up" : "dn") }, { h: "brier", v: (r) => f(r.brier, 4) }, { h: "mode", v: (r) => tag(r.mode, r.mode === "REPLAY" ? "" : "am") }]), { tight: true, empty: "no predictions yet" })];
+V["08"] = () => [panel("Pre-registered Predictions", "/ai/predictions · outcomes resolved deterministically", async () => table(await api("/api/v1/ai/predictions?limit=300"), [{ h: "created", v: (r) => ts(r.created_at), l: true }, { h: "agent", v: "agent_id", l: true }, { h: "und", v: "underlying_key", l: true }, { h: "dir", v: (r) => tag(r.direction, r.direction === "UP" ? "up" : r.direction === "DOWN" ? "dn" : "") }, { h: "conf", v: "confidence" }, { h: "horizon", v: (r) => r.horizon_min + "m" }, { h: "ref", v: (r) => f(r.ref_value) }, { h: "resolve at", v: (r) => ts(r.resolve_at), l: true }, { h: "realized", v: (r) => f(r.realized_value) }, { h: "ret", v: (r) => el("span", { class: sgn(r.signed_return) }, pct(r.signed_return, 3)) }, { h: "hit", v: (r) => nil(r.hit) ? tag("Pending") : tag(r.hit ? "Hit" : "Miss", r.hit ? "up" : "dn") }, { h: "brier", v: (r) => f(r.brier, 4) }, { h: "mode", v: (r) => tag(r.mode) }]), { tight: true, empty: "No predictions have been registered", cta: { label: "Open the committee", href: "#/04" } })];
 V["09"] = () => [grid("c4", panel("Account", "/paper/portfolio · paper engine (charges deducted)", async () => { const p = await api("/api/v1/paper/portfolio"); return kv([["Equity", inr(p.equity)], ["Cash", inr(p.cash)], ["Day P&L", pnl(p.day_pnl)], ["Unrealized", pnl(p.unrealized)], ["Realized net", pnl(p.realized_net)], ["Open risk", inr(p.open_risk)], ["Consec. losses", int(p.consecutive_losses)], ["Ledger events", int(p.ledger_events)]]); }, { cls: "s2" }),
-    panel("Equity Curve", "/paper/equity-curve · closed trades", async () => { const e = await api("/api/v1/paper/equity-curve"); return e.points.length ? el("div", {}, equitySvg(e.points, e.starting_capital), el("div", { class: "mono mu" }, `start ${inr(e.starting_capital)} → ${inr(e.points[e.points.length - 1].equity)}`)) : state("EMPTY", "no closed trades"); }, { cls: "s2" })),
+    panel("Equity Curve", "/paper/equity-curve · closed trades", async () => { const e = await api("/api/v1/paper/equity-curve"); return e.points.length ? el("div", {}, equitySvg(e.points, e.starting_capital), el("div", { class: "mono mu" }, `start ${inr(e.starting_capital)} → ${inr(e.points[e.points.length - 1].equity)}`)) : state("EMPTY", "No closed paper trades yet"); }, { cls: "s2" })),
   panel("Positions", "paper engine marks at executable bid", async () => { const p = await api("/api/v1/paper/portfolio"); return table(p.positions, [{ h: "symbol", v: "symbol", l: true }, { h: "instrument", v: (r) => `${r.underlying} ${r.expiry || ""} ${f(r.strike, 0)} ${r.option_type}`, l: true }, { h: "side", v: (r) => tag(r.side) }, { h: "state", v: (r) => tag(r.state) }, { h: "qty", v: (r) => `${int(r.qty_open)}/${int(r.qty_entered)}` }, { h: "entry", v: (r) => f(r.avg_entry) }, { h: "ltp", v: (r) => el("span", { class: r.mark_stale ? "mu3" : "", title: r.mark_stale ? "stale mark" : "" }, f(r.mark)) }, { h: "sl", v: (r) => f(r.stop_loss) }, { h: "target", v: (r) => r.targets.map((t) => (t.done ? "✓" : "") + f(t.price)).join(" ") }, { h: "unreal", v: (r) => pnl(r.unrealized) }, { h: "real gross", v: (r) => pnl(r.realized_gross) }, { h: "charges", v: (r) => inr(r.charges) },
-    { h: "", v: (r) => el("button", { class: "dng", onclick: () => dialog("Close paper position " + r.symbol, [el("div", { class: "mu" }, "Sends a PAPER exit order to the simulator. No broker is involved.")], [el("button", { class: "dng", onclick: () => { closeDlg(); act(() => post(`/api/v1/paper/positions/${encodeURIComponent(r.id)}/close`), "paper exit submitted"); } }, "Close")]) }, "Close") }]); }, { tight: true, empty: "no open positions" }),
+    { h: "", v: (r) => el("button", { class: "dng", onclick: () => dialog("Close paper position " + r.symbol, [el("div", { class: "mu" }, "Sends a PAPER exit order to the simulator. No broker is involved.")], [el("button", { class: "dng", onclick: () => { closeDlg(); act(() => post(`/api/v1/paper/positions/${encodeURIComponent(r.id)}/close`), "paper exit submitted"); } }, "Close")]) }, "Close") }]); }, { tight: true, empty: "No open paper positions", cta: { label: "Review the committee", href: "#/04" } }),
   grid("c2", panel("Working Orders", "paper simulator", async () => table((await api("/api/v1/paper/portfolio")).working_orders, [{ h: "id", v: (r) => short(r.id, 10), l: true }, { h: "purpose", v: "purpose", l: true }, { h: "side", v: (r) => tag(r.side) }, { h: "qty", v: "quantity" }, { h: "filled", v: "filled_qty" }, { h: "limit", v: (r) => f(r.limit_price) }, { h: "status", v: (r) => tag(r.status, "am") }, { h: "submitted", v: (r) => ts(r.submitted_at), l: true }, { h: "expires", v: (r) => ts(r.expires_at), l: true }]), { tight: true, empty: "no working orders" }),
     panel("Order Blotter · Closed Trades", "/paper/trades", async () => table([...(await api("/api/v1/paper/trades"))].reverse(), [{ h: "closed", v: (r) => ts(r.closed_at), l: true }, { h: "und", v: "underlying_key", l: true }, { h: "sec", v: "security_id" }, { h: "qty", v: "quantity" }, { h: "entry", v: (r) => f(r.avg_entry) }, { h: "exit", v: (r) => f(r.avg_exit) }, { h: "gross", v: (r) => pnl(r.gross_pnl) }, { h: "charges", v: (r) => inr(r.charges) }, { h: "net", v: (r) => pnl(r.net_pnl) }, { h: "reason", v: "exit_reason", l: true }]), { tight: true, empty: "no closed trades" }))];
 V["09"].wm = true;
 V["10"] = () => [grid("c2", panel("Performance After Costs", "/paper/analytics", async () => { const a = await api("/api/v1/paper/analytics"); return kv([["Trades", int(a.trades)], ["Win rate", pct(a.win_rate, 1)], ["Net P&L", pnl(a.net_pnl)], ["Gross P&L", pnl(a.gross_pnl)], ["Charges", inr(a.charges)], ["Expectancy", pnl(a.expectancy)], ["Avg win", pnl(a.avg_win)], ["Avg loss", pnl(a.avg_loss)], ["Max drawdown", inr(a.max_drawdown)], ["Max DD %", pct(a.max_drawdown_pct)]]); }),
-    panel("Equity Path", "/paper/equity-curve", async () => { const e = await api("/api/v1/paper/equity-curve"); return e.points.length ? equitySvg(e.points, e.starting_capital) : state("EMPTY", "no closed trades"); })),
+    panel("Equity Path", "/paper/equity-curve", async () => { const e = await api("/api/v1/paper/equity-curve"); return e.points.length ? equitySvg(e.points, e.starting_capital) : state("EMPTY", "No closed paper trades yet", { label: "Open paper trading", href: "#/09" }); })),
   grid("c2", panel("By Underlying", "/paper/analytics", async () => { const a = await api("/api/v1/paper/analytics"); return table(Object.entries(a.by_underlying), [{ h: "underlying", v: (r) => r[0], l: true }, { h: "trades", v: (r) => r[1].trades }, { h: "net", v: (r) => pnl(r[1].net_pnl) }, { h: "charges", v: (r) => inr(r[1].charges) }]); }, { tight: true, empty: "no trades" }),
     panel("By Exit Reason", "/paper/analytics", async () => { const a = await api("/api/v1/paper/analytics"); return table(Object.entries(a.by_exit_reason), [{ h: "reason", v: (r) => r[0], l: true }, { h: "trades", v: (r) => r[1].trades }, { h: "net", v: (r) => pnl(r[1].net_pnl) }, { h: "charges", v: (r) => inr(r[1].charges) }]); }, { tight: true, empty: "no trades" }))];
 V["11"] = () => { const mode = el("select", {}, ["LIVE", "REPLAY"].map((m) => el("option", { value: m }, m)));
-  const p = panel("Agent Leaderboard", "/ai/leaderboard · ranked only with sufficient n", async () => { const lb = await api("/api/v1/ai/leaderboard?mode=" + mode.value); return el("div", {}, table(lb.agents, [{ h: "rank", v: (r) => r.rank ?? "—" }, { h: "agent", v: "name", l: true }, { h: "n", v: "n" }, { h: "hit", v: (r) => pct(r.hit_rate, 1) }, { h: "wilson lb", v: (r) => pct(r.hit_rate_wilson_lb, 1) }, { h: "brier", v: (r) => f(r.brier, 4) }, { h: "ic", v: (r) => f(r.ic_spearman, 3) }, { h: "follow", v: (r) => f(r.follow_ratio, 2) }, { h: "", v: (r) => r.provisional ? tag("PROVISIONAL") : tag("RANKED", "am") }]) || state("EMPTY", "no scored agents"), el("div", { class: "mu", style: "padding:6px 9px" }, `min n ${lb.min_n_for_rank} · unscored: ${lb.unscored_agents.join(", ") || "none"}`)); }, { tight: true, tools: [mode] });
+  const p = panel("Agent Leaderboard", "/ai/leaderboard · ranked only with sufficient n", async () => { const lb = await api("/api/v1/ai/leaderboard?mode=" + mode.value); return el("div", {}, table(lb.agents, [{ h: "rank", v: (r) => r.rank ?? "—" }, { h: "agent", v: "name", l: true }, { h: "n", v: "n" }, { h: "hit", v: (r) => pct(r.hit_rate, 1) }, { h: "wilson lb", v: (r) => pct(r.hit_rate_wilson_lb, 1) }, { h: "brier", v: (r) => f(r.brier, 4) }, { h: "ic", v: (r) => f(r.ic_spearman, 3) }, { h: "follow", v: (r) => f(r.follow_ratio, 2) }, { h: "", v: (r) => r.provisional ? tag("Provisional") : tag("Ranked") }]) || state("EMPTY", "No scored agents yet", { label: "Open predictions", href: "#/08" }), el("div", { class: "mu", style: "padding:6px 9px" }, `min n ${lb.min_n_for_rank} · unscored: ${lb.unscored_agents.join(", ") || "none"}`)); }, { tight: true, tools: [mode] });
   mode.addEventListener("change", () => p.refresh()); return [p]; };
 V["12"] = () => [grid("c4", panel("Live Recorder", "/system/status", async () => { const s = await api("/api/v1/system/status"), r = s.market_data.recorder, d = s.database || {}; return kv([["Snapshots (proc)", int(r.snapshots)], ["Failures", int(r.failures), r.failures ? "dn" : ""], ["Snapshots (db)", int(d.recorded_snapshots)], ["Last snapshot", ts(d.last_snapshot_at), "sm"]]); }, { cls: "s2" }),
     panel("Replay", "feature engine replay (look-ahead safe)", async () => el("div", { class: "mu" }, "Replay runs server-side over recorded snapshots and approved datasets (scripts and lab). REPLAY-mode predictions are kept separate from LIVE on the leaderboard (11)."), { cls: "s2", live: false })),
@@ -439,7 +607,7 @@ V["15"] = () => { const on = el("input", { type: "checkbox" }), fl = el("input",
     panel("Kill Switch", "POST /admin/kill-switch · admin", async () => el("div", { class: "frm" }, el("label", {}, on, "engage"), el("label", {}, fl, "flatten paper positions"), nt, el("button", { class: "dng", onclick: () => act(() => post("/api/v1/admin/kill-switch", { on: on.checked, flatten: fl.checked, note: nt.value || null }), "kill switch updated") }, "Apply")), { live: false }),
     panel("Grok Budget Limit", "POST /ai/budget · admin · server refuses > ₹3,000", async () => el("div", { class: "frm" }, lim, el("label", {}, unf, "unfreeze month"), bn, el("button", { class: "pri", onclick: () => { const v = Number(lim.value); if (!(v > 0 && v <= HARD_CAP)) { toast("limit must be 1–3000", true); return; } act(() => post("/api/v1/ai/budget", { hard_limit_inr: v, unfreeze: unf.checked, note: bn.value || null }), "budget updated"); } }, "Set")), { live: false }),
     panel("Scoring", "POST /ai/scoring/run · admin", async () => el("div", { class: "frm" }, el("button", { onclick: () => act(() => post("/api/v1/ai/scoring/run"), "scoring run complete") }, "Resolve predictions & score"), el("span", { class: "mu" }, "Deterministic; no LLM calls.")), { live: false }),
-    panel("Session Key", "this tab only (sessionStorage)", async () => el("div", { class: "frm" }, el("button", { onclick: keyDialog }, "Change key"), el("button", { class: "dng", onclick: () => { key = ""; sessionStorage.removeItem("doi_key"); refreshAll(); } }, "Forget key")), { live: false }),
+    panel("Session Key", "this tab only (sessionStorage)", async () => el("div", { class: "frm" }, el("button", { onclick: keyDialog }, "Change key"), el("button", { class: "dng", onclick: () => { key = ""; sessionStorage.removeItem("doi_key"); gate = "unknown"; refreshAll(); } }, "Forget key")), { live: false }),
     panel("Safety Guarantees", "enforced by backend", async () => el("div", {}, ["No live broker execution route exists; the API has no order route outside the paper simulator.", "AI agents cannot submit orders. Recommendations wait for a human approver, then the deterministic RiskGate re-checks before the paper engine.", "Grok spend is reserved before each call and capped in the database (₹3,000/month hard limit).", "Kill switch persists across restarts and halts polling, AI meetings and new paper orders."].map((t) => el("div", { class: "cl" }, tag("ENFORCED", "am"), " ", t))), { live: false }))]; };
 
 async function saveSecret(name, label, v) {
@@ -515,25 +683,31 @@ V.settings = () => {
   function showOnce(r) { const box = el("input", { value: r.token, readonly: true, style: "width:100%" });
     dialog("New API key — copy it now", [el("div", { class: "dn" }, "Shown once. The server stores only a hash."), box, el("div", { class: "mu" }, r.id)], [el("button", { class: "pri", onclick: () => { navigator.clipboard && navigator.clipboard.writeText(r.token).then(() => toast("copied"), () => { box.select(); }); } }, "Copy")]); setTimeout(() => box.select(), 0); }
   return [setupWizard(secure), keysPanel, apiKeys, grid("c2",
-    panel("This Browser", "sessionStorage · this tab only", async () => el("div", { class: "frm" }, el("span", { class: "mu" }, S.who ? `signed in as ${S.who.actor} (${S.who.role})` : "no valid key in this tab"), el("button", { onclick: keyDialog }, "Change key"), el("button", { class: "dng", onclick: () => { key = ""; sessionStorage.removeItem("doi_key"); refreshAll(); } }, "Forget key")), { live: false }),
+    panel("This Browser", "sessionStorage · this tab only", async () => el("div", { class: "frm" }, el("span", { class: "mu" }, S.who ? `signed in as ${S.who.actor} (${S.who.role})` : "no valid key in this tab"), el("button", { onclick: keyDialog }, "Change key"), el("button", { class: "dng", onclick: () => { key = ""; sessionStorage.removeItem("doi_key"); gate = "unknown"; refreshAll(); } }, "Forget key")), { live: false }),
     panel("Fixed Safety Settings", "not editable here", async () => kv([["Live broker execution", "DISABLED", "dn sm"], ["Grok monthly cap", "₹3,000 (Administration)", "am sm"], ["Mode", "RESEARCH + PAPER", "sm"], ["Order routes", "paper simulator only", "sm"]]), { live: false }))];
 };
 
 // ---------- router / boot
-function keyDialog() { const i = el("input", { type: "password", placeholder: "API key", autocomplete: "off" }); dialog("API key (kept in this tab only)", [i, el("div", { class: "mu" }, "Stored in sessionStorage; sent only as a Bearer header to this origin.")], [el("button", { class: "pri", onclick: () => { key = i.value.trim(); sessionStorage.setItem("doi_key", key); closeDlg(); S.und = null; refreshAll(); show(); } }, "Use key")]); setTimeout(() => i.focus(), 0); }
+function keyDialog() { const i = el("input", { type: "password", placeholder: "API key", autocomplete: "off" }); dialog("API key (kept in this tab only)", [i, el("div", { class: "mu" }, "Stored in sessionStorage; sent only as a Bearer header to this origin.")], [el("button", { class: "pri", onclick: () => { key = i.value.trim(); if (key) sessionStorage.setItem("doi_key", key); else sessionStorage.removeItem("doi_key"); closeDlg(); S.und = null; refreshAll(); show(); } }, "Use key")]); setTimeout(() => i.focus(), 0); }
 function show() {
-  const [sec = "01", arg] = location.hash.replace(/^#\/?/, "").split("/");
-  const id = sec === "settings" || SECTIONS.some(([n]) => n === sec) ? sec : "01";
+  const { id, arg } = route();
   for (const a of $("nav").querySelectorAll("a")) a.classList.toggle("act", a.dataset.s === id);
+  for (const g of $("nav").querySelectorAll(".mode")) g.classList.toggle("on", (g.dataset.items || "").split(",").includes(id));
   LIVE = [];
-  const name = id === "settings" ? "Settings & Keys" : SECTIONS.find(([n]) => n === id)[1];
-  const body = V[id](arg);
-  $("main").replaceChildren(el("div", { class: "sh" }, el("h1", {}, el("span", {}, id === "settings" ? "⚙" : id), name), el("div", { class: "ctl" }, el("span", { class: "paper" }, "PAPER MODE"), el("button", { onclick: refreshAll }, "↻ Refresh"))), ...body);
-  $("wm").style.display = V[id].wm ? "flex" : "none";
-  if (V[id].after) V[id].after();
+  const name = id === "settings" ? "Settings & Keys" : id === "signals" ? "Strong calls" : SECTIONS.find(([n]) => n === id)[1];
+  const locked = needsLock() && !isPublic(id) && id !== "01";
+  const body = locked ? [lockCard()] : V[id](arg);
+  $("main").replaceChildren(el("div", { class: "sh" }, el("h1", {}, el("span", { class: "mode-k" }, modeOf(id)), name), el("div", { class: "ctl" }, el("span", { class: "paper" }, "Paper only"), el("button", { onclick: refreshAll }, "Refresh"))), ...body);
+  $("wm").style.display = !locked && V[id].wm ? "flex" : "none";
+  if (!locked && V[id].after) V[id].after();
 }
-for (const [n, t] of SECTIONS) $("nav").append(el("a", { href: "#/" + n, "data-s": n, title: t }, el("span", { class: "nn" }, n), el("span", { class: "nl" }, t)));
-$("nav").append(el("a", { href: "#/settings", "data-s": "settings", title: "Settings & Keys", style: "margin-top:auto;border-top:1px solid var(--ln)" }, el("span", { class: "nn" }, "⚙"), el("span", { class: "nl" }, "Settings & Keys")));
+for (const [mode, items] of NAV) {
+  $("nav").append(el("div", { class: "mode", "data-items": items.map(([n]) => n).join(",") }, mode));
+  for (const [n, t, short] of items) {
+    const full = n === "settings" ? "Settings & Keys" : n === "signals" ? "Strong calls" : SECTIONS.find(([id]) => id === n)[1];
+    $("nav").append(el("a", { href: "#/" + n, "data-s": n, title: full }, el("span", { class: "nn" }, short), el("span", { class: "nl" }, t)));
+  }
+}
 $("rail").addEventListener("click", () => $("nav").classList.toggle("c"));
 $("h-user").addEventListener("click", keyDialog);
 $("h-set").addEventListener("click", () => { location.hash = "#/settings"; });

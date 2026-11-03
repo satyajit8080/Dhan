@@ -88,7 +88,7 @@ def _underlying(rt: Runtime, key: str, *, require_live: bool = True) -> Underlyi
 def _upstream(e: Exception) -> HTTPException:
     if isinstance(e, TokenRejected):
         return HTTPException(503, "Dhan token rejected or expired; re-authenticate")
-    if isinstance(e, (CircuitOpen, RateLimited, UpstreamError, UpstreamTimeout)):
+    if isinstance(e, CircuitOpen | RateLimited | UpstreamError | UpstreamTimeout):
         return HTTPException(503, f"Dhan unavailable: {type(e).__name__}")
     if isinstance(e, SchemaError):
         return HTTPException(502, f"Dhan payload rejected: {e}")

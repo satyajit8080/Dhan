@@ -11,7 +11,7 @@ from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel, Field
 
 from doi.ai.agents import AGENTS
-from doi.ai.repository import list_meetings, list_recommendations, meeting_detail
+from doi.ai.repository import list_meetings, list_recommendations, list_strong_calls, meeting_detail
 from doi.ai.service import AIWorker, approve_recommendation, human_request_event, reject_recommendation
 from doi.app.security import requires
 from doi.core.auth import Principal
@@ -142,6 +142,13 @@ async def meeting(request: Request, meeting_id: str, who: Principal = Depends(re
     d = jsonable_encoder(d)
     d["summary"] = summarize(d)
     return d
+
+
+@router.get("/strong-calls")
+async def strong_calls(request: Request, who: Principal = Depends(requires("viewer"))):
+    """Committee-verified strong paper calls only. Nothing here places a broker order."""
+    rt = _ai(request)
+    return jsonable_encoder(await asyncio.to_thread(list_strong_calls, rt.ai.store))
 
 
 @router.get("/recommendations")

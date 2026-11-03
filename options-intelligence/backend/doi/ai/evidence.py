@@ -203,7 +203,7 @@ def evidence_numbers(view: Mapping[str, dict]) -> list[float]:
     for _, v in _leaves(dict(view)):
         if isinstance(v, bool):
             continue
-        if isinstance(v, (int, float)) and math.isfinite(v):
+        if isinstance(v, int | float) and math.isfinite(v):
             nums.append(float(v))
         # Numbers embedded in strings (hashes, dates, ids) are NOT evidence: they would
         # otherwise make arbitrary digits look traceable.
@@ -283,7 +283,7 @@ def validate_output(
         nums: list[float] = []
         if isinstance(v, bool):
             continue
-        if isinstance(v, (int, float)):
+        if isinstance(v, int | float):
             nums = [float(v)]
         elif isinstance(v, str):
             nums = [float(x.replace(",", "")) for x in _NUM.findall(v)]

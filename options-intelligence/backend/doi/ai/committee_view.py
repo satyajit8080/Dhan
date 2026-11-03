@@ -9,6 +9,55 @@ from doi.ai.agents import AGENTS
 _DIR = {"BULL": "UP", "BEAR": "DOWN", "NEUTRAL": "FLAT"}
 
 
+# A strong call is a paper BUY the committee has already filtered. Confidence below this
+# stays a plain bullish/bearish label and never surfaces as a trade signal.
+STRONG_CONFIDENCE = 4
+
+
+def strong_call(d: dict) -> dict | None:
+    """One committee-verified strong paper call, or None.
+
+    The meeting must have finished as RECOMMEND_PAPER with CIO confidence at least
+    STRONG_CONFIDENCE, no risk, contrarian, or compliance veto, and a risk-gate
+    approval. CE is included only for an up view and PE only for a down view.
+    The paper engine buys the option; this does not create an order.
+    """
+    summary = d.get("summary") or summarize(d)
+    rec = d.get("recommendation")
+    if not rec or summary.get("final_action") != "RECOMMEND_PAPER":
+        return None
+    if summary.get("label") not in ("STRONG BULLISH", "STRONG BEARISH"):
+        return None
+    conf = summary.get("cio_confidence")
+    if not isinstance(conf, int) or isinstance(conf, bool) or conf < STRONG_CONFIDENCE:
+        return None
+    vetoes = summary.get("vetoes") or {}
+    if vetoes.get("risk_officer") or vetoes.get("contrarian") or vetoes.get("compliance_failed"):
+        return None
+    if (summary.get("size") or {}).get("risk_gate_approved") is not True:
+        return None
+    direction, opt = summary.get("direction"), str(rec.get("option_type") or "").upper()
+    if not ((direction == "UP" and opt == "CE") or (direction == "DOWN" and opt == "PE")):
+        return None
+    meeting = d.get("meeting") or {}
+    return {
+        "id": rec.get("id"),
+        "underlying": rec.get("underlying_key"),
+        "underlying_key": rec.get("underlying_key"),
+        "option_type": opt,
+        "side": "BUY",
+        "signal": f"BUY {opt}",
+        "confidence": conf,
+        "label": summary["label"],
+        "meeting_id": rec.get("meeting_id") or meeting.get("id"),
+        "recommendation_id": rec.get("id"),
+        "status": rec.get("status") or "PENDING_HUMAN",
+        "strike": rec.get("strike"),
+        "expiry": rec.get("expiry"),
+        "valid_until": rec.get("valid_until"),
+    }
+
+
 def summarize(d: dict) -> dict:
     latest: dict[str, dict] = {}
     for t in sorted(d.get("turns") or [], key=lambda x: x.get("seq") or 0):

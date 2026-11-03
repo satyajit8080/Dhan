@@ -86,6 +86,24 @@ def meeting_detail(store, mid: str) -> dict | None:
     }
 
 
+def list_strong_calls(store) -> list[dict]:
+    """Recommendations the committee has already verified as strong paper buys."""
+    from doi.ai.committee_view import strong_call, summarize
+
+    out = []
+    for rec in list_recommendations(store):
+        detail = meeting_detail(store, rec.get("meeting_id"))
+        if not detail or not detail.get("recommendation"):
+            continue
+        row = dict(detail["recommendation"])
+        row.setdefault("status", rec.get("status") or "PENDING_HUMAN")
+        detail = {**detail, "recommendation": row, "summary": summarize(detail)}
+        call = strong_call(detail)
+        if call:
+            out.append(call)
+    return out
+
+
 def list_recommendations(store, status: str | None = None) -> list[dict]:
     if isinstance(store, PgMeetingStore):
         q, a = "SELECT * FROM ai_recommendations", ()
