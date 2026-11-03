@@ -72,6 +72,11 @@ class SecretStore:
             return None
         except PermissionError:
             raise SecretDirError(_perm_hint(self.dir)) from None
+        except IsADirectoryError:
+            raise SecretDirError(
+                f"{self.path(name)} is a folder, not a file (left by an old Docker mount). "
+                f"On the server run: sudo rmdir secrets/{SPECS[name].filename} && docker compose restart api ai-worker"
+            ) from None
 
     def write(self, name: str, value: str) -> Path:
         spec = SPECS.get(name)

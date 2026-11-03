@@ -138,3 +138,10 @@ def test_unreadable_secrets_dir_gives_actionable_503(pg_dsn, tmp_path, monkeypat
         assert r.status_code == 503 and "chown" in r.json()["detail"], path
     s = Settings.from_env({"SECRETS_DIR": str(tmp_path)})  # startup survives
     assert s.secrets_dir == tmp_path
+
+
+def test_token_path_is_a_folder_gives_actionable_503(pg_dsn, tmp_path):
+    _, c, k = _rt(pg_dsn, tmp_path)
+    (tmp_path / "secrets" / "dhan.token").mkdir(parents=True)
+    r = c.get("/api/v1/admin/settings", headers=k["admin"])
+    assert r.status_code == 503 and "rmdir" in r.json()["detail"]
