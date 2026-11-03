@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import csv
 import io
+import re
 import shutil
 import urllib.request
 from dataclasses import dataclass, field
@@ -38,6 +39,12 @@ def _pick(row: dict, *names: str) -> str:
     return ""
 
 
+def _underlying(tsym: str) -> str:
+    """'BAJAJ-AUTO-Nov2026-9000-CE' -> 'BAJAJ-AUTO' (symbols can contain hyphens)."""
+    m = re.match(r"^(.+?)-[A-Za-z]{3}\d{4}-", tsym)
+    return m.group(1) if m else tsym.split("-")[0]
+
+
 def _normalise(row: dict) -> dict:
     """Map either master format (detailed or compact) to one shape."""
     tsym = _pick(row, "SEM_TRADING_SYMBOL", "SYMBOL_NAME")
@@ -48,7 +55,7 @@ def _normalise(row: dict) -> dict:
         "instrument": _pick(row, "INSTRUMENT", "SEM_INSTRUMENT_NAME"),
         "series": _pick(row, "SERIES", "SEM_SERIES"),
         "underlying_id": _pick(row, "UNDERLYING_SECURITY_ID"),
-        "underlying": _pick(row, "UNDERLYING_SYMBOL") or tsym.split("-")[0],
+        "underlying": _pick(row, "UNDERLYING_SYMBOL") or _underlying(tsym),
         "tsym": tsym,
         "lot": _pick(row, "LOT_SIZE", "SEM_LOT_UNITS"),
         "expiry": _pick(row, "SM_EXPIRY_DATE", "SEM_EXPIRY_DATE")[:10],

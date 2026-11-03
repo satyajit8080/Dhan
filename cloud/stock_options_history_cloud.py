@@ -61,7 +61,7 @@ import urllib.request
 from datetime import date, datetime, timedelta, timezone
 
 PROGRAM = "stock-options-history"
-VERSION = "1.0"
+VERSION = "1.1"
 BASE_URL = "https://api.dhan.co/v2"
 ROLLING_PATH = "/charts/rollingoption"
 INSTRUMENT_FILE = "https://images.dhan.co/api-data/api-scrip-master.csv"
@@ -141,7 +141,8 @@ def resolve_instruments(symbols):
             if row.get("SEM_SEGMENT") == "E" and row.get("SEM_SERIES") == "EQ" and sym in wanted:
                 eq.setdefault(sym, row.get("SEM_SMST_SECURITY_ID", "").strip())
             elif row.get("SEM_INSTRUMENT_NAME") == "OPTSTK":
-                u = sym.split("-")[0]
+                m = re.match(r"^(.+?)-[A-Za-z]{3}\d{4}-", sym)
+                u = m.group(1) if m else sym.split("-")[0]
                 if u in wanted:
                     exp = (row.get("SEM_EXPIRY_DATE") or "")[:10]
                     try:
@@ -181,7 +182,7 @@ class Client:
         self.calls = 0
 
     def rolling(self, body):
-        """Returns (status, http_status, error_code, data_or_None, attempts)."""
+        """Returns (status, http_status, error_code, error_message, data_or_None, attempts)."""
         data = json.dumps(body).encode()
         err, ecode, http_status = "", "", None
         for attempt in range(1, 7):
@@ -207,9 +208,11 @@ class Client:
                 parsed = json.loads(raw.decode("utf-8", "replace")) if raw else {}
             except ValueError:
                 parsed = {}
-            ecode = ""
+            ecode, emsg = "", ""
             if isinstance(parsed, dict):
                 ecode = str(parsed.get("errorCode") or parsed.get("internalErrorCode") or "").upper()
+                emsg = REDACT(str(parsed.get("errorMessage") or parsed.get("internalErrorMessage")
+                                  or ""))[:300]
             if ecode in PLAN_CODES:
                 raise Stop("Data API plan missing (%s): enable the Data API in Dhan web" % ecode)
             if http_status in (401, 403) or ecode in AUTH_CODES:
@@ -220,16 +223,57 @@ class Client:
                 time.sleep(min(60.0, 2.0 ** attempt) + random.random())
                 continue
             if ecode in NO_DATA_CODES:
-                return "no_data", http_status, ecode, None, attempt
+                return "no_data", http_status, ecode, emsg, None, attempt
             if (http_status or 0) >= 400:
-                return "failed", http_status, ecode, None, attempt
+                return "failed", http_status, ecode, emsg, None, attempt
             payload = parsed.get("data") if isinstance(parsed, dict) and "data" in parsed else parsed
             if not isinstance(payload, dict):
-                return "failed", http_status, "BAD_ENVELOPE", None, attempt
+                return "failed", http_status, "BAD_ENVELOPE", "", None, attempt
             side = payload.get("ce") or payload.get("pe") or {}
             ok = isinstance(side, dict) and bool(side.get("timestamp"))
-            return ("ok" if ok else "no_data"), http_status, ecode, payload, attempt
-        return "failed", http_status, err or ecode, None, 6
+            return ("ok" if ok else "no_data"), http_status, ecode, "", payload, attempt
+        return "failed", http_status, err or ecode, "", None, 6
+
+
+# Request formats tried by the start-up probe, first accepted one is used for the run.
+# (Dhan answered HTTP 400 DH-905 to every request of the first cloud run.)
+SENSEX_FIELDS = ["open", "high", "low", "close", "oi", "spot", "strike"]   # format the SENSEX run uses
+VARIANTS = [
+    {"name": "int-interval/all-fields", "intInterval": True, "fields": FIELDS},
+    {"name": "int-interval/no-iv", "intInterval": True, "fields": [f for f in FIELDS if f != "iv"]},
+    {"name": "int-interval/no-volume", "intInterval": True, "fields": [f for f in FIELDS if f != "volume"]},
+    {"name": "int-interval/sensex-fields", "intInterval": True, "fields": SENSEX_FIELDS},
+    {"name": "str-interval/all-fields", "intInterval": False, "fields": FIELDS},
+    {"name": "str-interval/sensex-fields", "intInterval": False, "fields": SENSEX_FIELDS},
+]
+
+
+def make_body(variant, sec, strike, opt, a, b):
+    body = {"securityId": str(sec), "exchangeSegment": "NSE_FNO", "instrument": "OPTSTK",
+            "expiryFlag": "MONTH", "expiryCode": int(EXPIRY_CODE), "strike": strike,
+            "drvOptionType": opt, "requiredData": list(variant["fields"]),
+            "fromDate": a.isoformat(), "toDate": b.isoformat(),
+            "interval": int(INTERVAL) if variant["intInterval"] else str(INTERVAL)}
+    return body
+
+
+def probe(client, sec, sym, wins):
+    """Try each request format on one recent window. Returns the first Dhan accepts."""
+    a, b = wins[-2] if len(wins) > 1 else wins[-1]
+    accepted_empty = None
+    for v in VARIANTS:
+        st, http_status, ecode, emsg, payload, att = client.rolling(make_body(v, sec, "ATM", "CALL", a, b))
+        bars = 0
+        if isinstance(payload, dict) and isinstance(payload.get("ce"), dict):
+            bars = len(payload["ce"].get("timestamp") or [])
+        log("info", "probe", variant=v["name"], symbol=sym, fromDate=a.isoformat(),
+            toDate=b.isoformat(), status=st, httpStatus=http_status, errorCode=ecode,
+            errorMessage=emsg, bars=bars)
+        if st == "ok":
+            return v
+        if st == "no_data" and accepted_empty is None:
+            accepted_empty = v
+    return accepted_empty
 
 
 def trim(leg, keep_minutes):
@@ -297,6 +341,25 @@ def history():
 
     total = sum(1 for s in symbols if inst[s]["security_id"]) * len(wins) * len(STRIKES) * 2
     done, t0 = 0, time.monotonic()
+    s = next((x for x in symbols if inst[x]["security_id"]), None)
+    if s is None:
+        log("error", "history_stopped", reason="no symbol resolved to a security id")
+        return 2
+    try:
+        variant = probe(client, inst[s]["security_id"], s, wins)
+    except Stop as e:
+        log("error", "history_stopped", reason=str(e))
+        return 3
+    if variant is None:
+        log("error", "history_stopped", reason="Dhan refused every request format in the probe "
+            "(see the probe lines above for its error messages). Nothing else was requested.")
+        return 2
+    missing = [f for f in FIELDS if f not in variant["fields"]]
+    log("info", "probe_selected", variant=variant["name"], fieldsNotRequested=missing,
+        note="fields not requested stay blank in the CSV" if missing else "all fields requested")
+    emit("STKMETA", "format", {"variant": variant["name"], "fields": variant["fields"],
+                               "intInterval": variant["intInterval"]})
+    bad_windows = 0
     try:
         for si, s in enumerate(symbols, 1):
             sec = inst[s]["security_id"]
@@ -307,16 +370,13 @@ def history():
                 legs = []
                 for strike in STRIKES:
                     for opt in ("CALL", "PUT"):
-                        body = {"exchangeSegment": "NSE_FNO", "interval": str(INTERVAL),
-                                "securityId": str(sec), "instrument": "OPTSTK",
-                                "expiryFlag": "MONTH", "expiryCode": EXPIRY_CODE,
-                                "strike": strike, "drvOptionType": opt, "requiredData": FIELDS,
-                                "fromDate": a.isoformat(), "toDate": b.isoformat()}
-                        st, http_status, ecode, payload, att = client.rolling(body)
+                        body = make_body(variant, sec, strike, opt, a, b)
+                        st, http_status, ecode, emsg, payload, att = client.rolling(body)
                         side = "ce" if opt == "CALL" else "pe"
                         leg = (payload or {}).get(side) if isinstance(payload, dict) else None
                         rec = {"strike": strike, "side": side, "status": st, "httpStatus": http_status,
-                               "errorCode": ecode, "attempts": att, "request": body}
+                               "errorCode": ecode, "errorMessage": emsg, "attempts": att,
+                               "request": body}
                         if isinstance(leg, dict):
                             n = len(leg.get("timestamp") or [])
                             kept = trim(leg, keep) if KEEP == "SNAPSHOTS" else leg
@@ -332,6 +392,12 @@ def history():
                     window=a.isoformat(), pct=round(100.0 * done / max(total, 1), 1),
                     reqPerS=round(rate, 2), etaMin=round((total - done) / max(rate, 1e-6) / 60, 1),
                     failed=sum(1 for l in legs if l["status"] == "failed"))
+                rejected = [l for l in legs if l["status"] == "failed" and (l["httpStatus"] or 0) < 500]
+                bad_windows = bad_windows + 1 if len(rejected) == len(legs) else 0
+                if bad_windows >= 3:
+                    raise Stop("Dhan rejected every request in 3 windows in a row (%s %s: %s)"
+                               % (rejected[0]["httpStatus"], rejected[0]["errorCode"],
+                                  rejected[0]["errorMessage"]))
             log("info", "symbol_done", symbol=s, barsKept=rows)
     except Stop as e:
         log("error", "history_stopped", reason=str(e), resumeWith="START_AT_SYMBOL = %r" % s)

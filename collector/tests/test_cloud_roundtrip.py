@@ -20,7 +20,27 @@ MASTER = (b"SEM_EXM_EXCH_ID,SEM_SEGMENT,SEM_SMST_SECURITY_ID,SEM_INSTRUMENT_NAME
           b"SEM_OPTION_TYPE,SEM_TICK_SIZE,SEM_EXPIRY_FLAG,SEM_EXCH_INSTRUMENT_TYPE,SEM_SERIES,SM_SYMBOL_NAME\n"
           b"NSE,E,2885,EQUITY,,RELIANCE,1,Reliance,,,,0.1,,ES,EQ,RELIANCE\n"
           b"NSE,D,90001,OPTSTK,0,RELIANCE-Nov2099-1500-CE,500,R,2099-11-24 14:30:00,1500,CE,0.05,M,OP,,R\n"
-          b"NSE,E,7777,EQUITY,,NOTFNO,1,N,,,,0.1,,ES,EQ,NOTFNO\n")
+          b"NSE,E,7777,EQUITY,,NOTFNO,1,N,,,,0.1,,ES,EQ,NOTFNO\n"
+          b"NSE,E,16669,EQUITY,,BAJAJ-AUTO,1,B,,,,0.1,,ES,EQ,BAJAJ-AUTO\n"
+          b"NSE,D,90009,OPTSTK,0,BAJAJ-AUTO-Nov2099-9000-CE,75,B,2099-11-24 14:30:00,9000,CE,0.05,M,OP,,B\n")
+
+
+class StrictDhan(FakeDhan):
+    """Like the real first cloud run: a string interval gets HTTP 400 DH-905."""
+
+    def __init__(self, reject_all=False, **kw):
+        super().__init__(**kw)
+        self.reject_all = reject_all
+        self.bodies = []
+
+    def __call__(self, url, body, headers, timeout):
+        import json as _j
+        req = _j.loads(body)
+        self.bodies.append(req)
+        if self.reject_all or isinstance(req.get("interval"), str):
+            self.calls += 1
+            return 400, b'{"errorType":"Input_Exception","errorCode":"DH-905","errorMessage":"Missing required fields, bad values for parameters etc."}'
+        return super().__call__(url, body, headers, timeout)
 
 
 class _Resp:
@@ -57,7 +77,7 @@ def load_cloud(fake):
     mod.time.sleep = lambda s: None
     mod.CLIENT_ID, mod.ACCESS_TOKEN = "1100000000", TOKEN
     mod.FROM_DATE, mod.TO_DATE = "2026-03-01", "2026-04-15"
-    mod.SYMBOLS = ["RELIANCE", "NOTFNO"]
+    mod.SYMBOLS = ["RELIANCE", "NOTFNO", "BAJAJ-AUTO"]
     mod.REQUESTS_PER_SECOND = 1000
     return mod
 
@@ -67,7 +87,8 @@ class CloudRoundTrip(unittest.TestCase):
         import urllib.request as ur
         orig = ur.urlopen
         try:
-            mod = load_cloud(FakeDhan(fail_first=[429]))
+            fake = StrictDhan(fail_first=[429])
+            mod = load_cloud(fake)
             buf = io.StringIO()
             with contextlib.redirect_stdout(buf):
                 rc = mod.main()
@@ -77,6 +98,9 @@ class CloudRoundTrip(unittest.TestCase):
         self.assertEqual(rc, 0, logtext[-2000:])
         self.assertNotIn(TOKEN, logtext)
         self.assertNotIn("1100000000", logtext)
+        self.assertIn('"event": "probe_selected", "variant": "int-interval/all-fields"', logtext)
+        self.assertTrue(all(isinstance(b["interval"], int) for b in fake.bodies[1:]))
+        self.assertNotIn("BAJAJ-AUTO (NOT_IN_FNO)", logtext)
 
         with tempfile.TemporaryDirectory() as d:
             logf = Path(d) / "run.log"
@@ -87,13 +111,29 @@ class CloudRoundTrip(unittest.TestCase):
                 self.assertEqual(decode_cloud_log.main([str(logf), "--data-dir", str(data)]), 0)
             out = data / "exports" / "2026-03-01_2026-04-15"
             rows = list(csv.DictReader((out / "all_symbols.csv").open(encoding="utf-8")))
-            self.assertEqual(len(rows), 31 * 2 * 7)
-            self.assertTrue(all(r["lot_size"] == "500" for r in rows))
+            self.assertEqual(len([r for r in rows if r["symbol"] == "RELIANCE"]), 31 * 2 * 7)
+            self.assertEqual({r["lot_size"] for r in rows if r["symbol"] == "BAJAJ-AUTO"}, {"75"})
+            self.assertTrue(all(r["lot_size"] == "500" for r in rows if r["symbol"] == "RELIANCE"))
             self.assertIn("09:29", {r["time"] for r in rows if r["date"] == GAP_DAY.isoformat()})
             self.assertFalse([r for r in rows if r["date"] == HOLIDAY.isoformat()])
             report = (out / "validation_report.md").read_text(encoding="utf-8")
             self.assertIn("NOT_IN_FNO", report)
             self.assertTrue((data / "exports" / "bull50_stock_options_2026-03-01_2026-04-15.zip").exists())
+
+    def test_stops_when_every_format_is_refused(self):
+        import urllib.request as ur
+        orig = ur.urlopen
+        try:
+            fake = StrictDhan(reject_all=True)
+            mod = load_cloud(fake)
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                rc = mod.main()
+        finally:
+            ur.urlopen = orig
+        self.assertEqual(rc, 2)
+        self.assertEqual(fake.calls, len(mod.VARIANTS))      # only the probe, nothing else
+        self.assertIn("Missing required fields", buf.getvalue())
 
     def test_cloud_source_avoids_blocked_patterns(self):
         src = CLOUD.read_text(encoding="utf-8")

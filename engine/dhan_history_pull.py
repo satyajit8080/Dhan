@@ -31,6 +31,7 @@ import csv
 import io
 import json
 import os
+import re
 import sys
 import tempfile
 import time
@@ -174,7 +175,7 @@ def load_scrip_master(cache: Path) -> tuple[dict[str, str], dict[str, int]]:
             if seg == "E" and row.get("SEM_SERIES") == "EQ":
                 ids[sym] = row["SEM_SMST_SECURITY_ID"].strip()
             elif seg == "D" and inst == "OPTSTK":
-                under = sym.split("-")[0]
+                under = re.match(r"^(.+?)-[A-Za-z]{3}\d{4}-", sym).group(1) if re.match(r"^(.+?)-[A-Za-z]{3}\d{4}-", sym) else sym.split("-")[0]
                 try:
                     lots.setdefault(under, int(float(row.get("SEM_LOT_UNITS") or 0)))
                 except ValueError:

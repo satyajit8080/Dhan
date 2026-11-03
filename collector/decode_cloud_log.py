@@ -66,7 +66,10 @@ def main(argv=None) -> int:
     a = ap.parse_args(argv)
 
     records, broken = read_records(a.logs)
-    metas = [v for (k, _), v in records.items() if k == "STKMETA"]
+    metas = [v for (k, _), v in records.items() if k == "STKMETA" and "from" in v]
+    for (k, _), v in records.items():
+        if k == "STKMETA" and "variant" in v:
+            print(f"request format used by the cloud run: {v['variant']} (fields {', '.join(v['fields'])})")
     if not metas:
         print("no BX|STKMETA record found — is this a log of stock_options_history_cloud.py?")
         return 2
