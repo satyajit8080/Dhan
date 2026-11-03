@@ -56,6 +56,7 @@ class Runtime:
     controls: ControlStore | None = None
     ai: Any = None  # doi.ai.service.AIComponents
     lab: Any = None  # doi.research.lab.Lab (created on first use)
+    settings: Any = None  # doi.core.config.Settings used to build this runtime
     _paper_service: PaperService | None = field(default=None, repr=False)
 
     @property
@@ -158,7 +159,7 @@ async def download_master(url: str, timeout_s: float = 90.0) -> InstrumentMaster
 
 async def build_runtime(settings: Settings) -> Runtime:
     configs = load_index_configs(settings.strategy_config_dir)
-    rt = Runtime(configs=configs)
+    rt = Runtime(configs=configs, settings=settings)
     await init_paper(rt, settings, datetime.now(UTC))
     from doi.ai.service import build_ai
 

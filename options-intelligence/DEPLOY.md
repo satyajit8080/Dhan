@@ -102,3 +102,10 @@ python -m doi.ai.worker                                                  # AI wo
 | Update | `git pull && docker compose up -d --build` |
 
 The detailed guide is `docs/phase7-deployment.md`, and the current verification status is `docs/phase8-validation.md`.
+
+## Keys from the dashboard
+Open `/dashboard` → **⚙ Settings & Keys** (admin key required, HTTPS only):
+- Dhan client ID, Dhan access token, Grok API key: write-only, saved as 0600 files in `SECRETS_DIR` (mount it as a volume). The Dhan token and an existing Grok key apply live; the Dhan client ID or a first Grok key need `docker compose restart api ai-worker`.
+- Dashboard API keys: create (shown once), list, revoke. The last admin key cannot be revoked.
+- Every change is in the audit log without the value. Values set in `.env` override saved files.
+- One-time on the server: `mkdir -p secrets && sudo chown 10001:10001 secrets && chmod 700 secrets` (the container runs as uid 10001).

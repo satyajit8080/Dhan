@@ -299,4 +299,7 @@ def create_app(settings: Settings | None = None, runtime: Runtime | None = None)
     from doi.app.views_routes import router as views_router
 
     app.include_router(views_router)
+    from doi.app.settings_routes import router as settings_router
+
+    app.include_router(settings_router)
     return app

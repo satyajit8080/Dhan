@@ -80,6 +80,10 @@ class XaiClient:
         self._key, self._base, self._timeout = api_key, base_url.rstrip("/"), timeout_s
         self._client = client or httpx.AsyncClient()
 
+    def set_key(self, api_key: SecretStr) -> None:
+        """Rotate the key in place (Settings page); in-flight requests keep the old header."""
+        self._key = api_key
+
     async def chat(self, *, model: str, messages: list[dict], max_tokens: int, temperature: float) -> dict:
         # max_tokens is deprecated; max_completion_tokens bounds visible output only (official REST docs)
         body = {"model": model, "messages": messages, "max_completion_tokens": max_tokens, "temperature": temperature}

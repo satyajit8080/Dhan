@@ -29,7 +29,7 @@ header>*{display:flex;align-items:center;padding:0 9px;border-right:1px solid va
 .meter{width:80px;height:5px;background:var(--ln);position:relative}.meter>i{position:absolute;left:0;top:0;bottom:0;background:var(--am)}.meter.stop>i{background:var(--dn)}
 .sp{flex:1 1 0;min-width:0;border-right:0;padding:0}
 header>div:last-of-type{border-right:0}
-#h-user{max-width:150px;overflow:hidden;text-overflow:ellipsis}
+#h-user{max-width:120px;overflow:hidden;text-overflow:ellipsis}
 @media(max-width:1750px){.hx{display:none}}
 #ks{flex-shrink:0;font:700 10.5px var(--mono);padding:0 14px;border:0;border-left:1px solid var(--ln);background:transparent;letter-spacing:.1em}
 #ks.on{background:var(--dn);color:#fff}#ks.off{color:var(--dn)}
@@ -106,6 +106,7 @@ footer{grid-column:1/3;border-top:1px solid var(--ln);background:var(--pn2);disp
   <div title="Grok spend this month vs hard cap (enforced server-side)"><span class="lbl">AI Budget</span><span id="h-bud" class="n">—</span><span id="h-meter" class="meter"><i style="width:0"></i></span></div>
   <div class="sp"></div>
   <div><button id="h-ntf" title="Notifications">ALERTS <span id="h-ntfn" class="n">0</span></button></div>
+  <div><button id="h-set" title="Settings &amp; keys">⚙</button></div>
   <div><button id="h-user" title="API key and identity">KEY</button></div>
   <button id="ks" class="off" title="Kill switch (admin)">KILL SWITCH —</button>
 </header>
@@ -441,22 +442,57 @@ V["15"] = () => { const on = el("input", { type: "checkbox" }), fl = el("input",
     panel("Session Key", "this tab only (sessionStorage)", async () => el("div", { class: "frm" }, el("button", { onclick: keyDialog }, "Change key"), el("button", { class: "dng", onclick: () => { key = ""; sessionStorage.removeItem("doi_key"); refreshAll(); } }, "Forget key")), { live: false }),
     panel("Safety Guarantees", "enforced by backend", async () => el("div", {}, ["No live broker execution route exists; the API has no order route outside the paper simulator.", "AI agents cannot submit orders. Recommendations wait for a human approver, then the deterministic RiskGate re-checks before the paper engine.", "Grok spend is reserved before each call and capped in the database (₹3,000/month hard limit).", "Kill switch persists across restarts and halts polling, AI meetings and new paper orders."].map((t) => el("div", { class: "cl" }, tag("ENFORCED", "am"), " ", t))), { live: false }))]; };
 
+V.settings = () => {
+  const secure = location.protocol === "https:" || ["localhost", "127.0.0.1"].includes(location.hostname);
+  const keysPanel = panel("Integration Keys", "/admin/settings · admin · write-only, stored server-side (0600)", async () => {
+    const st = await api("/api/v1/admin/settings");
+    const rows = st.items.map((it) => {
+      const inp = el("input", { type: "password", autocomplete: "new-password", spellcheck: "false", placeholder: it.configured ? "enter new value to replace" : "enter value", style: "width:260px" });
+      const save = el("button", { class: "pri", disabled: !secure, title: secure ? "" : "HTTPS required", onclick: async () => { const v = inp.value.trim(); if (!v) { toast("value is empty", true); return; } inp.value = "";
+        const r = await act(() => api("/api/v1/admin/settings/" + it.name, { method: "PUT", body: JSON.stringify({ value: v }) }), it.label + " saved"); if (r) toast(`${it.label}: ${r.applied === "live" ? "applied live" : "saved — restart api & ai-worker to apply"}${r.env_overrides_file ? " · NOTE: environment variable overrides this" : ""}`); } }, "Save");
+      const del = el("button", { class: "dng", disabled: !it.configured || it.source !== "file", onclick: () => dialog("Delete " + it.label, [el("div", { class: "mu" }, "Removes the saved file on the server. Environment variables are not affected.")], [el("button", { class: "dng", onclick: () => { closeDlg(); act(() => api("/api/v1/admin/settings/" + it.name, { method: "DELETE" }), "deleted"); } }, "Delete")]) }, "Delete");
+      const test = it.name === "xai_api_key" ? el("button", { disabled: !it.configured, onclick: async () => { const r = await act(() => post("/api/v1/admin/settings/xai_api_key/test"), "tested"); if (r) toast(r.ok ? "Grok key OK · " + r.models.length + " models (no spend)" : "Grok key failed: " + r.error, !r.ok); } }, "Test")
+        : it.name === "dhan_access_token" ? el("button", { disabled: !it.configured, onclick: async () => { try { const r = await api("/api/v1/market/expiries?underlying=NIFTY"); toast("Dhan OK · NIFTY expiries " + r.expiries.slice(0, 3).join(", ")); } catch (e) { toast("Dhan test failed: " + e.message, true); } } }, "Test") : null;
+      const state = [tag(it.configured ? "CONFIGURED" : "MISSING", it.configured ? "up" : "dn"), it.source ? tag("SRC " + it.source) : null, it.env_overrides_file ? tag("ENV OVERRIDES FILE", "am") : null,
+        it.token_state ? tag("TOKEN " + it.token_state, it.token_state === "valid" ? "up" : "dn") : null, it.ai_live === false && it.configured ? tag("AI OFF · RESTART/AI_ENABLED", "am") : null, it.market_data_active === false && it.configured ? tag("RESTART TO APPLY", "am") : null];
+      return { it, inp, save, del, test, state };
+    });
+    return el("div", {}, secure ? null : el("div", { class: "bn dn" }, "Not served over HTTPS — saving keys is disabled. Enable TLS on this domain first."),
+      table(rows, [{ h: "key", v: (r) => el("div", {}, el("div", {}, r.it.label), el("div", { class: "mu3", style: "font-family:var(--sans);white-space:normal;max-width:300px" }, r.it.help)), l: true },
+        { h: "status", v: (r) => el("span", { class: "frm" }, r.state), l: true }, { h: "fingerprint", v: (r) => r.it.fingerprint || "—" }, { h: "updated", v: (r) => ts(r.it.updated_at) }, { h: "expires", v: (r) => r.it.name === "dhan_access_token" ? ts(r.it.expires_at) : "" },
+        { h: "new value", v: (r) => el("span", { class: "frm" }, r.inp, r.save, r.test, r.del), l: true }]),
+      el("div", { class: "mu", style: "padding:6px 9px" }, "Values are never shown again after saving — only a fingerprint. Every change is recorded in the audit log without the value. ", st.restart_hint));
+  }, { tight: true, live: false });
+  const email = el("input", { placeholder: "email", type: "email" }), role = el("select", {}, ["viewer", "approver", "admin"].map((r) => el("option", { value: r }, r))), label = el("input", { placeholder: "label (e.g. phone)" });
+  const apiKeys = panel("Dashboard API Keys", "/admin/api-keys · admin", async () => el("div", {},
+    el("div", { class: "frm", style: "padding:6px 9px" }, email, role, label, el("button", { class: "pri", disabled: !secure, onclick: async () => { const r = await act(() => post("/api/v1/admin/api-keys", { email: email.value, role: role.value, label: label.value || null }), "key created"); if (r) showOnce(r); } }, "Create key")),
+    table(await api("/api/v1/admin/api-keys"), [{ h: "id", v: "id", l: true }, { h: "email", v: "email", l: true }, { h: "role", v: (k) => tag(k.role, k.role === "admin" ? "am" : "") }, { h: "label", v: (k) => k.label || "—", l: true }, { h: "created", v: (k) => ts(k.created_at), l: true }, { h: "last used", v: (k) => ts(k.last_used_at), l: true },
+      { h: "status", v: (k) => k.revoked_at ? tag("REVOKED") : tag("ACTIVE", "up") }, { h: "", v: (k) => k.revoked_at ? "" : el("button", { class: "dng", onclick: () => dialog("Revoke " + k.id, [el("div", { class: "mu" }, `${k.email} · ${k.role}. Anyone using this key loses access immediately.`)], [el("button", { class: "dng", onclick: () => { closeDlg(); act(() => post(`/api/v1/admin/api-keys/${encodeURIComponent(k.id)}/revoke`), "revoked"); } }, "Revoke")]) }, "Revoke") }]) || state("EMPTY", "no keys")), { tight: true, live: false });
+  function showOnce(r) { const box = el("input", { value: r.token, readonly: true, style: "width:100%" });
+    dialog("New API key — copy it now", [el("div", { class: "dn" }, "Shown once. The server stores only a hash."), box, el("div", { class: "mu" }, r.id)], [el("button", { class: "pri", onclick: () => { navigator.clipboard && navigator.clipboard.writeText(r.token).then(() => toast("copied"), () => { box.select(); }); } }, "Copy")]); setTimeout(() => box.select(), 0); }
+  return [keysPanel, apiKeys, grid("c2",
+    panel("This Browser", "sessionStorage · this tab only", async () => el("div", { class: "frm" }, el("span", { class: "mu" }, S.who ? `signed in as ${S.who.actor} (${S.who.role})` : "no valid key in this tab"), el("button", { onclick: keyDialog }, "Change key"), el("button", { class: "dng", onclick: () => { key = ""; sessionStorage.removeItem("doi_key"); refreshAll(); } }, "Forget key")), { live: false }),
+    panel("Fixed Safety Settings", "not editable here", async () => kv([["Live broker execution", "DISABLED", "dn sm"], ["Grok monthly cap", "₹3,000 (Administration)", "am sm"], ["Mode", "RESEARCH + PAPER", "sm"], ["Order routes", "paper simulator only", "sm"]]), { live: false }))];
+};
+
 // ---------- router / boot
 function keyDialog() { const i = el("input", { type: "password", placeholder: "API key", autocomplete: "off" }); dialog("API key (kept in this tab only)", [i, el("div", { class: "mu" }, "Stored in sessionStorage; sent only as a Bearer header to this origin.")], [el("button", { class: "pri", onclick: () => { key = i.value.trim(); sessionStorage.setItem("doi_key", key); closeDlg(); S.und = null; refreshAll(); show(); } }, "Use key")]); setTimeout(() => i.focus(), 0); }
 function show() {
   const [sec = "01", arg] = location.hash.replace(/^#\/?/, "").split("/");
-  const id = SECTIONS.some(([n]) => n === sec) ? sec : "01";
+  const id = sec === "settings" || SECTIONS.some(([n]) => n === sec) ? sec : "01";
   for (const a of $("nav").querySelectorAll("a")) a.classList.toggle("act", a.dataset.s === id);
   LIVE = [];
-  const name = SECTIONS.find(([n]) => n === id)[1];
+  const name = id === "settings" ? "Settings & Keys" : SECTIONS.find(([n]) => n === id)[1];
   const body = V[id](arg);
-  $("main").replaceChildren(el("div", { class: "sh" }, el("h1", {}, el("span", {}, id), name), el("div", { class: "ctl" }, el("span", { class: "paper" }, "PAPER MODE"), el("button", { onclick: refreshAll }, "↻ Refresh"))), ...body);
+  $("main").replaceChildren(el("div", { class: "sh" }, el("h1", {}, el("span", {}, id === "settings" ? "⚙" : id), name), el("div", { class: "ctl" }, el("span", { class: "paper" }, "PAPER MODE"), el("button", { onclick: refreshAll }, "↻ Refresh"))), ...body);
   $("wm").style.display = V[id].wm ? "flex" : "none";
   if (V[id].after) V[id].after();
 }
 for (const [n, t] of SECTIONS) $("nav").append(el("a", { href: "#/" + n, "data-s": n, title: t }, el("span", { class: "nn" }, n), el("span", { class: "nl" }, t)));
+$("nav").append(el("a", { href: "#/settings", "data-s": "settings", title: "Settings & Keys", style: "margin-top:auto;border-top:1px solid var(--ln)" }, el("span", { class: "nn" }, "⚙"), el("span", { class: "nl" }, "Settings & Keys")));
 $("rail").addEventListener("click", () => $("nav").classList.toggle("c"));
 $("h-user").addEventListener("click", keyDialog);
+$("h-set").addEventListener("click", () => { location.hash = "#/settings"; });
 $("h-ntf").addEventListener("click", () => { $("ntf").style.display = $("ntf").style.display === "block" ? "none" : "block"; });
 $("ks").addEventListener("click", () => { const want = !killOn(); const fl = el("input", { type: "checkbox" }), nt = el("input", { placeholder: "note (audited)", maxlength: 500 });
   dialog(want ? "ENGAGE KILL SWITCH" : "RELEASE KILL SWITCH", [el("div", { class: "mu" }, want ? "Halts chain polling, AI meetings and new paper orders. Requires admin role." : "Resumes deterministic polling and paper engine. Requires admin role."), want ? el("label", { class: "frm" }, fl, "also flatten paper positions") : null, nt],

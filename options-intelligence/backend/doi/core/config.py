@@ -43,6 +43,7 @@ class Settings(BaseModel):
     llm_safety_buffer_inr: float = 150.0
     llm_fx_inr_per_usd: float = 90.0
     llm_tax_multiplier: float = 1.18
+    secrets_dir: Path = Path("./secrets")  # keys saved from the Settings page (0600 files)
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> Settings:
@@ -75,6 +76,16 @@ class Settings(BaseModel):
             "llm_safety_buffer_inr": "LLM_SAFETY_BUFFER_INR",
             "llm_fx_inr_per_usd": "LLM_FX_INR_PER_USD",
             "llm_tax_multiplier": "LLM_TAX_MULTIPLIER",
+            "secrets_dir": "SECRETS_DIR",
         }
         data = {f: env[k] for f, k in fields.items() if env.get(k)}
+        # Keys saved from the Settings page; environment variables take precedence.
+        from doi.core.secret_store import SecretStore
+
+        store = SecretStore(Path(data.get("secrets_dir", "./secrets")))
+        for field_name, secret in (("dhan_client_id", "dhan_client_id"), ("xai_api_key", "xai_api_key")):
+            if field_name not in data and (v := store.read(secret)):
+                data[field_name] = v
+        if "dhan_access_token" not in data and "dhan_token_file" not in data:
+            data["dhan_token_file"] = str(store.path("dhan_access_token"))
         return cls(**data)

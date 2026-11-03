@@ -5,7 +5,7 @@ COPY backend/doi ./doi
 COPY migrations /migrations
 COPY scripts/smoke_live.py /scripts/smoke_live.py
 ENV MIGRATIONS_DIR=/migrations
-RUN pip install --no-cache-dir . && useradd -r app
+RUN pip install --no-cache-dir . && useradd -r -u 10001 app
 USER app
 EXPOSE 8000
 # Migrations also run at start-up inside build_runtime (advisory-locked, idempotent).
