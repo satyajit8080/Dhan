@@ -4,6 +4,7 @@ COPY backend/pyproject.toml ./
 COPY backend/doi ./doi
 COPY migrations /migrations
 COPY scripts/smoke_live.py /scripts/smoke_live.py
+RUN chmod -R a+rX,go-w /app/doi /migrations /scripts
 ENV MIGRATIONS_DIR=/migrations
 RUN pip install --no-cache-dir . && useradd -r -u 10001 app
 USER app
