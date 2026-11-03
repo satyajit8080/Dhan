@@ -34,10 +34,11 @@ START_AT_DATE = ""                # resume: with START_AT_SYMBOL, skip that symb
 STRIKES = ["ATM-3", "ATM-2", "ATM-1", "ATM", "ATM+1", "ATM+2", "ATM+3"]   # Dhan max for stocks: +/-3
 EXPIRY_CODE = 1                   # 1 = near month (0 is refused by Dhan)
 INTERVAL = 1                      # minutes
-KEEP = "SNAPSHOTS"                # "SNAPSHOTS": keep only bars within KEEP_TOLERANCE_MIN of 09:30/15:20
-                                  # (values untouched, ~40x smaller log); "FULL": every 1-min bar
+KEEP = "SNAPSHOTS"                # "SNAPSHOTS": per leg and day keep only the LAST bar at or before each
+                                  # snapshot time, at most ASOF_WINDOW_MIN old (values untouched; stock
+                                  # options do not trade every minute). "FULL": every 1-min bar (huge log)
 SNAPSHOT_TIMES = ["09:30", "15:20"]
-KEEP_TOLERANCE_MIN = 2
+ASOF_WINDOW_MIN = 15
 REQUESTS_PER_SECOND = 4           # Dhan data APIs allow ~5/s
 MAX_REQUESTS = 95000              # stop after this many calls (Dhan ~100k/day)
 RECORD_CHUNK = 3000               # characters per log line
@@ -61,7 +62,7 @@ import urllib.request
 from datetime import date, datetime, timedelta, timezone
 
 PROGRAM = "stock-options-history"
-VERSION = "1.3"
+VERSION = "1.4"
 BASE_URL = "https://api.dhan.co/v2"
 ROLLING_PATH = "/charts/rollingoption"
 INSTRUMENT_FILE = "https://images.dhan.co/api-data/api-scrip-master.csv"
@@ -325,10 +326,19 @@ def probe(client, sec, sym, frm, to):
     return fmt
 
 
-def trim(leg, keep_minutes):
-    """Keep only bars at the snapshot minutes. Values are copied unchanged."""
+def trim(leg, targets):
+    """Per IST day and snapshot, keep the last bar in [target - ASOF_WINDOW_MIN, target].
+    Values are copied unchanged."""
     ts = leg.get("timestamp") or []
-    idx = [i for i, t in enumerate(ts) if (((int(t) + 19800) % 86400) // 60) in keep_minutes]
+    best = {}
+    for i, t in enumerate(ts):
+        t = int(t)
+        day, minute = (t + 19800) // 86400, ((t + 19800) % 86400) // 60
+        for target in targets:
+            if target - ASOF_WINDOW_MIN <= minute <= target:
+                if (day, target) not in best or t > int(ts[best[(day, target)]]):
+                    best[(day, target)] = i
+    idx = sorted(set(best.values()))
     out = {}
     for k, v in leg.items():
         if isinstance(v, list) and len(v) == len(ts):
@@ -366,11 +376,10 @@ def history():
     symbols = list(dict.fromkeys(s.strip().upper() for s in SYMBOLS if s.strip()))
     if START_AT_SYMBOL and START_AT_SYMBOL.upper() in symbols:
         symbols = symbols[symbols.index(START_AT_SYMBOL.upper()):]
-    keep = set()
+    keep = []
     for t in SNAPSHOT_TIMES:
         h, m = (int(x) for x in t.split(":"))
-        for d in range(-KEEP_TOLERANCE_MIN, KEEP_TOLERANCE_MIN + 1):
-            keep.add(h * 60 + m + d)
+        keep.append(h * 60 + m)
 
     try:
         inst = resolve_instruments(symbols)
@@ -407,7 +416,7 @@ def history():
             "windowDays": fmt["days"], "windowStep": fmt["step"], "inclusiveToDate": fmt["inclusive"],
             "windows": [[a.isoformat(), b.isoformat()] for a, b in wins],
             "interval": INTERVAL, "expiryCode": EXPIRY_CODE, "strikes": STRIKES, "keep": KEEP,
-            "snapshotTimes": SNAPSHOT_TIMES, "keepToleranceMin": KEEP_TOLERANCE_MIN,
+            "snapshotTimes": SNAPSHOT_TIMES, "keepToleranceMin": ASOF_WINDOW_MIN, "selection": "asof",
             "symbols": symbols, "format": fmt, "python": "%d.%d.%d" % tuple(sys.version_info[:3]),
             "orders": "NONE"}
     emit("STKMETA", "meta", meta)

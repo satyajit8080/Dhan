@@ -122,7 +122,9 @@ class CloudRoundTrip(unittest.TestCase):
             self.assertEqual(len([r for r in rows if r["symbol"] == "RELIANCE"]), 31 * 2 * 7)
             self.assertEqual({r["lot_size"] for r in rows if r["symbol"] == "BAJAJ-AUTO"}, {"75"})
             self.assertTrue(all(r["lot_size"] == "500" for r in rows if r["symbol"] == "RELIANCE"))
-            self.assertIn("09:29", {r["time"] for r in rows if r["date"] == GAP_DAY.isoformat()})
+            gap = [r for r in rows if r["date"] == GAP_DAY.isoformat() and r["time"] == "09:30"
+                   and r["symbol"] == "RELIANCE"]
+            self.assertEqual(len(gap), 7)              # 09:29 trades used as of 09:30
             self.assertFalse([r for r in rows if r["date"] == HOLIDAY.isoformat()])
             report = (out / "validation_report.md").read_text(encoding="utf-8")
             self.assertIn("NOT_IN_FNO", report)

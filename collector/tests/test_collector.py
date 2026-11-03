@@ -127,10 +127,10 @@ class EndToEnd(Base):
         keys = [(r["date"], r["time"], r["strike"]) for r in rows]
         self.assertEqual(len(keys), len(set(keys)), "duplicates in export")
         times = {r["time"] for r in rows}
-        self.assertLessEqual(times, {"09:30", "15:20", "09:29"})
-        # gap day: 09:30 missing -> nearest earlier bar 09:29, reported
-        gap = [r for r in rows if r["date"] == GAP_DAY.isoformat()]
-        self.assertIn("09:29", {r["time"] for r in gap})
+        self.assertEqual(times, {"09:30", "15:20"})
+        # gap day: no 09:30 bar -> as-of uses the 09:29 trade; row still labelled 09:30
+        gap = [r for r in rows if r["date"] == GAP_DAY.isoformat() and r["time"] == "09:30"]
+        self.assertTrue(gap and all(r["ce_ltp"] != "" and r["pe_ltp"] != "" for r in gap))
         self.assertEqual(len([r for r in rows if r["date"] == "2026-03-02"]), 14)
         # missing PE IV stays blank (never fabricated)
         nulls = [r for r in rows if r["date"] == NULL_IV_DAY.isoformat() and r["pe_iv"] == ""]
@@ -142,10 +142,11 @@ class EndToEnd(Base):
         self.assertEqual({r["expiry"] for r in rows if r["date"] == "2026-04-01"}, {"2026-04-28"})
 
         missing = (out / "missing_data.csv").read_text()
-        self.assertIn("SNAPSHOT_SUBSTITUTED", missing)
         self.assertIn("PE_IV_MISSING", missing)
         report = (out / "validation_report.md").read_text()
         self.assertIn("NOT_IN_FNO", report)
+        self.assertIn("| Legs priced from a trade before the snapshot minute | 14 /", report)
+        self.assertIn("oldest 1 min", report)
         self.assertIn("Moved for holidays: 2026-03-31→2026-03-30", report)
         summary = json.loads((out / "summary.json").read_text())
         self.assertLess(summary["median_expiry_straddle_pct"], config.EXPIRY_STRADDLE_MAX_PCT)
@@ -186,6 +187,30 @@ class EndToEnd(Base):
         fake2 = FakeDhan()
         self.run_with(fake2)
         self.assertEqual(fake2.calls, 1)
+
+
+class AsOf(unittest.TestCase):
+    """Stock options trade sparsely: the 09:30 value is each leg's last trade <= 09:30."""
+
+    def _rec(self, side, strike_label, bars):
+        ts = [int(datetime(2026, 3, 2, h, m, tzinfo=config.IST).timestamp()) for h, m, _ in bars]
+        leg = {"timestamp": ts, "close": [c for _, _, c in bars], "oi": [1] * len(bars),
+               "iv": [20] * len(bars), "volume": [1] * len(bars), "strike": [1000] * len(bars),
+               "spot": [1001] * len(bars)}
+        return {"status": "ok", "request": {"strike": strike_label},
+                "response": {"data": {side: leg}}}
+
+    def test_last_trade_at_or_before_snapshot(self):
+        from collector.assemble import build_symbol
+        recs = [self._rec("ce", "ATM", [(9, 10, 5.0), (9, 18, 6.0), (9, 31, 99.0)]),
+                self._rec("pe", "ATM", [(9, 10, 7.0)])]                # only 20 min old -> too old
+        rows, st = build_symbol("X", recs, ExpiryMapper(), 100, 15)
+        r = [x for x in rows if x["time"] == "09:30"]
+        self.assertEqual(len(r), 1)
+        self.assertEqual(r[0]["ce_ltp"], 6)            # 09:18 trade; 09:31 is after the snapshot
+        self.assertIsNone(r[0]["pe_ltp"])              # nothing within 15 min -> blank, reported
+        self.assertEqual(st.lag_max, 12)
+        self.assertIn("PE_LEG_MISSING", {i[2] for i in st.issues})
 
 
 class Units(unittest.TestCase):

@@ -245,7 +245,7 @@ def parse_args(argv=None):
     p.add_argument("--expiry-code", type=int, choices=[1, 2, 3], default=1,
                    help="1 = near month (default), 2 = next, 3 = far")
     p.add_argument("--tolerance", type=int, default=config.DEFAULT_TOLERANCE_MIN,
-                   help="minutes either side of 09:30/15:20 to look for a bar (0 = exact only)")
+                   help="as-of window: use each leg's last trade at most N min before 09:30/15:20 (0 = exact minute only)")
     p.add_argument("--holidays", help="optional file of NSE holiday dates YYYY-MM-DD")
     p.add_argument("--master", help="use this local instrument-master CSV instead of downloading")
     p.add_argument("--refresh-instruments", action="store_true")

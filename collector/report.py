@@ -51,8 +51,9 @@ def write_report(path: Path, *, frm: date, to: date, instruments: dict[str, Inst
     L = []
     L.append("# Bull50 stock-options history — validation report\n")
     L.append(f"Range **{frm} → {to}** (to is exclusive) · 1-min bars · ATM±3 CE/PE · "
-             f"snapshots {', '.join(t.strftime('%H:%M') for t in config.SNAPSHOTS)} IST "
-             f"(nearest bar within ±{tolerance} min) · source Dhan `/v2/charts/rollingoption`\n")
+             f"snapshots {', '.join(t.strftime('%H:%M') for t in config.SNAPSHOTS)} IST, as of: each "
+             f"leg's last trade at or before the snapshot, at most {tolerance} min old · source Dhan "
+             f"`/v2/charts/rollingoption`\n")
     L.append("All values are as returned by Dhan. Nothing is interpolated or filled; "
              "blanks in the CSV are data Dhan did not return.\n")
     L.append("## Overall\n")
@@ -64,7 +65,9 @@ def write_report(path: Path, *, frm: date, to: date, instruments: dict[str, Inst
           f"| Rows with every field present | {tot('complete_rows')} ({_pct(tot('complete_rows'), tot('rows'))}) |",
           f"| Snapshots found / expected | {tot('snapshots_found')} / {tot('snapshots_expected')} "
           f"({_pct(tot('snapshots_found'), tot('snapshots_expected'))}) |",
-          f"| Snapshots using a nearby minute | {tot('snapshots_substituted')} |",
+          f"| Legs priced from a trade before the snapshot minute | {tot('legs_lagged')} / "
+          f"{tot('legs_total')} ({_pct(tot('legs_lagged'), tot('legs_total'))}), oldest "
+          f"{max([st.lag_max for st in stats.values()] or [0])} min |",
           f"| Requests not yet fetched (failed or pending) | {n_pending} |",
           f"| Duplicate bars dropped | {tot('duplicates')} (conflicting: {tot('conflicts')}) |",
           f"| Duplicate rows dropped at export | {dedup_dropped} |",

@@ -31,7 +31,7 @@ MAX_YEARS = 5                                 # Dhan: up to 5 years back
 
 # Observations to extract (IST minute bars).
 SNAPSHOTS = (time(9, 30), time(15, 20))
-DEFAULT_TOLERANCE_MIN = 2                     # nearest bar within +/- N min if exact is missing
+DEFAULT_TOLERANCE_MIN = 15                    # as-of: last trade at most N min before the snapshot
 
 # Rate limiting. Dhan Data APIs: ~5 req/s, ~100k/day.
 DEFAULT_RPS = 4.0

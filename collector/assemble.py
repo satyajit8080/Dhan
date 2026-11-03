@@ -4,8 +4,9 @@ Rules:
   * Values come straight from Dhan. Nothing is interpolated, carried forward or
     filled: a missing price, OI, IV or volume stays blank and is reported.
   * ltp = the 1-minute bar's close.
-  * If the exact snapshot minute has no bar, the nearest bar within the tolerance
-    is used and its real time is written in the `time` column (and reported).
+  * Snapshots are "as of": each leg's last trade at or before 09:30 / 15:20, no older
+    than the tolerance (default 15 min). The `time` column is the snapshot time; how
+    stale the legs are is reported.
   * Duplicates (same symbol, minute, strike, side) are dropped; conflicting
     duplicates keep the first value and are counted.
 """
@@ -62,16 +63,34 @@ class SymbolStats:
     snapshots_expected: int = 0
     snapshots_found: int = 0
     snapshots_substituted: int = 0
+    legs_total: int = 0
+    legs_lagged: int = 0
+    lag_max: int = 0
     issues: list = field(default_factory=list)     # (date, snapshot, issue, detail)
     straddles: list = field(default_factory=list)  # (expiry, straddle_pct_of_spot)
 
 
+def _offset(rec: dict) -> Optional[int]:
+    label = ((rec.get("request") or {}).get("strike") or "")
+    if label == "ATM":
+        return 0
+    try:
+        return int(label[3:])
+    except ValueError:
+        return None
+
+
 def build_symbol(symbol: str, records: Iterable[dict], mapper: ExpiryMapper,
                  lot_size: Optional[int], tolerance_min: int) -> tuple[list[dict], SymbolStats]:
+    """As-of snapshots: for each day, snapshot time, rolling strike offset and side, take the
+    LAST bar at or before the snapshot minute, no older than `tolerance_min` minutes. That is
+    the price a trader saw at 09:30 / 15:20 (stock options do not trade every minute).
+    Values are copied unchanged; nothing is filled. The row's `time` is the snapshot time;
+    how stale each leg is goes into the stats."""
     st = SymbolStats(symbol)
     targets = _target_minutes()
-    keep_min = {t + d for t in targets for d in range(-tolerance_min, tolerance_min + 1)}
-    bars: dict[tuple[int, float], dict] = {}
+    window = {t: (t - tolerance_min, t) for t in targets}
+    picks: dict[tuple, tuple] = {}          # (day, target, offset, side) -> (ts, values)
     days: set[date] = set()
 
     for rec in records:
@@ -79,63 +98,81 @@ def build_symbol(symbol: str, records: Iterable[dict], mapper: ExpiryMapper,
             st.requests_no_data += 1
             continue
         st.requests_ok += 1
+        off = _offset(rec)
         data = (rec.get("response") or {}).get("data") or {}
         for side in ("ce", "pe"):
             leg = data.get(side) or {}
-            ts_list = leg.get("timestamp") or []
-            for i, ts in enumerate(ts_list):
+            for i, ts in enumerate(leg.get("timestamp") or []):
                 ts = int(ts)
-                days.add(_day(ts))
-                if _minute(ts) not in keep_min:
-                    continue
-                k = _val(leg, "strike", i)
-                if k is None:
-                    continue
-                bar = bars.setdefault((ts, float(k)), {})
-                if side + "_seen" in bar:
-                    same = all(bar.get(f"{side}_{out}") == _val(leg, src, i) for src, out in LEG_FIELDS)
-                    st.duplicates += 1
-                    st.conflicts += 0 if same else 1
-                    continue
-                bar[side + "_seen"] = True
-                for src, out in LEG_FIELDS:
-                    bar[f"{side}_{out}"] = _val(leg, src, i)
-                bar[side + "_spot"] = _val(leg, "spot", i)
-                st.bars_kept += 1
+                d, m = _day(ts), _minute(ts)
+                days.add(d)
+                for t, (lo, hi) in window.items():
+                    if not lo <= m <= hi:
+                        continue
+                    k = _val(leg, "strike", i)
+                    if k is None:
+                        continue
+                    vals = {"strike": float(k), "spot": _val(leg, "spot", i)}
+                    for src, out in LEG_FIELDS:
+                        vals[out] = _val(leg, src, i)
+                    key = (d, t, off, side)
+                    prev = picks.get(key)
+                    if prev is not None and prev[0] == ts:
+                        st.duplicates += 1
+                        st.conflicts += 0 if prev[1] == vals else 1
+                        continue
+                    st.bars_kept += 1
+                    if prev is None or ts > prev[0]:
+                        picks[key] = (ts, vals)
 
     if days:
         st.first_day, st.last_day = min(days).isoformat(), max(days).isoformat()
         st.days_with_data = len(days)
 
-    by_day: dict[date, dict[int, list]] = defaultdict(lambda: defaultdict(list))
-    for (ts, k), bar in bars.items():
-        by_day[_day(ts)][_minute(ts)].append((k, ts, bar))
+    by_snap: dict[tuple, list] = defaultdict(list)
+    for (d, t, off, side), (ts, vals) in picks.items():
+        by_snap[(d, t)].append((off, side, ts, vals))
 
     rows: list[dict] = []
     for d in sorted(days):
-        minutes = by_day.get(d, {})
         for t in targets:
             label = f"{t // 60:02d}:{t % 60:02d}"
             st.snapshots_expected += 1
-            chosen = _choose(minutes, t, tolerance_min)
-            if chosen is None:
+            got = by_snap.get((d, t))
+            if not got:
                 st.issues.append((d.isoformat(), label, "SNAPSHOT_MISSING",
-                                  f"no bar within +/-{tolerance_min} min"))
+                                  f"no trade in any leg from {tolerance_min} min before to {label}"))
                 continue
             st.snapshots_found += 1
-            if chosen != t:
-                st.snapshots_substituted += 1
-                st.issues.append((d.isoformat(), label, "SNAPSHOT_SUBSTITUTED",
-                                  f"used {chosen // 60:02d}:{chosen % 60:02d}"))
-            strikes = sorted(minutes[chosen], key=lambda x: x[0])
-            if len(strikes) < len(config.OFFSETS):
+            offsets = {off for off, _, _, _ in got}
+            if len(offsets) < len(config.OFFSETS):
                 st.issues.append((d.isoformat(), label, "STRIKES_INCOMPLETE",
-                                  f"{len(strikes)}/{len(config.OFFSETS)} strikes"))
+                                  f"{len(offsets)}/{len(config.OFFSETS)} rolling strikes traded"))
+            by_strike: dict[float, dict] = {}
+            latest = None
+            for off, side, ts, vals in got:
+                bar = by_strike.setdefault(vals["strike"], {})
+                if bar.get(side + "_seen") and bar[side + "_ts"] >= ts:
+                    continue                    # same strike reached via two offsets: keep newer
+                bar.update({side + "_seen": True, side + "_ts": ts, side + "_spot": vals["spot"]})
+                for _, out in LEG_FIELDS:
+                    bar[f"{side}_{out}"] = vals[out]
+                lag = t - _minute(ts)
+                st.legs_total += 1
+                if lag:
+                    st.legs_lagged += 1
+                    st.lag_max = max(st.lag_max, lag)
+                if latest is None or ts > latest[0]:
+                    latest = (ts, vals["spot"])
+            if any(t - _minute(ts) for _, _, ts, _ in got):
+                st.snapshots_substituted += 1
             expiry = mapper.expiry_for(d).isoformat()
             snap_rows = []
-            for k, ts, bar in strikes:
-                row = _row(symbol, d, chosen, expiry, k, bar, lot_size, st, label)
-                snap_rows.append(row)
+            for k in sorted(by_strike):
+                bar = by_strike[k]
+                if latest and latest[1] is not None:
+                    bar["spot_latest"] = latest[1]
+                snap_rows.append(_row(symbol, d, t, expiry, k, bar, lot_size, st, label))
             rows.extend(snap_rows)
             if t == targets[-1] and expiry == d.isoformat():
                 pct = _straddle_pct(snap_rows)
@@ -152,16 +189,6 @@ def _val(leg: dict, name: str, i: int):
     return arr[i]
 
 
-def _choose(minutes: dict, target: int, tol: int) -> Optional[int]:
-    if target in minutes:
-        return target
-    for d in range(1, tol + 1):
-        for m in (target - d, target + d):     # earlier bar wins a tie
-            if m in minutes:
-                return m
-    return None
-
-
 def _num(v):
     if v is None:
         return None
@@ -172,9 +199,12 @@ def _row(symbol, d, minute, expiry, k, bar, lot, st: SymbolStats, label) -> dict
     ce_spot, pe_spot = bar.get("ce_spot"), bar.get("pe_spot")
     if ce_spot is not None and pe_spot is not None and abs(ce_spot - pe_spot) > 0.01:
         st.spot_mismatch += 1
+    spot = bar.get("spot_latest")
+    if spot is None:
+        spot = ce_spot if ce_spot is not None else pe_spot
     row = {"date": d.isoformat(), "time": f"{minute // 60:02d}:{minute % 60:02d}",
            "symbol": symbol, "expiry": expiry, "strike": _num(k),
-           "spot": ce_spot if ce_spot is not None else pe_spot, "lot_size": lot}
+           "spot": spot, "lot_size": lot}
     complete = True
     for side in ("ce", "pe"):
         if not bar.get(side + "_seen"):

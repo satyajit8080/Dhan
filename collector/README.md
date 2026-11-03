@@ -43,10 +43,10 @@ The run starts with a probe that finds a request shape Dhan accepts. In practice
 to `toDate`, inclusive) with DH-905, despite its docs saying 30 days. So a full 5-year,
 60-stock pull is about 657k requests: about 7 days at the ~95k/day budget, one run a day.
 
-By default the cloud run keeps only the bars within ±2 min of 09:30 and 15:20, with values
-unchanged (`KEEP = "SNAPSHOTS"`). That's about 60 MB of log for 60 stocks × 5 years;
-`KEEP = "FULL"` (every 1-min bar) would be about 7 GB. Each record also logs how many bars
-Dhan returned, for audit.
+By default the cloud run keeps, per leg and day, only the last bar at or before 09:30 and
+15:20 (at most 15 min old, `ASOF_WINDOW_MIN`), with values unchanged (`KEEP = "SNAPSHOTS"`).
+`KEEP = "FULL"` (every 1-min bar) makes a log far too large for Dhan Cloud. Each record also
+logs how many bars Dhan returned, for audit.
 
 ## Option B: run everything on your PC
 
@@ -116,12 +116,14 @@ Use it, for example, with a different `--tolerance`.
 
 - **Nothing is made up.** A price, OI, IV or volume Dhan didn't return stays blank in the CSV
   and is listed in `missing_data.csv`. Nothing is interpolated or carried forward.
-- If no bar exists at exactly 09:30 or 15:20, the nearest bar within ±2 minutes is used
-  (`--tolerance`, 0 = exact only). The CSV `time` column shows that bar's real time, and the
-  substitution is listed in the report.
+- **As-of snapshots.** Dhan only has a bar for minutes in which the option traded, and stock
+  options often skip minutes. Each leg's 09:30 / 15:20 value is its last trade at or before
+  that time, at most 15 minutes old (`--tolerance`, 0 = exact minute only). The `time`
+  column is the snapshot time; the report shows how many legs came from an earlier minute
+  and the oldest one. A leg with no trade in the window stays blank.
 - Duplicate bars (same stock, minute, strike, side) are dropped. Duplicates whose values
   disagree are counted in the report.
-- **Missing-data issues:** `NO_DATA_DAY`, `SNAPSHOT_MISSING`, `SNAPSHOT_SUBSTITUTED`,
+- **Missing-data issues:** `NO_DATA_DAY`, `SNAPSHOT_MISSING`,
   `STRIKES_INCOMPLETE`, `CE/PE_LEG_MISSING`, `CE/PE_<FIELD>_MISSING`, `SPOT_MISSING`,
   `REQUEST_NOT_FETCHED`.
 
