@@ -52,10 +52,20 @@ TELEGRAM_CHAT = _var('{{TELEGRAM_CHAT_ID}}')
 RUN_SELFTEST_ON_START = True
 RUN_BACKTEST_ON_START = True
 BACKTEST_MONTHS = 6
-BACKTEST_INDICES = ["BANKEX"]   # [] = all indices
+BACKTEST_INDICES = ["NIFTY"]   # [] = all indices
 INDEX_PROXY_BACKTEST = True     # also backtest on 6 months of INDEX 5m bars (no volume -> only squeeze can fire)
-FIXED_POINT_TESTS = [(10, 10), (15, 15), (10, 20), (15, 30)]   # (stop pts, target pts) compared vs 2xATR
-PRINT_ALL_TRADES = True         # print every backtest trade as WIN / LOSS with entry + exit reason
+FIXED_POINT_TESTS = []   # (stop pts, target pts) compared vs 2xATR
+PRINT_ALL_TRADES = False
+# NIFTY improvement filters (derived from Aug-Nov futures trades; checked on unseen May-Aug index bars)
+FILTER_SETS = {
+    "F1 max 1 trade/day": {"max_trades_per_day": 1},
+    "F2 stop after 1st loss": {"stop_after_loss": True},
+    "F3 entries 09:30-13:00": {"entry_end": dt.time(13, 0)},
+    "F4 squeeze break >= 2bps": {"min_break_bps": 2.0},
+    "F5 breakeven at +1R": {"breakeven_r": 1.0},
+    "F6 squeeze setup only": {"setups": ("SQUEEZE_BREAKOUT",)},
+    "ALL F1+F3+F4+F5": {"max_trades_per_day": 1, "entry_end": dt.time(13, 0), "min_break_bps": 2.0, "breakeven_r": 1.0},
+}         # print every backtest trade as WIN / LOSS with entry + exit reason
 
 BASE = "https://api.dhan.co/v2"
 SCRIP_MASTER = "https://images.dhan.co/api-data/api-scrip-master-detailed.csv"
@@ -638,7 +648,7 @@ def wilson(k, n, z=1.959964):
     return p, max(0.0, c - h), min(1.0, c + h)
 
 
-def backtest(bars5, dly, lot, exch, p=PARAMS):
+def backtest(bars5, dly, lot, exch, p=PARAMS, flt=None):
     """Signal on CLOSED bar i -> fill at OPEN of bar i+1. Exit at 2xATR stop / target / 15:20.
     Stop assumed first if both are hit inside one bar. Net = gross - full charges."""
     if len(bars5) < 60:
@@ -647,6 +657,8 @@ def backtest(bars5, dly, lot, exch, p=PARAMS):
     dmap = {dt.datetime.fromtimestamp(d["ts"], IST).date(): d for d in dly}
     ddays = sorted(dmap)
     trades, pos = [], None
+    flt = flt or {}
+    day_n, day_loss = {}, {}
     for i in range(1, len(bars5) - 1):
         b, nb = bars5[i], bars5[i + 1]
         t = dt.datetime.fromtimestamp(b["ts"], IST)
@@ -660,7 +672,7 @@ def backtest(bars5, dly, lot, exch, p=PARAMS):
             hit_tg = (b["high"] >= pos["target"]) if pos["d"] > 0 else (b["low"] <= pos["target"])
             exit_px = why = None
             if hit_sl:
-                exit_px, why = pos["stop"], "SL"
+                exit_px, why = pos["stop"], ("BE" if pos["stop"] == pos["entry"] else "SL")
             elif hit_tg:
                 exit_px, why = pos["target"], "TARGET"
             elif (t + dt.timedelta(minutes=5)).time() >= EOD_EXIT or tn.date() != t.date():
@@ -675,20 +687,35 @@ def backtest(bars5, dly, lot, exch, p=PARAMS):
                                "net": gross - ch, "r": pos["d"] * (exit_px - pos["entry"]) / pos["sd"],
                                "mfe_r": pos["mfe"], "mae_r": pos["mae"], "entry_reason": pos["reason"],
                                "bars_held": int(round((b["ts"] - pos["ts"]) / 300)) + 1})
+                if gross - ch <= 0:
+                    day_loss[dt.datetime.fromtimestamp(pos["ts"], IST).date()] = True
                 pos = None
+            elif flt.get("breakeven_r") and pos["mfe"] >= flt["breakeven_r"]:
+                pos["stop"] = max(pos["stop"], pos["entry"]) if pos["d"] > 0 else min(pos["stop"], pos["entry"])
             continue
-        if not (ENTRY_START <= t.time() < ENTRY_END) or tn.date() != t.date():
+        if not (ENTRY_START <= t.time() < flt.get("entry_end", ENTRY_END)) or tn.date() != t.date():
+            continue
+        if flt.get("max_trades_per_day") and day_n.get(t.date(), 0) >= flt["max_trades_per_day"]:
+            continue
+        if flt.get("stop_after_loss") and day_loss.get(t.date()):
             continue
         j = bisect.bisect_left(ddays, t.date()) - 1
         lv = pivots(dmap[ddays[j]]["high"], dmap[ddays[j]]["low"], dmap[ddays[j]]["close"]) if j >= 0 else {}
         sig = signal_at(x, i, lv, p)
         if sig["signal"] in ("LONG", "SHORT"):
+            if flt.get("setups") and sig["setup"] not in flt["setups"]:
+                continue
+            if flt.get("min_break_bps") and sig["setup"] == "SQUEEZE_BREAKOUT":
+                band = x["bb_up"][i] if sig["signal"] == "LONG" else x["bb_lo"][i]
+                if abs(x["close"][i] - band) / x["close"][i] * 1e4 < flt["min_break_bps"]:
+                    continue
             d = 1 if sig["signal"] == "LONG" else -1
             entry, sd = nb["open"], sig["stop_dist"]
             mr = sig["setup"] == "MEAN_REVERSION"
             tgt = sig["targets"][0] if mr else sig["targets"][-1]
             if (tgt - entry) * d <= 0:
                 continue
+            day_n[t.date()] = day_n.get(t.date(), 0) + 1
             pos = {"ts": nb["ts"], "d": d, "entry": entry, "stop": entry - d * sd,
                    "target": tgt if mr else entry + d * 2 * sd, "sd": sd, "setup": sig["setup"], "qty": lot,
                    "mfe": 0.0, "mae": 0.0, "reason": sig["reason"]}
@@ -797,6 +824,32 @@ def summarize_fixed(label, tr, lot):
                                                     gp / gl if gl > 0 else float("inf"), ex))
 
 
+def period_stats(tl, lo=None, hi=None):
+    S = [t for t in tl if (lo is None or t["entry_ts"] >= lo) and (hi is None or t["entry_ts"] < hi)]
+    if not S:
+        return "n=0"
+    net = [t["net"] for t in S]
+    eq = pk = dd = 0.0
+    for v in net:
+        eq += v
+        pk = max(pk, eq)
+        dd = min(dd, eq - pk)
+    gp, gl = sum(v for v in net if v > 0), -sum(v for v in net if v < 0)
+    return "n=%3d win=%4.1f%% net=Rs%+8.0f PF=%4.2f maxDD=Rs%.0f" % (
+        len(S), 100.0 * sum(v > 0 for v in net) / len(S), sum(net), gp / gl if gl > 0 else float("inf"), dd)
+
+
+def filter_report(name, bars, dly, lot, exch, split_ts, label):
+    log("----- %s FILTER TEST on %s%s -----" % (name, label, (" (split %s: BEFORE = unseen data)" % dt.datetime.fromtimestamp(
+        split_ts, IST).strftime("%Y-%m-%d")) if split_ts else ""))
+    for fname, flt in [("BASELINE (current rules)", None)] + list(FILTER_SETS.items()):
+        tl = backtest(bars, dly, lot, exch, PARAMS, flt).get("trades_list", [])
+        log("  %-26s ALL    %s" % (fname, period_stats(tl)))
+        if split_ts:
+            log("  %-26s BEFORE %s" % ("", period_stats(tl, None, split_ts)))
+            log("  %-26s AFTER  %s" % ("", period_stats(tl, split_ts, None)))
+
+
 def outcome_reason(t):
     """Plain-language reason a trade won or lost (from exit type, best/worst excursion in R, charges)."""
     if t["net"] > 0:
@@ -885,6 +938,11 @@ def pull_and_backtest(months):
             log("%s by setup: %s" % (name, r.get("by_setup")))
             if PRINT_ALL_TRADES:
                 print_trade_lists(name, tl)
+            if FILTER_SETS:
+                filter_report(name, fut5, dly, lot, spec["exch"], None, "FUTURES 5m")
+                if idx5:
+                    filter_report(name, [dict(b, volume=0.0) for b in idx5], dly, lot, spec["exch"],
+                                  fut5[0]["ts"] if fut5 else None, "INDEX 5m proxy (squeeze only, no VWAP)")
             if INDEX_PROXY_BACKTEST and idx5:
                 ib = [dict(b, volume=0.0) for b in idx5]
                 ri = backtest(ib, dly, lot, spec["exch"])
