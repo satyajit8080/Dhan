@@ -65,6 +65,9 @@ FILTER_SETS = {
     "F5 breakeven at +1R": {"breakeven_r": 1.0},
     "F6 squeeze setup only": {"setups": ("SQUEEZE_BREAKOUT",)},
     "ALL F1+F3+F4+F5": {"max_trades_per_day": 1, "entry_end": dt.time(13, 0), "min_break_bps": 2.0, "breakeven_r": 1.0},
+    "F3+F4 (time + 2bps)": {"entry_end": dt.time(13, 0), "min_break_bps": 2.0},
+    "F3+F4+F1 (+1 trade/day)": {"entry_end": dt.time(13, 0), "min_break_bps": 2.0, "max_trades_per_day": 1},
+    "F3+F4+F6 (squeeze only)": {"entry_end": dt.time(13, 0), "min_break_bps": 2.0, "setups": ("SQUEEZE_BREAKOUT",)},
 }         # print every backtest trade as WIN / LOSS with entry + exit reason
 
 BASE = "https://api.dhan.co/v2"
@@ -824,7 +827,7 @@ def summarize_fixed(label, tr, lot):
                                                     gp / gl if gl > 0 else float("inf"), ex))
 
 
-RUN_ORB_TEST = True
+RUN_ORB_TEST = False
 
 
 def backtest_orb(bars5, lot, exch, or_minutes=15, target_r=1.0, last_entry=dt.time(13, 0)):
