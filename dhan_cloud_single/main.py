@@ -52,7 +52,7 @@ TELEGRAM_CHAT = _var('{{TELEGRAM_CHAT_ID}}')
 RUN_SELFTEST_ON_START = True
 RUN_BACKTEST_ON_START = True
 BACKTEST_MONTHS = 6
-PRINT_TRADES = 20               # last N backtest trades printed per index
+PRINT_ALL_TRADES = True         # print every backtest trade as WIN / LOSS with entry + exit reason
 
 BASE = "https://api.dhan.co/v2"
 SCRIP_MASTER = "https://images.dhan.co/api-data/api-scrip-master-detailed.csv"
@@ -649,6 +649,10 @@ def backtest(bars5, dly, lot, exch, p=PARAMS):
         t = dt.datetime.fromtimestamp(b["ts"], IST)
         tn = dt.datetime.fromtimestamp(nb["ts"], IST)
         if pos is not None:
+            fav = (b["high"] - pos["entry"]) if pos["d"] > 0 else (pos["entry"] - b["low"])
+            adv = (b["low"] - pos["entry"]) if pos["d"] > 0 else (pos["entry"] - b["high"])
+            pos["mfe"] = max(pos["mfe"], fav / pos["sd"])
+            pos["mae"] = min(pos["mae"], adv / pos["sd"])
             hit_sl = (b["low"] <= pos["stop"]) if pos["d"] > 0 else (b["high"] >= pos["stop"])
             hit_tg = (b["high"] >= pos["target"]) if pos["d"] > 0 else (b["low"] <= pos["target"])
             exit_px = why = None
@@ -665,7 +669,9 @@ def backtest(bars5, dly, lot, exch, p=PARAMS):
                 gross = pos["d"] * (exit_px - pos["entry"]) * q
                 trades.append({"entry_ts": pos["ts"], "exit_ts": b["ts"], "setup": pos["setup"], "dir": pos["d"],
                                "entry": pos["entry"], "exit": exit_px, "why": why, "gross": gross, "charges": ch,
-                               "net": gross - ch, "r": pos["d"] * (exit_px - pos["entry"]) / pos["sd"]})
+                               "net": gross - ch, "r": pos["d"] * (exit_px - pos["entry"]) / pos["sd"],
+                               "mfe_r": pos["mfe"], "mae_r": pos["mae"], "entry_reason": pos["reason"],
+                               "bars_held": int(round((b["ts"] - pos["ts"]) / 300)) + 1})
                 pos = None
             continue
         if not (ENTRY_START <= t.time() < ENTRY_END) or tn.date() != t.date():
@@ -681,7 +687,8 @@ def backtest(bars5, dly, lot, exch, p=PARAMS):
             if (tgt - entry) * d <= 0:
                 continue
             pos = {"ts": nb["ts"], "d": d, "entry": entry, "stop": entry - d * sd,
-                   "target": tgt if mr else entry + d * 2 * sd, "sd": sd, "setup": sig["setup"], "qty": lot}
+                   "target": tgt if mr else entry + d * 2 * sd, "sd": sd, "setup": sig["setup"], "qty": lot,
+                   "mfe": 0.0, "mae": 0.0, "reason": sig["reason"]}
     res = {"status": "OK" if trades else "NO TRADES", "bars": len(bars5), "trades": len(trades), "lot": lot,
            "from": dt.datetime.fromtimestamp(bars5[0]["ts"], IST).strftime("%Y-%m-%d"),
            "to": dt.datetime.fromtimestamp(bars5[-1]["ts"], IST).strftime("%Y-%m-%d"), "trades_list": trades}
@@ -712,6 +719,64 @@ def backtest(bars5, dly, lot, exch, p=PARAMS):
     return res
 
 
+def outcome_reason(t):
+    """Plain-language reason a trade won or lost (from exit type, best/worst excursion in R, charges)."""
+    if t["net"] > 0:
+        if t["why"] == "TARGET":
+            return "target hit (+%.1fR) - move continued as signalled" % t["r"]
+        return "time exit 15:20 in profit (+%.2fR, best +%.1fR)" % (t["r"], t["mfe_r"])
+    if t["gross"] > 0:
+        return "small gross gain Rs%.0f eaten by charges Rs%.0f" % (t["gross"], t["charges"])
+    if t["why"] == "SL":
+        if t["mfe_r"] >= 1.0:
+            return "was +%.1fR in profit, then reversed to stop (no trailing/breakeven stop)" % t["mfe_r"]
+        if t["mfe_r"] < 0.3:
+            return "went against immediately (best only +%.1fR) - false signal" % t["mfe_r"]
+        return "small favourable move (+%.1fR) then stopped out at 2xATR" % t["mfe_r"]
+    if t["why"] == "EOD":
+        return "no follow-through; closed at 15:20 at %.2fR (best +%.1fR)" % (t["r"], t["mfe_r"])
+    return "target reached but net negative after charges"
+
+
+def print_trade_lists(name, tl):
+    wins = [t for t in tl if t["net"] > 0]
+    losses = [t for t in tl if t["net"] <= 0]
+    for title, rows in (("WIN", wins), ("LOSS", losses)):
+        log("----- %s %s TRADES (%d) -----" % (name, title, len(rows)))
+        for t in rows:
+            log("  %s %s %-16s %-5s entry %.1f exit %.1f %-6s %dbars net Rs%.0f (chg %.0f) | ENTRY: %s | RESULT: %s" % (
+                title, dt.datetime.fromtimestamp(t["entry_ts"], IST).strftime("%Y-%m-%d %H:%M"), t["setup"],
+                "LONG" if t["dir"] > 0 else "SHORT", t["entry"], t["exit"], t["why"], t["bars_held"], t["net"],
+                t["charges"], t["entry_reason"], outcome_reason(t)))
+    cats = {}
+    for t in losses:
+        r = outcome_reason(t)
+        k = ("GAVE BACK PROFIT (was >= +1R, hit stop)" if r.startswith("was +") else
+             "FALSE SIGNAL (went against immediately)" if r.startswith("went against") else
+             "WEAK MOVE then stopped at 2xATR" if r.startswith("small favourable") else
+             "CHARGES turned small gain into loss" if r.startswith("small gross") else
+             "NO FOLLOW-THROUGH (closed 15:20)" if r.startswith("no follow") else r)
+        c = cats.setdefault(k, [0, 0.0])
+        c[0] += 1
+        c[1] += t["net"]
+    log("----- %s LOSS REASONS SUMMARY -----" % name)
+    for k, (n, v) in sorted(cats.items(), key=lambda kv: kv[1][1]):
+        log("  %-75s n=%-3d net Rs%.0f" % (k, n, v))
+    for side in (1, -1):
+        rows = [t for t in tl if t["dir"] == side]
+        if rows:
+            log("  %s: %d trades, wins %d, net Rs%.0f" % ("LONG " if side > 0 else "SHORT", len(rows),
+                                                          sum(t["net"] > 0 for t in rows), sum(t["net"] for t in rows)))
+    hours = {}
+    for t in tl:
+        h = dt.datetime.fromtimestamp(t["entry_ts"], IST).hour
+        e = hours.setdefault(h, [0, 0, 0.0])
+        e[0] += 1
+        e[1] += t["net"] > 0
+        e[2] += t["net"]
+    log("  by entry hour: " + "  ".join("%02d:00 n=%d w=%d Rs%.0f" % (h, *hours[h]) for h in sorted(hours)))
+
+
 def pull_and_backtest(months):
     log("=== DATA PULL + BACKTEST: last %s months of 5m data ===" % months)
     futs = all_futures()
@@ -735,12 +800,12 @@ def pull_and_backtest(months):
             summary[name] = r
             log("%s RESULT: %s" % (name, {k: (round(v, 2) if isinstance(v, float) else v) for k, v in r.items() if k != "by_setup"}))
             log("%s by setup: %s" % (name, r.get("by_setup")))
-            for t in tl[-PRINT_TRADES:]:
-                log("  %s %-16s %-5s entry %.1f exit %.1f %-6s net Rs%.0f (charges %.0f)" % (
-                    dt.datetime.fromtimestamp(t["entry_ts"], IST).strftime("%Y-%m-%d %H:%M"), t["setup"],
-                    "LONG" if t["dir"] > 0 else "SHORT", t["entry"], t["exit"], t["why"], t["net"], t["charges"]))
+            if PRINT_ALL_TRADES:
+                print_trade_lists(name, tl)
         except Exception:
             log(name, "backtest failed:", traceback.format_exc()[-600:])
+    tot = sum(v.get("net_rupees", 0) for v in summary.values())
+    log("=== TOTAL net across indices: Rs%.0f ===" % tot)
     log("NOTE: Dhan lists only live futures contracts, so futures history starts at the oldest live contract's listing "
         "(~3 months). Index bars carry no volume (no VWAP), so they are reported but not traded.")
     return summary
