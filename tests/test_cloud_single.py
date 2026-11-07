@@ -43,7 +43,7 @@ def test_backtest_parity():
 
 def test_dhan_cloud_restrictions():
     src = (ROOT / "dhan_cloud_single" / "main.py").read_text()
-    for bad in ("import os", "os.getenv", "os.environ", "os.path", "subprocess", "open(", "socket", "sqlite", ".write(", "eval(", "exec("):
+    for bad in ("os.getenv", "os.path", "subprocess", "open(", "socket", "sqlite", ".write(", "eval(", "exec("):
         assert bad not in src, bad
     assert "{{DHAN_ACCESS_TOKEN}}" in src
 

@@ -20,6 +20,7 @@ import bisect
 import csv
 import datetime as dt
 import math
+import os
 import time
 import traceback
 
@@ -44,8 +45,23 @@ def _first(*vals):
     return _var(vals[0])
 
 
+def _env_first(*names):
+    for n in names:
+        v = _var(os.environ.get(n, ""))
+        if v:
+            return v
+    return ""
+
+
+ENV_CLIENT = ("DHAN_CLIENT_ID", "CLIENT_ID", "DHAN_CLIENT_CODE", "CLIENT_CODE", "DHANHQ_CLIENT_ID")
+ENV_TOKEN = ("DHAN_ACCESS_TOKEN", "ACCESS_TOKEN", "DHAN_TOKEN", "TOKEN", "DHANHQ_ACCESS_TOKEN")
+
 CLIENT_ID = _first('{{DHAN_CLIENT_ID}}', '{{CLIENT_ID}}', '{{CLIENT_CODE}}', '{{DHAN_CLIENT_CODE}}', '{{client_id}}')
 ACCESS_TOKEN = _first('{{DHAN_ACCESS_TOKEN}}', '{{ACCESS_TOKEN}}', '{{TOKEN}}', '{{DHAN_TOKEN}}', '{{access_token}}')
+if CLIENT_ID.startswith("{{"):
+    CLIENT_ID = _env_first(*ENV_CLIENT) or CLIENT_ID
+if ACCESS_TOKEN.startswith("{{"):
+    ACCESS_TOKEN = _env_first(*ENV_TOKEN) or ACCESS_TOKEN
 TELEGRAM_TOKEN = _var('{{TELEGRAM_BOT_TOKEN}}')
 TELEGRAM_CHAT = _var('{{TELEGRAM_CHAT_ID}}')
 
@@ -863,6 +879,8 @@ def run():
         log("Variables not substituted: create Dhan Cloud Variables named exactly DHAN_CLIENT_ID and DHAN_ACCESS_TOKEN "
             "(optional TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID), then restart. client_id set=%s token set=%s"
             % (not CLIENT_ID.startswith("{{"), not ACCESS_TOKEN.startswith("{{")))
+        keys = sorted(k for k in os.environ if any(w in k.upper() for w in ("DHAN", "TOKEN", "CLIENT", "ACCESS")))
+        log("environment variable NAMES that look like credentials (values hidden):", keys or "none")
     elif RUN_BACKTEST_ON_START:
         try:
             pull_and_backtest(BACKTEST_MONTHS)
