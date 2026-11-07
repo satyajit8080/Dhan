@@ -896,14 +896,14 @@ def pull_and_backtest(months):
                 log("%s-INDEX by setup: %s" % (name, ri.get("by_setup")))
                 if PRINT_ALL_TRADES and til:
                     print_trade_lists(name + "-INDEX", til)
-                    months = {}
+                    by_month = {}
                     for t in til:
                         mk = dt.datetime.fromtimestamp(t["entry_ts"], IST).strftime("%Y-%m")
-                        e = months.setdefault(mk, [0, 0, 0.0])
+                        e = by_month.setdefault(mk, [0, 0, 0.0])
                         e[0] += 1
                         e[1] += t["net"] > 0
                         e[2] += t["net"]
-                    log("  %s-INDEX by month: %s" % (name, "  ".join("%s n=%d w=%d Rs%.0f" % (m, *months[m]) for m in sorted(months))))
+                    log("  %s-INDEX by month: %s" % (name, "  ".join("%s n=%d w=%d Rs%.0f" % (m, *by_month[m]) for m in sorted(by_month))))
             if FIXED_POINT_TESTS and fut1:
                 log("----- %s STOP/TARGET COMPARISON (same entries; exits on 1m bars, %d bars) -----" % (name, len(fut1)))
                 log("  " + summarize_fixed("2xATR / 4xATR", [{"pts": t["net"] / lot + t["charges"] / lot, "net": t["net"],
