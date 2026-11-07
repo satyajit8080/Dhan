@@ -26,10 +26,18 @@ import traceback
 import requests
 
 # =============================================================== CONFIG ==
-CLIENT_ID = "{{DHAN_CLIENT_ID}}"
-ACCESS_TOKEN = "{{DHAN_ACCESS_TOKEN}}"
-TELEGRAM_TOKEN = "{{TELEGRAM_BOT_TOKEN}}"
-TELEGRAM_CHAT = "{{TELEGRAM_CHAT_ID}}"
+# Dhan Cloud replaces {{NAME}} with the Variable's value. Single quotes here mean the value
+# works whether it is entered in the Variables page with or without double quotes.
+
+
+def _var(v):
+    return str(v).strip().strip('"').strip("'").strip()
+
+
+CLIENT_ID = _var('{{DHAN_CLIENT_ID}}')
+ACCESS_TOKEN = _var('{{DHAN_ACCESS_TOKEN}}')
+TELEGRAM_TOKEN = _var('{{TELEGRAM_BOT_TOKEN}}')
+TELEGRAM_CHAT = _var('{{TELEGRAM_CHAT_ID}}')
 
 RUN_SELFTEST_ON_START = True
 RUN_BACKTEST_ON_START = True
@@ -842,7 +850,9 @@ def run():
     if RUN_SELFTEST_ON_START:
         selftest()
     if not configured():
-        log("Set Dhan Cloud Variables DHAN_CLIENT_ID and DHAN_ACCESS_TOKEN (and TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID)")
+        log("Variables not substituted: create Dhan Cloud Variables named exactly DHAN_CLIENT_ID and DHAN_ACCESS_TOKEN "
+            "(optional TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID), then restart. client_id set=%s token set=%s"
+            % (not CLIENT_ID.startswith("{{"), not ACCESS_TOKEN.startswith("{{")))
     elif RUN_BACKTEST_ON_START:
         try:
             pull_and_backtest(BACKTEST_MONTHS)
