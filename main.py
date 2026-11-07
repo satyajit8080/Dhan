@@ -1761,6 +1761,11 @@ CREATE TABLE IF NOT EXISTS alerts (
   text TEXT, sent INTEGER, error TEXT);
 CREATE INDEX IF NOT EXISTS ix_alert ON alerts(index_name, kind, ts);
 
+CREATE TABLE IF NOT EXISTS orderflow_snapshots (
+  id INTEGER PRIMARY KEY, ts REAL NOT NULL, ts_ist TEXT, index_name TEXT, bar_ts REAL, signal TEXT, side TEXT,
+  score REAL, est_cvd_tick REAL, est_cvd_bvc REAL, fut_oi REAL, oi_15m_pct REAL, buildup_15m TEXT,
+  book_total_imb REAL, book_depth_imb REAL, advances INTEGER, declines INTEGER, payload TEXT);
+CREATE INDEX IF NOT EXISTS ix_of_ts ON orderflow_snapshots(index_name, ts);
 CREATE TABLE IF NOT EXISTS health (
   id INTEGER PRIMARY KEY, ts REAL NOT NULL, ts_ist TEXT, component TEXT, status TEXT, detail TEXT);
 """
@@ -2214,6 +2219,7 @@ class InstrumentMaster:
         self.cfg = cfg
         self.cache = cfg.data_dir / "scrip_master.csv.gz"
         self.indices: Dict[str, Contract] = {}
+        self.equities: Dict[str, Contract] = {}     # NIFTY 50 constituents (NSE_EQ) for breadth
         self.futures: Dict[str, List[Contract]] = collections.defaultdict(list)
         self.options: Dict[Tuple[str, str], Dict[Tuple[float, str], Contract]] = collections.defaultdict(dict)
         self.by_sid: Dict[Tuple[str, int], Contract] = {}
@@ -2264,9 +2270,11 @@ class InstrumentMaster:
         iD, iX = col("DISPLAY_NAME", "SEM_CUSTOM_SYMBOL"), col("SM_EXPIRY_DATE", "SEM_EXPIRY_DATE")
         iK, iO = col("STRIKE_PRICE", "SEM_STRIKE_PRICE"), col("OPTION_TYPE", "SEM_OPTION_TYPE")
         iL, iT = col("LOT_SIZE", "SEM_LOT_UNITS"), col("TICK_SIZE", "SEM_TICK_SIZE")
+        iSer = col("SERIES", "SEM_SERIES")
         if min(iE, iS, iSid, iI, iU, iX) < 0:
             raise RuntimeError(f"scrip master layout changed: {hdr[:20]}")
         self.indices.clear()
+        self.equities.clear()
         self.futures.clear()
         self.options.clear()
         self.by_sid.clear()
@@ -2276,6 +2284,12 @@ class InstrumentMaster:
             if len(r) <= max(iE, iS, iSid, iI, iU, iX):
                 continue
             und = r[iU].strip().upper()
+            if r[iI].strip().upper() == "EQUITY" and r[iE].strip() == "NSE" and und in NIFTY50_SECTORS \
+                    and (iSer < 0 or len(r) <= iSer or r[iSer].strip().upper() in ("EQ", "")):
+                with contextlib.suppress(ValueError):
+                    self.equities[und] = Contract(int(r[iSid]), "NSE_EQ", und, "EQUITY", "", None, None, 1.0, 0.05,
+                                                  r[iD].strip() if iD >= 0 else und)
+                continue
             if und not in want:
                 continue
             seg = seg_map.get((r[iE].strip(), r[iS].strip()))
@@ -4285,6 +4299,168 @@ class SingleInstance:
                 self.fh.close()
 
 
+# ============================================================ ORDER FLOW ==
+# One implementation of the order-flow mathematics lives in dhan_cloud_single/main.py (build-up, all-months OI,
+# BVC estimated delta/CVD, relative volume, OI zone, NIFTY 50 breadth, book imbalance, explainable checks).
+# The VPS engine loads that module and feeds it from the EXISTING WebSocket (no second connection, no new REST
+# pipeline). Concepts adapted from github.com/MrChartist/order-flow (PolyForm Noncommercial 1.0.0;
+# Required Notice: Copyright (c) 2026 Mr. Chartist) - re-implemented, no code copied.
+# DATA HONESTY: Dhan sends no trade-aggressor flag, so every delta/CVD here is an ESTIMATE.
+
+_OF_LIB: Any = None
+
+
+def of_lib() -> Any:
+    """The shared order-flow library (dhan_cloud_single/main.py), loaded once; None if unavailable."""
+    global _OF_LIB
+    if _OF_LIB is None:
+        try:
+            import importlib.util as _ilu
+            f = Path(__file__).resolve().parent / "dhan_cloud_single" / "main.py"
+            spec = _ilu.spec_from_file_location("nifty_orderflow_lib", f)
+            mod = _ilu.module_from_spec(spec)
+            spec.loader.exec_module(mod)  # type: ignore[union-attr]
+            _OF_LIB = mod
+        except Exception as e:  # pragma: no cover - only when the file is missing
+            LOG.warning("order-flow library unavailable", error=str(e)[:200])
+            _OF_LIB = False
+    return _OF_LIB or None
+
+
+NIFTY50_SECTORS: Dict[str, str] = dict(getattr(of_lib(), "NIFTY50", {}) or {})
+
+OF_LIMITATIONS = [
+    "Volume delta and CVD are ESTIMATED: Dhan's feed has no trade-side (aggressor) flag.",
+    "Live estimate = quote rule (trade at/above the previous best ask = buy, at/below best bid = sell, else tick rule); "
+    "it classifies each increase of cumulative volume between two packets, so several trades inside one packet share one side.",
+    "Bar estimate = Bulk Volume Classification on 5m futures bars (the only method that can be back-tested).",
+    "Order-book imbalance uses RESTING orders (5-level depth, total buy/sell quantity): intentions, not executions; "
+    "it is not available historically, so it is never back-tested.",
+    "Breadth is equal-weight over the NIFTY 50 list in the code (as of the Sep-2025 rebalance), not index-weighted; "
+    "no historical constituent snapshots exist, so breadth is never back-tested.",
+    "All-months OI on the VPS covers the near and next futures from engine start; earlier minutes use near-month OI only.",
+    "The existing infrastructure has no Redis: state is in memory and SQLite (orderflow_snapshots).",
+]
+
+
+class TickFlow:
+    """ESTIMATED signed volume from consecutive WebSocket packets of one futures contract (session-reset)."""
+
+    def __init__(self) -> None:
+        self.day: Optional[dt.date] = None
+        self.reset()
+
+    def reset(self) -> None:
+        self.cvd = 0.0
+        self.last_vol: Optional[float] = None
+        self.last_ltp = NAN
+        self.bid = self.ask = NAN
+        self.last_sign = 0
+        self.by_min: Dict[float, float] = {}
+        self.oi_min: Dict[float, float] = {}
+        self.n_quote = self.n_tick = self.n_unclassified = 0
+        self.buy_vol = self.sell_vol = 0.0
+
+    def update(self, ltp: float, volume: float, oi: Optional[float], bid: float, ask: float, t: float) -> None:
+        d = dt.datetime.fromtimestamp(t, IST).date()
+        if d != self.day:
+            self.day = d
+            self.reset()
+        m = math.floor(t / 60) * 60
+        if oi is not None and oi > 0:
+            self.oi_min[m] = float(oi)
+        if not fin(ltp) or ltp <= 0:
+            return
+        if self.last_vol is not None and fin(volume) and volume > self.last_vol:
+            dv = volume - self.last_vol
+            s = 0
+            if fin(self.bid) and fin(self.ask) and self.ask > self.bid > 0:
+                if ltp >= self.ask:
+                    s = 1
+                elif ltp <= self.bid:
+                    s = -1
+                else:
+                    mid = (self.bid + self.ask) / 2
+                    s = 1 if ltp > mid else (-1 if ltp < mid else 0)
+                if s:
+                    self.n_quote += 1
+            if not s:
+                s = 1 if ltp > self.last_ltp else (-1 if ltp < self.last_ltp else self.last_sign)
+                if s:
+                    self.n_tick += 1
+                else:
+                    self.n_unclassified += 1
+            if s:
+                self.cvd += s * dv
+                self.by_min[m] = self.by_min.get(m, 0.0) + s * dv
+                if s > 0:
+                    self.buy_vol += dv
+                else:
+                    self.sell_vol += dv
+                self.last_sign = s
+        if fin(volume):
+            self.last_vol = volume if self.last_vol is None else max(self.last_vol, volume)
+        self.last_ltp = ltp
+        if fin(bid) and bid > 0 and fin(ask) and ask > 0:
+            self.bid, self.ask = bid, ask
+
+
+def tick_book_quote(tk: Optional["Tick"]) -> Optional[Dict[str, Any]]:
+    """WebSocket Full packet -> the record shape book_from_quote() reads."""
+    if tk is None or not tk.bids:
+        return None
+    return {"buy_quantity": tk.buy_qty, "sell_quantity": tk.sell_qty,
+            "depth": {"buy": [{"price": p, "quantity": q} for p, q, _ in tk.bids],
+                      "sell": [{"price": p, "quantity": q} for p, q, _ in tk.asks]}}
+
+
+def orderflow_view(bars1: List[Dict[str, Any]], now: float, flow: Optional[TickFlow] = None,
+                   other_oi: Optional[List[List[Dict[str, float]]]] = None,
+                   quotes: Optional[Dict[str, Dict[str, float]]] = None,
+                   book_q: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """Order-flow reading on COMPLETED 5m futures bars (1m bars from the WebSocket + REST seed)."""
+    L = of_lib()
+    if L is None:
+        return {"ok": False, "reason": "order-flow library missing", "limitations": OF_LIMITATIONS}
+    b1 = []
+    for b in bars1:
+        c = dict(b)
+        if flow is not None and c.get("oi") in (None, 0) and c["ts"] in flow.oi_min:
+            c["oi"] = flow.oi_min[c["ts"]]
+        b1.append(c)
+    bars5 = L.complete_5m(b1, now)
+    breadth = L.breadth_from_quotes(quotes) if quotes else None
+    book = L.book_from_quote(book_q) if book_q else None
+    if len(bars5) < 4:
+        return {"ok": False, "reason": "need at least 4 completed 5m futures bars", "breadth": breadth, "book": book,
+                "limitations": OF_LIMITATIONS}
+    oi_tot = L.combine_oi(bars5, other_oi) if other_oi else None
+    ctx = L.of_prepare(bars5, oi_tot)
+    i = len(bars5) - 1
+    st = L.orderflow_state(bars5, ctx, i, breadth, book)
+    tick = None
+    if flow is not None and (flow.n_quote + flow.n_tick):
+        n = flow.n_quote + flow.n_tick + flow.n_unclassified
+        tick = {"est_cvd": flow.cvd, "est_buy_vol": flow.buy_vol, "est_sell_vol": flow.sell_vol,
+                "quote_rule_share": flow.n_quote / n, "tick_rule_share": flow.n_tick / n,
+                "unclassified_share": flow.n_unclassified / n,
+                "label": "ESTIMATED from live packets (quote rule, tick-rule fallback); not exchange trade-side data"}
+    bar = bars5[i]
+    return {"ok": True, "bar_ts": bar["ts"], "bar_ist": dt.datetime.fromtimestamp(bar["ts"], IST).strftime("%Y-%m-%d %H:%M"),
+            "close": bar["close"], "signal": st["signal"], "side": st["side"], "score": st.get("score"),
+            "counted": st.get("counted", 0),
+            "checks": [{"name": n_, "pass": p_, "evidence": ev} for n_, p_, ev in st.get("checks", [])],
+            "w15": st.get("w15"), "w60": st.get("w60"), "day": st.get("day"), "zone": st.get("zone"),
+            "vwap": ctx["vwap"][i], "relvol": ctx["relvol"][i],
+            "bvc": {"est_cvd": ctx["cvd"][i], "est_delta_last_bar": ctx["delta"][i],
+                    "label": "ESTIMATED by bulk volume classification on 5m bars"},
+            "tick": tick, "oi": ctx["oi"][i], "all_months_oi": bool(other_oi), "breadth": breadth, "book": book,
+            "text": L.of_text(st), "constituents_as_of": getattr(L, "NIFTY50_AS_OF", ""),
+            "series": [{"ts": b["ts"], "close": b["close"], "est_cvd": ctx["cvd"][k], "oi": ctx["oi"][k],
+                        "volume": b.get("volume")} for k, b in enumerate(bars5) if k >= max(0, i - 74)],
+            "limitations": OF_LIMITATIONS, "research_only": True}
+
+
 class Engine:
     def __init__(self, cfg: Config):
         self.cfg = cfg
@@ -4315,6 +4491,11 @@ class Engine:
         self._idx_by_key: Dict[Tuple[str, int], str] = {}
         self._fut_by_key: Dict[Tuple[str, int], str] = {}
         self._opt_by_key: Dict[Tuple[str, int], Tuple[str, float, str]] = {}
+        self._fut_other: Dict[Tuple[str, int], str] = {}          # later-month futures (all-months OI)
+        self._other_oi: Dict[Tuple[str, int], Dict[float, float]] = {}
+        self._eq_by_key: Dict[Tuple[str, int], str] = {}          # NIFTY 50 constituents (breadth)
+        self.tickflow: Dict[str, TickFlow] = {n: TickFlow() for n in self.states}
+        self.orderflow: Dict[str, Dict[str, Any]] = {}
 
     # ------------------------------------------------------------- ticks
     def _on_tick(self, tk: Tick, kind: str) -> None:
@@ -4323,7 +4504,16 @@ class Engine:
         if key in self._idx_by_key:
             self.states[self._idx_by_key[key]].bars.update(tk.ltp, t)
         elif key in self._fut_by_key:
-            self.states[self._fut_by_key[key]].fut_bars.update(tk.ltp, t, tk.volume)
+            name_ = self._fut_by_key[key]
+            fb = self.states[name_].fut_bars
+            fb.update(tk.ltp, t, tk.volume)
+            if tk.oi and fb._cur is not None:
+                fb._cur["oi"] = float(tk.oi)
+            self.tickflow[name_].update(tk.ltp, tk.volume, tk.oi, tk.bids[0][0] if tk.bids else NAN,
+                                        tk.asks[0][0] if tk.asks else NAN, t)
+        elif key in self._fut_other:
+            if tk.oi:
+                self._other_oi.setdefault(key, {})[math.floor(t / 60) * 60] = float(tk.oi)
         elif key in self._opt_by_key:
             name, K, side = self._opt_by_key[key]
             lg = self.states[name].chain.get((K, side))
@@ -4398,6 +4588,10 @@ class Engine:
             self._idx_by_key[(st.idx.segment, st.idx.security_id)] = name
             if st.fut:
                 self._fut_by_key[(st.fut.segment, st.fut.security_id)] = name
+            for k_ in (1, 2):
+                c2 = self.master.near_future(name, k_)
+                if c2:
+                    self._fut_other[(c2.segment, c2.security_id)] = name
             LOG.info("instruments discovered", index=name, sid=st.idx.security_id, expiry=st.expiry,
                      next_expiry=st.next_expiry, lot=st.lot, step=st.step,
                      fut=st.fut.display if st.fut else None, fut_sid=st.fut.security_id if st.fut else None)
@@ -4443,6 +4637,12 @@ class Engine:
                     if c:
                         want[(c.segment, c.security_id)] = 21
                         self._opt_by_key[(c.segment, c.security_id)] = (name, K, side)
+        for k in self._fut_other:
+            want[k] = 17                     # quote mode carries OI for derivatives
+        if "NIFTY" in self.states:
+            self._eq_by_key = {(c.segment, c.security_id): sym for sym, c in self.master.equities.items()}
+            for k in self._eq_by_key:
+                want[k] = 17                 # ltp + previous close -> breadth
         for line in [x.strip() for x in _env("BREADTH_CONSTITUENTS").split(",") if x.strip()]:
             with contextlib.suppress(ValueError):
                 seg, sid = line.split(":")
@@ -4668,12 +4868,18 @@ class Engine:
             return
         st.last_tech = out  # type: ignore[attr-defined]
         card = out.get("card", {})
+        of = await self.orderflow_refresh(name, store=True)
+        if card.get("signal") in ("LONG", "SHORT") and of.get("ok"):
+            want_sig = "OF_BULLISH" if card["signal"] == "LONG" else "OF_BEARISH"
+            card["orderflow_agrees"] = of.get("signal") == want_sig
+            card["orderflow_score"] = of.get("score")
         if card.get("signal") in ("LONG", "SHORT"):
             p_, u_, i_ = ts_pair(ts)
             self.db.insert("signals", {"ts": p_, "ts_utc": u_, "ts_ist": i_, "index_name": name, "kind": "TECH_" + str(card.get("setup")),
                                        "direction": 1 if card["signal"] == "LONG" else -1, "spot": st.last_features.get("spot"),
                                        "fut": st.last_features.get("fut"), "feature_ts": ts, "evidence": card.get("reason"),
-                                       "features": {"indicators": out.get("indicators"), "card": card}})
+                                       "features": {"indicators": out.get("indicators"), "card": card,
+                                                    "orderflow": {k: of.get(k) for k in ("signal", "side", "score", "checks")}}})
             self.signals.pending.append({"index": name, "ts": ts, "dir": 1 if card["signal"] == "LONG" else -1,
                                          "spot": st.last_features.get("spot"), "kind": "TECH_" + str(card.get("setup"))})
             o = card.get("option") or {}
@@ -4683,6 +4889,49 @@ class Engine:
                    (f"Option {o.get('strike')}{o.get('side')} entry {o.get('entry')} SL {o.get('sl')} T {o.get('targets')} "
                     f"lots {o.get('lots')} (risk Rs{o.get('risk_rupees')}, charges Rs{o.get('charges_at_sl')})" if o else "No liquid strike"))
             await self.alerter.send(name, "TECH_" + card["signal"], txt, f"{last5}")
+
+    def orderflow_compute(self, name: str) -> Dict[str, Any]:
+        st = self.states[name]
+        others = [[{"ts": m, "oi": v} for m, v in sorted(self._other_oi.get(k, {}).items())]
+                  for k, n in self._fut_other.items() if n == name]
+        others = [o for o in others if o]
+        quotes = {}
+        if name == "NIFTY":
+            for k, sym in self._eq_by_key.items():
+                tk = self.feed.tick(*k)
+                if tk is not None and fin(tk.ltp):
+                    pc = tk.prev_close if tk.prev_close else tk.close
+                    quotes[sym] = {"ltp": tk.ltp, "prev_close": pc}
+        book_q = tick_book_quote(self.feed.tick(st.fut.segment, st.fut.security_id)) if st.fut else None
+        out = orderflow_view(st.fut_bars.all(), time.time(), self.tickflow.get(name), others, quotes or None, book_q)
+        out["index"] = name
+        out["series_name"] = st.fut.display if st.fut else None
+        out["breadth_n"] = len(quotes)
+        out["computed_ist"] = now_ist().strftime("%Y-%m-%d %H:%M:%S")
+        return out
+
+    async def orderflow_refresh(self, name: str, store: bool = False) -> Dict[str, Any]:
+        try:
+            out = await asyncio.to_thread(self.orderflow_compute, name)
+        except Exception as e:
+            LOG.exception("order-flow failed", index=name)
+            return {"ok": False, "reason": str(e)[:200], "limitations": OF_LIMITATIONS}
+        prev = self.orderflow.get(name, {})
+        self.orderflow[name] = out
+        if store and out.get("ok"):
+            p_, _, i_ = ts_pair()
+            w15, bk, br = out.get("w15") or {}, out.get("book") or {}, out.get("breadth") or {}
+            self.db.insert("orderflow_snapshots", {
+                "ts": p_, "ts_ist": i_, "index_name": name, "bar_ts": out["bar_ts"], "signal": out["signal"],
+                "side": out["side"], "score": out.get("score"), "est_cvd_tick": (out.get("tick") or {}).get("est_cvd"),
+                "est_cvd_bvc": out["bvc"]["est_cvd"], "fut_oi": out.get("oi"), "oi_15m_pct": w15.get("doi_pct"),
+                "buildup_15m": w15.get("buildup"), "book_total_imb": bk.get("total_imb"), "book_depth_imb": bk.get("depth_imb"),
+                "advances": br.get("advances"), "declines": br.get("declines"),
+                "payload": {k: out.get(k) for k in ("checks", "zone", "tick", "bvc", "w60", "day")}})
+            if out["signal"] != "NONE" and out["signal"] != prev.get("signal"):
+                await self.alerter.send(name, "ORDERFLOW", f"[{name}] {out['text']}\n(research signal, not a trade)",
+                                        f"{out['bar_ts']}|{out['signal']}")
+        return out
 
     def _rel(self, pattern: str) -> Optional[Dict[str, Any]]:
         r = self.reliability.get(pattern)
@@ -4889,6 +5138,24 @@ class Engine:
             out = await self.refresh_tech(name)
             return web.json_response(out, dumps=jdump)
 
+        async def api_orderflow(req: Any) -> Any:
+            if tok and req.query.get("token") != tok:
+                return web.json_response({"error": "unauthorized"}, status=401)
+            name = (req.query.get("index") or "NIFTY").upper()
+            if name not in self.states:
+                return web.json_response({"error": f"unknown index {name}"}, status=400, dumps=jdump)
+            out = await self.orderflow_refresh(name)
+            hist = await asyncio.to_thread(self.db.query,
+                                           "SELECT ts_ist, signal, side, score, est_cvd_tick, est_cvd_bvc, fut_oi, buildup_15m, "
+                                           "book_total_imb, advances, declines FROM orderflow_snapshots WHERE index_name=? "
+                                           "ORDER BY ts DESC LIMIT 30", (name,))
+            out["history"] = [dict(r) for r in hist]
+            return web.json_response(out, dumps=jdump)
+
+        async def of_page(_req: Any) -> Any:
+            f = self.cfg.base_dir / "orderflow.html"
+            return web.FileResponse(f) if f.exists() else web.Response(text="orderflow.html missing", status=404)
+
         async def api_indices(_req: Any) -> Any:
             return web.json_response({"indices": list(self.states), "phase": self.cal.phase(),
                                       "fatal": self.fatal_reason}, dumps=jdump)
@@ -4899,6 +5166,8 @@ class Engine:
         app.router.add_get("/index.html", page)
         app.router.add_get("/api/signal", api_signal)
         app.router.add_get("/api/indices", api_indices)
+        app.router.add_get("/api/orderflow", api_orderflow)
+        app.router.add_get("/orderflow.html", of_page)
         runner = web.AppRunner(app, access_log=None)
         await runner.setup()
         try:

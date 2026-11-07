@@ -57,7 +57,7 @@ LEDGER_START = "2026-11-09"        # first paper-trading session; the ledger is 
 EXEC_LIVE = "realistic"            # execution scenario used for the paper ledger
 
 # research-history bookkeeping: every rule/filter variant evaluated on this data so far (for Deflated Sharpe)
-VARIANTS_TESTED = 26               # 3 setups x baseline + 7 single filters + 3 combos + 4 ORB + 4 fixed-point + 5 indices
+VARIANTS_TESTED = 27               # 3 setups x baseline + 7 single filters + 3 combos + 4 ORB + 4 fixed-point + 5 indices + F3+F4+order flow
 
 BASE = "https://api.dhan.co/v2"
 SCRIP_MASTER = "https://images.dhan.co/api-data/api-scrip-master-detailed.csv"
@@ -487,8 +487,9 @@ def chain_analytics(legs, F, T, step, r=RISK_FREE):
 
 # ============================================================ DHAN DATA ==
 _last = {}
-ALLOWED = ("/charts/intraday", "/charts/historical", "/optionchain", "/optionchain/expirylist", "/marketfeed/ltp")
-SPACING = {"/optionchain": 3.2, "/optionchain/expirylist": 3.2, "/marketfeed/ltp": 1.05}
+ALLOWED = ("/charts/intraday", "/charts/historical", "/optionchain", "/optionchain/expirylist", "/marketfeed/ltp",
+           "/marketfeed/quote")
+SPACING = {"/optionchain": 3.2, "/optionchain/expirylist": 3.2, "/marketfeed/ltp": 1.05, "/marketfeed/quote": 1.05}
 
 
 def now_ist():
@@ -532,18 +533,44 @@ def candles(d):
     return out
 
 
+_SCAN = {}
+
+
 def all_futures():
-    """Stream the instrument master; every live FUTIDX contract per index (sid, segment, lot, expiry)."""
+    """Cached daily instrument scan (futures + NIFTY 50 equities in one pass over the master)."""
+    d = now_ist().date().isoformat()
+    if _SCAN.get("day") != d:
+        _SCAN["futs"], _SCAN["eq"] = _scan_master()
+        _SCAN["day"] = d
+    return _SCAN["futs"]
+
+
+def nifty50_ids():
+    all_futures()
+    return _SCAN.get("eq", {})
+
+
+def _scan_master():
+    """Stream the instrument master: every live NIFTY FUTIDX contract and the NSE EQ security ids of the NIFTY 50."""
     today = now_ist().date().isoformat()
     res = {n: [] for n in INDICES}  # NIFTY only
+    eq = {}
     with requests.get(SCRIP_MASTER, stream=True, timeout=180) as r:
         r.raise_for_status()
         rd = csv.reader(ln.decode("utf-8", "replace") for ln in r.iter_lines() if ln)
         hdr = [x.strip().upper() for x in next(rd)]
         ix = {k: hdr.index(k) for k in ("EXCH_ID", "SECURITY_ID", "INSTRUMENT", "UNDERLYING_SYMBOL",
                                         "DISPLAY_NAME", "LOT_SIZE", "SM_EXPIRY_DATE")}
+        i_ser = hdr.index("SERIES") if "SERIES" in hdr else -1
         for row in rd:
-            if len(row) <= max(ix.values()) or row[ix["INSTRUMENT"]] != "FUTIDX":
+            if len(row) <= max(ix.values()):
+                continue
+            if row[ix["INSTRUMENT"]] == "EQUITY" and row[ix["EXCH_ID"]] == "NSE" and (i_ser < 0 or row[i_ser] == "EQ"):
+                sym = row[ix["UNDERLYING_SYMBOL"]].strip().upper()
+                if sym in NIFTY50:
+                    eq[sym] = int(row[ix["SECURITY_ID"]])
+                continue
+            if row[ix["INSTRUMENT"]] != "FUTIDX":
                 continue
             u = row[ix["UNDERLYING_SYMBOL"]].strip().upper()
             e = row[ix["SM_EXPIRY_DATE"]][:10]
@@ -553,7 +580,33 @@ def all_futures():
                                "display": row[ix["DISPLAY_NAME"]]})
     for u in res:
         res[u].sort(key=lambda f: f["expiry"])
-    return res
+    return res, eq
+
+
+def quotes_snapshot(fut_sid=None):
+    """One /marketfeed/quote call: NIFTY 50 constituents (breadth) + the NIFTY future (resting order book)."""
+    eq = nifty50_ids()
+    req = {}
+    if eq:
+        req["NSE_EQ"] = sorted(eq.values())
+    if fut_sid:
+        req["NSE_FNO"] = [fut_sid]
+    if not req:
+        return None, None, 0
+    d = post("/marketfeed/quote", req)
+    d = d.get("data", d) or {}
+    inv = {v: k for k, v in eq.items()}
+    qs = {}
+    for sid, q in (d.get("NSE_EQ") or {}).items():
+        sym = inv.get(int(sid))
+        if sym and isinstance(q, dict):
+            pc = float((q.get("ohlc") or {}).get("close") or 0)
+            lp = float(q.get("last_price") or 0)
+            if pc <= 0 and q.get("net_change") is not None:
+                pc = lp - float(q["net_change"])
+            qs[sym] = {"ltp": lp, "prev_close": pc}
+    fq = (d.get("NSE_FNO") or {}).get(str(fut_sid)) if fut_sid else None
+    return breadth_from_quotes(qs), book_from_quote(fq), len(eq)
 
 
 def intraday(sid, seg, instrument, frm, to, interval=5, oi=False):
@@ -736,6 +789,8 @@ def resample(b1, minutes=5):
             cur["low"] = min(cur["low"], b["low"])
             cur["close"] = b["close"]
             cur["volume"] = cur.get("volume", 0) + b.get("volume", 0)
+            if b.get("oi") is not None:
+                cur["oi"] = b["oi"]
     if cur:
         out.append(cur)
     return out
@@ -888,7 +943,7 @@ def prior_session_levels(bars):
 
 
 def backtest(bars5, lot, exch="NSE", p=PARAMS, flt=None, ex="realistic", levels="series", dly=None,
-             charge_year=None, with_open=False):
+             charge_year=None, with_open=False, of_ctx=None):
     """Event-driven NIFTY backtest on CLOSED 5m bars.
       signal on bar i (data <= close of i) -> market entry at OPEN of bar i+1 (+slippage)
       exits checked from the entry bar on: stop (market, gap-aware), target (limit), 15:20 time exit
@@ -903,6 +958,7 @@ def backtest(bars5, lot, exch="NSE", p=PARAMS, flt=None, ex="realistic", levels=
     A = adjusted(bars5)
     x = compute(A)
     flt = flt or {}
+    ofc = of_ctx if of_ctx is not None else (of_prepare(A) if any((b.get("volume") or 0) > 0 for b in A) else None)
     if levels == "index_daily":
         dmap = {ist(d["ts"]).date(): d for d in (dly or [])}
         ddays = sorted(dmap)
@@ -974,6 +1030,10 @@ def backtest(bars5, lot, exch="NSE", p=PARAMS, flt=None, ex="realistic", levels=
             if flt.get("min_break_bps") and brk < flt["min_break_bps"]:
                 continue
         d = 1 if sig["signal"] == "LONG" else -1
+        of_st = orderflow_state(A, ofc, i) if ofc else None
+        of_agree = bool(of_st and of_st["signal"] == ("OF_BULLISH" if d > 0 else "OF_BEARISH"))
+        if flt.get("of_confirm") and not of_agree:
+            continue
         nb = A[i + 1]
         entry, sd = nb["open"] + d * slip, sig["stop_dist"]
         mr = sig["setup"] == "MEAN_REVERSION"
@@ -985,7 +1045,10 @@ def backtest(bars5, lot, exch="NSE", p=PARAMS, flt=None, ex="realistic", levels=
                 "f_brk": brk if ok(brk) else 0.0, "f_hour": t.hour + t.minute / 60.0,
                 "f_atr_bps": x["atr"][i] / x["close"][i] * 1e4,
                 "f_vwap_bps": ((x["close"][i] / x["vwap"][i] - 1) * 1e4 * d) if ok(x["vwap"][i]) else 0.0,
-                "f_di": (x["di_plus"][i] - x["di_minus"][i]) * d, "f_dir": d}
+                "f_di": (x["di_plus"][i] - x["di_minus"][i]) * d, "f_dir": d,
+                "of_agree": of_agree if of_st else None,
+                "of_score": of_st["score"] if of_st and ok(of_st.get("score", NAN)) else None,
+                "of_side": of_st["side"] if of_st else None}
         pos = {"ts": nb["ts"], "entry_bar_ts": nb["ts"], "signal_ts": b["ts"], "d": d, "entry": entry,
                "stop": entry - d * sd, "target": tgt, "sd": sd, "setup": sig["setup"], "qty": lot, "mfe": 0.0, "mae": 0.0,
                "reason": sig["reason"], "adj": nb.get("adj", 0.0) or 0.0, "feat": feat}
@@ -1287,6 +1350,297 @@ def auc(scores, labels):
     return c / (len(pos) * len(neg))
 
 
+
+# ============================================================ ORDER FLOW ==
+# Concepts adapted (re-implemented, no code copied) from github.com/MrChartist/order-flow
+# (PolyForm Noncommercial 1.0.0; Required Notice: Copyright (c) 2026 Mr. Chartist, https://mrchartist.com):
+#   * futures build-up = price change vs open-interest change of the future over a window
+#   * open interest summed over ALL listed months so a roll between months cancels out
+#   * the "zone": the 15-minute stretch that added the most OI while price moved with the side
+#   * side = futures move beyond a floor %, sector lean by majority, explainable pass/fail checks
+# Added here (not in that repository): estimated volume delta / CVD, relative volume, order-book imbalance,
+# NIFTY 50 breadth, historical validation and paper-ledger integration.
+#
+# DATA HONESTY: Dhan provides NO trade-side (aggressor) flag. Every delta / CVD figure below is ESTIMATED:
+#   * from bars: Bulk Volume Classification (Easley, Lopez de Prado & O'Hara 2012): buy share = Phi(dP / sigma_dP)
+#   * from live ticks (VPS WebSocket): quote rule vs the previous best bid/ask, tick rule as fallback
+# Book imbalance uses RESTING orders (5-level depth, total buy/sell quantity) - intentions, not executions.
+
+NIFTY50_AS_OF = "NSE NIFTY 50 constituents, September-2025 rebalance - re-check after every March/September review"
+NIFTY50 = {
+    "AXISBANK": "Financials", "HDFCBANK": "Financials", "ICICIBANK": "Financials", "KOTAKBANK": "Financials", "SBIN": "Financials",
+    "BAJFINANCE": "Financials", "BAJAJFINSV": "Financials", "HDFCLIFE": "Financials", "SBILIFE": "Financials",
+    "SHRIRAMFIN": "Financials", "JIOFIN": "Financials",
+    "HCLTECH": "IT", "INFY": "IT", "TCS": "IT", "TECHM": "IT", "WIPRO": "IT",
+    "RELIANCE": "Energy", "ONGC": "Energy", "NTPC": "Energy", "POWERGRID": "Energy", "COALINDIA": "Energy",
+    "BAJAJ-AUTO": "Auto", "EICHERMOT": "Auto", "M&M": "Auto", "MARUTI": "Auto", "TMPV": "Auto",
+    "HINDUNILVR": "FMCG", "ITC": "FMCG", "NESTLEIND": "FMCG", "TATACONSUM": "FMCG",
+    "CIPLA": "Healthcare", "DRREDDY": "Healthcare", "SUNPHARMA": "Healthcare", "APOLLOHOSP": "Healthcare", "MAXHEALTH": "Healthcare",
+    "HINDALCO": "Metals", "JSWSTEEL": "Metals", "TATASTEEL": "Metals", "ADANIENT": "Metals",
+    "ASIANPAINT": "Consumer", "TITAN": "Consumer", "TRENT": "Consumer", "ETERNAL": "Consumer",
+    "LT": "Industrials", "BEL": "Industrials", "ULTRACEMCO": "Industrials", "GRASIM": "Industrials", "ADANIPORTS": "Industrials",
+    "BHARTIARTL": "Telecom & Services", "INDIGO": "Telecom & Services",
+}
+OF_FLOOR_PCT = {"15m": 0.15, "60m": 0.30, "day": 0.50}
+OF_ZONE_BARS = 3          # 15 minutes of 5m bars
+OF_MIN_SCORE = 0.6        # share of counted checks that must hold for an order-flow side
+
+
+def buildup(dp, doi):
+    if not ok(dp) or not ok(doi) or abs(dp) <= 1e-9 or doi == 0:
+        return "NEUTRAL"
+    if dp > 0:
+        return "LONG_BUILD" if doi > 0 else "SHORT_COVER"
+    return "SHORT_BUILD" if doi > 0 else "LONG_UNWIND"
+
+
+BUILDUP_SIDE = {"LONG_BUILD": 1, "SHORT_COVER": 1, "SHORT_BUILD": -1, "LONG_UNWIND": -1, "NEUTRAL": 0}
+
+
+def combine_oi(near, others):
+    """All-months open interest on the near month's bars: each other month contributes its last known OI
+    at or before the bar (OI holds until it changes)."""
+    out = []
+    cur = [-1] * len(others)
+    for b in near:
+        tot = b.get("oi") or 0.0
+        for k, o in enumerate(others):
+            while cur[k] + 1 < len(o) and o[cur[k] + 1]["ts"] <= b["ts"]:
+                cur[k] += 1
+            if cur[k] >= 0:
+                tot += o[cur[k]].get("oi") or 0.0
+        out.append(tot)
+    return out
+
+
+def bvc_delta(bars, lookback=50):
+    """ESTIMATED signed volume per bar by Bulk Volume Classification; sigma = stdev of the previous `lookback`
+    bar-to-bar close changes (causal). Returns (delta list, buy-share list)."""
+    deltas, shares = [], []
+    ch = []
+    for i, b in enumerate(bars):
+        dp = b["close"] - bars[i - 1]["close"] if i else b["close"] - b["open"]
+        w = ch[-lookback:]
+        if len(w) >= 10:
+            m = sum(w) / len(w)
+            sd = math.sqrt(sum((v - m) ** 2 for v in w) / (len(w) - 1))
+        else:
+            sd = 0.0
+        share = norm_cdf(dp / sd) if sd > 0 else 0.5
+        v = b.get("volume") or 0.0
+        deltas.append(v * (2 * share - 1))
+        shares.append(share)
+        ch.append(dp)
+    return deltas, shares
+
+
+def session_cvd(bars, deltas):
+    out, s, day = [], 0.0, None
+    for b, d in zip(bars, deltas):
+        dd = ist(b["ts"]).date()
+        if dd != day:
+            s, day = 0.0, dd
+        s += d
+        out.append(s)
+    return out
+
+
+def relative_volume(bars, sessions=10):
+    """Volume / mean volume of the same time-of-day bar over the previous `sessions` sessions (causal)."""
+    hist = {}
+    out = []
+    for b in bars:
+        t = ist(b["ts"])
+        key = (t.hour, t.minute)
+        h = hist.setdefault(key, [])
+        base = sum(h[-sessions:]) / len(h[-sessions:]) if len(h) >= 3 else NAN
+        v = b.get("volume") or 0.0
+        out.append(v / base if ok(base) and base > 0 else NAN)
+        h.append(v)
+    return out
+
+
+def of_prepare(bars, oi_total=None):
+    """Per-bar order-flow series for a futures 5m series (adjusted prices, real volume and OI)."""
+    d, _ = bvc_delta(bars)
+    oi = oi_total if oi_total is not None else [b.get("oi") for b in bars]
+    day_open_idx, prev_close, prev_oi = {}, {}, {}
+    last_day, last_c, last_oi = None, None, None
+    for i, b in enumerate(bars):
+        dd = ist(b["ts"]).date()
+        if dd != last_day:
+            day_open_idx[dd] = i
+            prev_close[dd], prev_oi[dd] = last_c, last_oi
+            last_day = dd
+        last_c, last_oi = b["close"], oi[i]
+    return {"delta": d, "cvd": session_cvd(bars, d), "relvol": relative_volume(bars), "oi": oi, "vwap": vwap(bars),
+            "prev_close": prev_close, "prev_oi": prev_oi, "has_volume": any((b.get("volume") or 0) > 0 for b in bars),
+            "has_oi": any(ok(v) and v > 0 for v in oi if v is not None)}
+
+
+def of_window(bars, ctx, i, nbars):
+    """Futures reading over the last `nbars` bars (or the day vs previous close when nbars is None)."""
+    if nbars is None:
+        dd = ist(bars[i]["ts"]).date()
+        p0, o0 = ctx["prev_close"].get(dd), ctx["prev_oi"].get(dd)
+    else:
+        j = i - nbars
+        if j < 0 or ist(bars[j]["ts"]).date() != ist(bars[i]["ts"]).date():
+            return None
+        p0, o0 = bars[j]["close"], ctx["oi"][j]
+    p1, o1 = bars[i]["close"], ctx["oi"][i]
+    if not ok(p0) or p0 <= 0:
+        return None
+    doi = (o1 - o0) if ok(o1) and ok(o0) else NAN
+    return {"dp": p1 - p0, "dp_pct": (p1 / p0 - 1) * 100, "doi": doi,
+            "doi_pct": (doi / o0 * 100) if ok(doi) and o0 else NAN, "buildup": buildup(p1 - p0, doi)}
+
+
+def of_zone(bars, ctx, i, side):
+    """Repository idea: the 15-minute stretch today that added the most OI while price moved with the side."""
+    dd = ist(bars[i]["ts"]).date()
+    best = None
+    for e in range(i, OF_ZONE_BARS - 1, -1):
+        s = e - OF_ZONE_BARS + 1
+        if ist(bars[s]["ts"]).date() != dd:
+            break
+        o0, o1 = ctx["oi"][s], ctx["oi"][e]
+        if not (ok(o0) and ok(o1)) or o1 - o0 <= 0:
+            continue
+        if (bars[e]["close"] - bars[s]["close"]) * side <= 0:
+            continue
+        if best is None or o1 - o0 > best["oi_added"]:
+            best = {"low": min(bars[k]["low"] for k in range(s, e + 1)), "high": max(bars[k]["high"] for k in range(s, e + 1)),
+                    "from": bars[s]["ts"], "oi_added": o1 - o0}
+    return best
+
+
+def breadth_from_quotes(quotes):
+    """quotes: {symbol: {"ltp":..., "prev_close":...}} for NIFTY 50 constituents. Equal-weight (no index weights)."""
+    rows = []
+    for sym, q in quotes.items():
+        lp, pc = q.get("ltp"), q.get("prev_close")
+        if ok(lp) and ok(pc) and pc > 0:
+            rows.append((sym, (lp / pc - 1) * 100, NIFTY50.get(sym, "Other")))
+    if not rows:
+        return None
+    adv = sum(1 for _, c, _ in rows if c > 0.05)
+    dec = sum(1 for _, c, _ in rows if c < -0.05)
+    sectors = {}
+    for sym, c, sec in rows:
+        sectors.setdefault(sec, []).append((sym, c))
+    sec_out = {}
+    for sec, v in sectors.items():
+        cs = sorted(c for _, c in v)
+        med = cs[len(cs) // 2] if len(cs) % 2 else (cs[len(cs) // 2 - 1] + cs[len(cs) // 2]) / 2
+        up = sum(1 for c in cs if c > 0.05)
+        dn = sum(1 for c in cs if c < -0.05)
+        lean = "mixed"
+        if up > dn and up * 2 >= len(cs):
+            lean = "bullish"
+        elif dn > up and dn * 2 >= len(cs):
+            lean = "bearish"
+        sec_out[sec] = {"n": len(cs), "median_pct": med, "up": up, "down": dn, "lean": lean}
+    rows.sort(key=lambda r: r[1])
+    return {"n": len(rows), "advances": adv, "declines": dec, "unchanged": len(rows) - adv - dec,
+            "ad_ratio": adv / dec if dec else float("inf") if adv else NAN,
+            "mean_pct": sum(c for _, c, _ in rows) / len(rows), "sectors": sec_out,
+            "leaders": [(s, round(c, 2)) for s, c, _ in rows[-3:][::-1]], "laggards": [(s, round(c, 2)) for s, c, _ in rows[:3]]}
+
+
+def book_from_quote(q):
+    """Resting-order state of the NIFTY future from a /marketfeed/quote record."""
+    if not q:
+        return None
+    dep = q.get("depth") or {}
+    bids = [(float(x.get("price") or 0), float(x.get("quantity") or 0)) for x in dep.get("buy", [])]
+    asks = [(float(x.get("price") or 0), float(x.get("quantity") or 0)) for x in dep.get("sell", [])]
+    tb, ts_ = float(q.get("buy_quantity") or 0), float(q.get("sell_quantity") or 0)
+    wb = sum(qq * 0.5 ** k for k, (_, qq) in enumerate(bids))
+    wa = sum(qq * 0.5 ** k for k, (_, qq) in enumerate(asks))
+    bb = bids[0][0] if bids else NAN
+    ba = asks[0][0] if asks else NAN
+    return {"total_imb": (tb - ts_) / (tb + ts_) if tb + ts_ > 0 else NAN,
+            "depth_imb": (wb - wa) / (wb + wa) if wb + wa > 0 else NAN,
+            "spread": ba - bb if ok(ba) and ok(bb) and ba >= bb else NAN, "bid": bb, "ask": ba,
+            "total_buy_qty": tb, "total_sell_qty": ts_}
+
+
+def orderflow_state(bars, ctx, i, breadth=None, book=None):
+    """Explainable order-flow reading at CLOSED bar i (uses data <= i only).
+    side: bullish / bearish from the 15-minute futures move beyond its floor, else rangebound.
+    Each check is pass / fail / None (data not available -> not counted)."""
+    w15, w60, wday = of_window(bars, ctx, i, 3), of_window(bars, ctx, i, 12), of_window(bars, ctx, i, None)
+    if w15 is None:
+        return {"side": "unknown", "score": NAN, "checks": [], "signal": "NONE"}
+    side = 1 if w15["dp_pct"] >= OF_FLOOR_PCT["15m"] else (-1 if w15["dp_pct"] <= -OF_FLOOR_PCT["15m"] else 0)
+    out = {"side": {1: "bullish", -1: "bearish", 0: "rangebound"}[side], "w15": w15, "w60": w60, "day": wday,
+           "cvd": ctx["cvd"][i], "relvol": ctx["relvol"][i], "vwap": ctx["vwap"][i], "checks": [], "signal": "NONE",
+           "delta_label": "ESTIMATED (bulk volume classification; Dhan has no trade-side flag)"}
+    if side == 0:
+        out["score"] = NAN
+        return out
+    ck = out["checks"]
+    opened = "LONG_BUILD" if side > 0 else "SHORT_BUILD"
+    bu = w15["buildup"]
+    ck.append(("fresh positions (OI up with the move)", (bu == opened) if ok(w15["doi"]) else None,
+               "15m: price %+.2f%%, OI %s -> %s" % (w15["dp_pct"], "%+.2f%%" % w15["doi_pct"] if ok(w15["doi_pct"]) else "n/a", bu)))
+    ck.append(("last hour agrees", (w60["dp"] * side > 0) if w60 else None,
+               "60m price %+.2f%% (%s)" % (w60["dp_pct"], w60["buildup"]) if w60 else "60m not measurable yet"))
+    ck.append(("day agrees", (wday["dp"] * side > 0) if wday else None,
+               "since prev close %+.2f%% (%s)" % (wday["dp_pct"], wday["buildup"]) if wday else "no previous close"))
+    vw = ctx["vwap"][i]
+    ck.append(("price on the right side of VWAP", ((bars[i]["close"] - vw) * side > 0) if ok(vw) else None,
+               "close %.1f vs VWAP %.1f" % (bars[i]["close"], vw) if ok(vw) else "no volume -> no VWAP"))
+    j = i - 6
+    if ctx["has_volume"] and j >= 0 and ist(bars[j]["ts"]).date() == ist(bars[i]["ts"]).date():
+        dc = ctx["cvd"][i] - ctx["cvd"][j]
+        ck.append(("estimated CVD rising with the move (30m)", dc * side > 0, "est. CVD change 30m %+.0f (ESTIMATED)" % dc))
+    else:
+        ck.append(("estimated CVD rising with the move (30m)", None, "not enough volume history"))
+    rv = ctx["relvol"][i]
+    ck.append(("volume above normal for this time (>=1.2x)", (rv >= 1.2) if ok(rv) else None,
+               "relative volume %.2fx" % rv if ok(rv) else "needs 3 prior sessions"))
+    if breadth:
+        adr = breadth["ad_ratio"]
+        ck.append(("NIFTY 50 breadth agrees", (adr >= 1.5) if side > 0 else (ok(adr) and adr <= 1 / 1.5),
+                   "adv %d / dec %d (A/D %.2f), equal-weight %+.2f%%" % (breadth["advances"], breadth["declines"], adr, breadth["mean_pct"])))
+        fin = breadth["sectors"].get("Financials")
+        if fin:
+            ck.append(("Financials (heaviest NIFTY sector) lean agrees", fin["lean"] == out["side"],
+                       "Financials %s, median %+.2f%% (%d up / %d down)" % (fin["lean"], fin["median_pct"], fin["up"], fin["down"])))
+    else:
+        ck.append(("NIFTY 50 breadth agrees", None, "breadth not available (historical bars carry none)"))
+    if book and ok(book.get("total_imb")):
+        ck.append(("resting order book leans the same way", book["total_imb"] * side > 0.10,
+                   "total buy/sell qty imbalance %+.2f, 5-level %+.2f (resting orders, not trades)" % (
+                       book["total_imb"], book.get("depth_imb", NAN))))
+    else:
+        ck.append(("resting order book leans the same way", None, "no live depth (historical bars carry none)"))
+    counted = [c for c in ck if c[1] is not None]
+    out["score"] = sum(1 for c in counted if c[1]) / len(counted) if counted else NAN
+    out["counted"] = len(counted)
+    zone = of_zone(bars, ctx, i, side) if ctx["has_oi"] else None
+    out["zone"] = zone
+    if ok(out["score"]) and out["score"] >= OF_MIN_SCORE and ck[0][1] is not False:
+        out["signal"] = "OF_BULLISH" if side > 0 else "OF_BEARISH"
+    return out
+
+
+def of_text(st):
+    if not st or not st.get("checks"):
+        return "ORDER FLOW: %s" % (st or {}).get("side", "n/a")
+    lines = ["ORDER FLOW: %s | side %s | %d/%d checks (score %.2f)" % (
+        st["signal"], st["side"], sum(1 for c in st["checks"] if c[1]), st.get("counted", 0), st["score"] if ok(st["score"]) else NAN)]
+    for name, p, ev in st["checks"]:
+        lines.append("  [%s] %s - %s" % ("PASS" if p else ("FAIL" if p is False else " n/a"), name, ev))
+    if st.get("zone"):
+        z = st["zone"]
+        lines.append("  zone %.1f-%.1f from %s (+%.0f OI)" % (z["low"], z["high"], ist(z["from"]).strftime("%H:%M"), z["oi_added"]))
+    lines.append("  " + st["delta_label"])
+    return "\n".join(lines)
+
+
 # ============================================================ NIFTY AUDIT ==
 VARIANTS = {
     "BASELINE": None,
@@ -1299,7 +1653,7 @@ REPORTED = {  # numbers reported in the earlier runs (index proxy, legacy engine
 }
 
 
-def simulate_exit(A, i, d, sd, E, lot, exch):
+def simulate_exit(A, i, d, sd, E, lot, exch, detail=False):
     """Exit of a position entered at the open of bar i (same rules as the engine, stop/target 2x/4x ATR)."""
     slip = E["slip"]
     entry = A[i]["open"] + d * slip
@@ -1328,7 +1682,12 @@ def simulate_exit(A, i, d, sd, E, lot, exch):
     raw_e = entry - (A[i].get("adj", 0) or 0)
     raw_x = exit_px - (A[i].get("adj", 0) or 0)
     buy, sell = (raw_e, raw_x) if d > 0 else (raw_x, raw_e)
-    return d * (exit_px - entry) * lot - charges("fut", exch, buy * lot, sell * lot, None, day)
+    ch = charges("fut", exch, buy * lot, sell * lot, None, day)
+    pts = d * (exit_px - entry)
+    if detail:
+        return {"pts": pts, "gross": pts * lot, "charges": ch, "net": pts * lot - ch, "date": day.isoformat(), "dir": d,
+                "entry_ts": A[i]["ts"]}
+    return pts * lot - ch
 
 
 def permutation_random_entries(bars, trades, lot, exch, E, entry_end, P=PERMUTATIONS, seed=21):
@@ -1431,6 +1790,63 @@ def ml_research(tr, label):
             label, len(P), 100 * base_all, auc(P, Yt), brier, brier0, tp / (tp + fp) if tp + fp else NAN,
             tp / (tp + fn) if tp + fn else NAN, sum(v for v, _ in Nt) / len(Nt), (sum(sel) / len(sel)) if sel else NAN,
             len(sel)))
+
+
+def of_audit(fut_adj, per, lot, f34_fut):
+    """Historical validation of the order-flow layer on NIFTY futures 5m bars (the only series with volume + OI).
+    Breadth and order-book checks cannot be back-tested (Dhan history has no constituent snapshots or depth)."""
+    log("-" * 100)
+    log("PHASE OF  ORDER-FLOW VALIDATION (futures 5m, all-months OI, ESTIMATED delta; breadth/book not back-testable)")
+    A = adjusted(fut_adj)
+    oi_tot = oi_all_months(fut_adj, per, 5)
+    ctx = of_prepare(A, oi_tot)
+    n_oi = sum(1 for v in oi_tot if ok(v))
+    log("  coverage: bars %d | bars with all-months OI %d (%.0f%%) | bars with volume %d" % (
+        len(A), n_oi, 100.0 * n_oi / max(len(A), 1), sum(1 for b in A if (b.get("volume") or 0) > 0)))
+    x = compute(A)
+    sigs, last = [], "NONE"
+    for i in range(30, len(A) - 2):
+        t = ist(A[i]["ts"])
+        st = orderflow_state(A, ctx, i)
+        sgn = st["signal"]
+        if sgn != "NONE" and sgn != last and ENTRY_START <= t.time() < ENTRY_END and ist(A[i + 1]["ts"]).date() == t.date() \
+                and ok(x["atr"][i]):
+            d = 1 if sgn == "OF_BULLISH" else -1
+            tr = simulate_exit(A, i + 1, d, PARAMS["stop_atr"] * x["atr"][i], EXEC["realistic"], lot, "NSE", detail=True)
+            fw = {}
+            for h in (3, 6):
+                if i + h < len(A) and ist(A[i + h]["ts"]).date() == t.date():
+                    fw[h] = d * (A[i + h]["close"] / A[i]["close"] - 1) * 1e4
+            tr.update({"signal": sgn, "fwd": fw, "score": st["score"]})
+            sigs.append(tr)
+        last = sgn
+    log("  ORDER-FLOW SIGNALS traded alone (next-bar entry, 2xATR stop / 4xATR target / 15:20, realistic, 2026 costs):")
+    for lab, S in (("ALL", sigs), ("OF_BULLISH", [q for q in sigs if q["signal"] == "OF_BULLISH"]),
+                   ("OF_BEARISH", [q for q in sigs if q["signal"] == "OF_BEARISH"])):
+        log("    %-11s %s" % (lab, fmt_sum(summarize(S)) if S else "n=0"))
+    for h in (3, 6):
+        v = [q["fwd"][h] for q in sigs if h in q["fwd"]]
+        if v:
+            k = sum(1 for a in v if a > 0)
+            w = wilson(k, len(v))
+            base = []
+            for i in range(30, len(A) - h):
+                if ist(A[i + h]["ts"]).date() == ist(A[i]["ts"]).date():
+                    base.append(A[i + h]["close"] > A[i]["close"])
+            log("    forward +%dm in signal direction: hit %.1f%% [%.0f-%.0f] (n=%d), mean %+.1f bps | unconditional up-share %.1f%%" % (
+                h * 5, 100 * w[0], 100 * w[1], 100 * w[2], len(v), sum(v) / len(v), 100.0 * sum(base) / max(len(base), 1)))
+    if len(sigs) >= 10:
+        perm = permutation_random_entries(fut_adj, sigs, lot, "NSE", EXEC["realistic"], ENTRY_END)
+        log("    permutation vs random entries: actual Rs%.0f | random median Rs%.0f | p = %.3f" % (
+            perm["actual"], perm["random_median"], perm["p_value"]))
+    log("  F3+F4 futures trades split by order-flow agreement at the signal bar:")
+    for lab, S in (("OF agrees", [t for t in f34_fut if t.get("of_agree") is True]),
+                   ("OF does not agree", [t for t in f34_fut if t.get("of_agree") is False])):
+        log("    %-18s %s" % (lab, fmt_sum(summarize(S)) if S else "n=0"))
+    v = backtest(fut_adj, lot, "NSE", PARAMS, dict(VARIANTS["F3+F4"], of_confirm=True), "realistic", of_ctx=ctx)["trades"]
+    log("    F3+F4 + order-flow confirmation (F7, rule fixed before testing): %s" % (fmt_sum(summarize(v)) if v else "n=0"))
+    log("  CAVEAT: one 2.5-month futures period only (the period F3/F4 were chosen on); no out-of-sample order-flow test "
+        "is possible until more futures history is collected. Delta/CVD are ESTIMATES (no trade-side data from Dhan).")
 
 
 def run_audit(months=AUDIT_MONTHS):
@@ -1565,6 +1981,11 @@ def run_audit(months=AUDIT_MONTHS):
         log("  cost per trade: Rs%.0f (= %.1f NIFTY points on 1 lot); breakeven slippage = point edge / 2 fills = %.1f pts" % (
             s["charges"] / s["n"], s["charges"] / s["n"] / lot, (s["gross"] / s["n"] / lot - s["charges"] / s["n"] / lot) / 2))
 
+    try:
+        f34_fut = backtest(fut_adj, lot, "NSE", PARAMS, f34, "realistic", of_ctx=of_prepare(adjusted(fut_adj), oi_all_months(fut_adj, per, 5)))["trades"]
+        of_audit(fut_adj, per, lot, f34_fut)
+    except Exception:
+        log("order-flow audit failed:", traceback.format_exc()[-800:])
     log("-" * 100)
     log("PHASE 5b REGIME STABILITY (F3+F4, INDEX 6m, realistic)")
     dret = {}
@@ -1648,19 +2069,35 @@ def run_audit(months=AUDIT_MONTHS):
 def fetch_series(futs, frm, to, interval=1):
     per, exp = {}, {}
     for f in futs:
-        per[f["sid"]] = intraday(f["sid"], f["segment"], "FUTIDX", frm, to, interval)
+        per[f["sid"]] = intraday(f["sid"], f["segment"], "FUTIDX", frm, to, interval, oi=True)
         exp[f["sid"]] = f["expiry"]
     bars, rolls = stitch_front_month(per, exp, adjust=True)
-    return bars, rolls
+    return bars, rolls, per
 
 
-def ledger_build(bars5, lot, start_date):
-    res = backtest(bars5, lot, "NSE", PARAMS, LIVE_FILTER, EXEC_LIVE, with_open=True)
+def oi_all_months(stitched, per, bar_minutes=5):
+    """Open interest summed over every listed NIFTY futures month at each stitched bar (rolls cancel out)."""
+    series = {sid: sorted(v, key=lambda b: b["ts"]) for sid, v in per.items()}
+    ts_lists = {sid: [b["ts"] for b in v] for sid, v in series.items()}
+    out = []
+    for b in stitched:
+        tot = 0.0
+        for sid, v in series.items():
+            k = bisect.bisect_right(ts_lists[sid], b["ts"] + bar_minutes * 60 - 1) - 1
+            if k >= 0 and v[k].get("oi") is not None:
+                tot += v[k]["oi"]
+        out.append(tot if tot > 0 else NAN)
+    return out
+
+
+def ledger_build(bars5, lot, start_date, of_ctx=None):
+    res = backtest(bars5, lot, "NSE", PARAMS, LIVE_FILTER, EXEC_LIVE, with_open=True, of_ctx=of_ctx)
     closed_tr = [t for t in res["trades"] if t["date"] >= start_date]
     events = []
     for t in closed_tr:
-        events.append((t["entry_ts"], t["id"], "OPEN", "[PAPER %s] OPEN %s %s @ %.1f (stop dist %.1f) | %s" % (
-            t["id"], "LONG" if t["dir"] > 0 else "SHORT", t["setup"], t["entry"], t["sd"], t["entry_reason"])))
+        events.append((t["entry_ts"], t["id"], "OPEN", "[PAPER %s] OPEN %s %s @ %.1f (stop dist %.1f) | %s | order flow %s" % (
+            t["id"], "LONG" if t["dir"] > 0 else "SHORT", t["setup"], t["entry"], t["sd"], t["entry_reason"],
+            {True: "AGREES", False: "does not agree", None: "n/a"}[t.get("of_agree")])))
         events.append((t["exit_ts"] + 300, t["id"], "CLOSED", "[PAPER %s] CLOSED %s @ %.1f (%s) | %+.1f pts | gross Rs%.0f | "
                        "charges Rs%.0f | net Rs%.0f" % (t["id"], "LONG" if t["dir"] > 0 else "SHORT", t["exit"], t["why"],
                                                        t["pts"], t["gross"], t["charges"], t["net"])))
@@ -1687,8 +2124,10 @@ def ledger_summary(closed_tr, day):
             len(S), w, 100.0 * w / len(S), sum(t["net"] for t in S), sum(t["charges"] for t in S))
     td = [t for t in closed_tr if t["date"] == day]
     s = summarize(closed_tr) if closed_tr else {"n": 0}
-    return "[PAPER] %s today: %s | since %s: %s | maxDD Rs%.0f" % (
-        day, line(td), LEDGER_START, line(closed_tr), s.get("max_dd", 0.0))
+    agree = [t for t in closed_tr if t.get("of_agree") is True]
+    other = [t for t in closed_tr if t.get("of_agree") is False]
+    return "[PAPER] %s today: %s | since %s: %s | maxDD Rs%.0f | order-flow agreed: %s | did not: %s" % (
+        day, line(td), LEDGER_START, line(closed_tr), s.get("max_dd", 0.0), line(agree), line(other))
 
 
 # ============================================================= SELF-TEST ==
@@ -1810,6 +2249,21 @@ def selftest():
     g1 = [{"ts": t0, "open": 100, "high": 100, "low": 100, "close": 100}]
     check("Hurst of random walk ~0.5", 0.4 < hurst([q["close"] for q in synthetic_bars(4000, 3, vol=0.001)]) < 0.6 and g1)
     check("t-test p-value (t=2.0, df=30) = 0.0546", abs(t_sf2(2.0, 30) - 0.0546) < 5e-4)
+    check("OI build-up quadrants", [buildup(1, 1), buildup(1, -1), buildup(-1, 1), buildup(-1, -1), buildup(0, 5)]
+          == ["LONG_BUILD", "SHORT_COVER", "SHORT_BUILD", "LONG_UNWIND", "NEUTRAL"])
+    nr = [{"ts": t0 + k * 300, "oi": 100.0} for k in range(4)]
+    check("All-months OI carries forward", combine_oi(nr, [[{"ts": t0 + 300, "oi": 50.0}]]) == [100.0, 150.0, 150.0, 150.0])
+    fl = mk([100.0 + (k % 2) for k in range(40)]) + mk([200.0] * 1)
+    dl, sh = bvc_delta(fl[:40])
+    check("BVC estimated delta: |delta| <= volume, no lookahead", all(abs(x) <= 100.0 + 1e-9 for x in dl)
+          and bvc_delta(fl[:20])[0] == dl[:20])
+    br = breadth_from_quotes({"HDFCBANK": {"ltp": 101, "prev_close": 100}, "ICICIBANK": {"ltp": 99, "prev_close": 100},
+                              "SBIN": {"ltp": 102, "prev_close": 100}, "TCS": {"ltp": 100, "prev_close": 100}})
+    check("Breadth A/D + sector lean", br["advances"] == 2 and br["declines"] == 1 and br["unchanged"] == 1
+          and br["sectors"]["Financials"]["lean"] == "bullish")
+    bk = book_from_quote({"buy_quantity": 300, "sell_quantity": 100, "depth": {"buy": [{"price": 10, "quantity": 30}],
+                                                                               "sell": [{"price": 10.5, "quantity": 10}]}})
+    check("Book imbalance + spread", abs(bk["total_imb"] - 0.5) < 1e-12 and abs(bk["depth_imb"] - 0.5) < 1e-12 and bk["spread"] == 0.5)
     log("SELF-TEST: %d/%d passed" % (sum(res), len(res)))
     return all(res)
 
@@ -1832,20 +2286,45 @@ def cycle(state):
         return
     lot = futs[0]["lot"]
     frm = min(dt.date.fromisoformat(LEDGER_START), today) - dt.timedelta(days=8)
-    b1, rolls = fetch_series(futs, frm, today, 1)
+    b1, rolls, per = fetch_series(futs, frm, today, 1)
     bars5 = complete_5m(b1, now)
+    of_ctx = of_prepare(adjusted(bars5), oi_all_months(bars5, per, 5)) if bars5 else None
     if bars5 and now - (bars5[-1]["ts"] + 300) > 900 and in_session(now_ist()):
         log("DATA STALE: last complete 5m bar %s" % ist(bars5[-1]["ts"]).strftime("%H:%M"))
     vix_v = vix()
     expiry, legs = option_chain(INDICES["NIFTY"]["sid"])
     card, table = build_card(bars5, legs, expiry, futs[0]["expiry"], vix_v, lot, LIVE_FILTER)
-    log(card_text(card, table).replace("\n", " | "))
+    breadth = book = None
+    try:
+        breadth, book, n_eq = quotes_snapshot(futs[0]["sid"])
+        if breadth and breadth["n"] < n_eq:
+            log("breadth: %d of %d NIFTY 50 quotes usable" % (breadth["n"], n_eq))
+    except Exception as e:
+        log("breadth/order-book snapshot failed:", str(e)[:160])
+    of_st = orderflow_state(adjusted(bars5), of_ctx, len(bars5) - 1, breadth, book) if of_ctx and len(bars5) > 20 else None
+    state["orderflow"] = {"state": of_st, "breadth": breadth, "book": book, "bar": card.get("bar")}
+    text = card_text(card, table) + "\n" + of_text(of_st)
+    if breadth:
+        text += "\nBREADTH (equal-weight, %s): adv %d dec %d unch %d | A/D %.2f | avg %+.2f%% | sectors %s | leaders %s | laggards %s" % (
+            NIFTY50_AS_OF.split(",")[0], breadth["advances"], breadth["declines"], breadth["unchanged"], breadth["ad_ratio"],
+            breadth["mean_pct"], ", ".join("%s %s %+.2f%%" % (k, v["lean"], v["median_pct"]) for k, v in sorted(
+                breadth["sectors"].items(), key=lambda kv: -kv[1]["median_pct"])), breadth["leaders"], breadth["laggards"])
+    if book:
+        text += "\nBOOK (resting orders): total buy/sell imbalance %+.2f | 5-level %+.2f | spread %.2f" % (
+            book["total_imb"], book["depth_imb"], book["spread"])
+    log(text.replace("\n", " | "))
     key = ("card", card.get("bar"), card["signal"])
     if card["signal"] in ("LONG", "SHORT") and key not in state["sent"]:
         state["sent"].add(key)
-        telegram(card_text(card, table))
+        telegram(text)
+    if of_st and of_st["signal"] != "NONE":
+        k2 = ("of", card.get("bar"), of_st["signal"])
+        if k2 not in state["sent"] and state.get("last_of_signal") != of_st["signal"]:
+            state["sent"].add(k2)
+            telegram("[NIFTY] %s (research signal, not a trade) @%s\n%s" % (of_st["signal"], card.get("bar"), of_text(of_st)))
+    state["last_of_signal"] = of_st["signal"] if of_st else None
     if PAPER_TRADE:
-        closed_tr, open_pos, events = ledger_build(bars5, lot, LEDGER_START)
+        closed_tr, open_pos, events = ledger_build(bars5, lot, LEDGER_START, of_ctx)
         for ts, tid, st_, msg in events:
             k = (tid, st_)
             if k in state["sent"]:

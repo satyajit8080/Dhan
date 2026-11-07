@@ -67,7 +67,7 @@ For BASELINE, F3, F4 and F3+F4, on OOS May–Aug (index), IS Aug–Nov (index) a
 - daily Sharpe and Sortino (annualised), t-statistic and p-value
 - bootstrap 95% CI of total P&L and P(total ≤ 0)
 - Monte Carlo max drawdown (median, p95, p99)
-- Deflated Sharpe with **26 variants tried** on this data
+- Deflated Sharpe with **27 variants tried** on this data (26 + the order-flow confirmation variant)
 - a random-entry permutation test (same trade count, window, direction mix, exits and costs)
 - Benjamini-Hochberg adjusted OOS p-values
 
@@ -130,3 +130,53 @@ NOT ESTABLISHED"** until much more paper and real futures history exists.
 3. Keep downloading futures daily (VPS `download`) so the futures-only sample grows to ≥ 300 trades.
 4. Add backtest-vs-paper, drawdown and data-quality panels to `index.html` (VPS).
 5. Only after gates 1–5 pass on new data: consider 1-lot live trading with a hard daily loss cap. Never enable automatic orders.
+
+---
+
+## 9. Order-flow integration (concepts from MrChartist/order-flow)
+
+**Repository audit.** `github.com/MrChartist/order-flow` is a browser dashboard that reads futures build-up (price vs OI
+change), sums OI over all listed months, marks the 15-minute "zone" that added the most OI, and leans sectors by
+majority. Licence: **PolyForm Noncommercial 1.0.0** (Required Notice: Copyright (c) 2026 Mr. Chartist). No code was
+copied; the ideas were re-implemented and the notice is kept in the source. It has **no trade-side data either**: its
+"flow" is OI + price, not aggressor volume.
+
+**Verified Dhan capabilities**
+
+| Capability | Dhan provides | Used for |
+|---|---|---|
+| Futures 1m/5m bars with volume and OI (`/charts/intraday`, `oi=true`) | Yes, history | Build-up, all-months OI, BVC delta, relative volume, **back-testable** |
+| WebSocket FULL packet: LTP, cumulative volume, OI, total buy/sell qty, 5-level depth | Yes, live only | Live quote-rule delta, book imbalance |
+| `/marketfeed/quote` for NSE_EQ + NSE_FNO | Yes, live only | NIFTY 50 breadth (cloud), book (cloud) |
+| Trade aggressor flag / tick-by-tick trades | **No** | → every delta/CVD is labelled **ESTIMATED** |
+| Historical depth, historical constituent quotes | **No** | → book and breadth never back-tested |
+| Redis | Not in the existing infrastructure | → in-memory state + SQLite (`orderflow_snapshots`) |
+
+**What was integrated**
+
+| Feature | Cloud `dhan_cloud_single/main.py` | VPS `main.py` |
+|---|---|---|
+| Futures OI build-up (15m / 60m / day), LONG_BUILD / SHORT_COVER / SHORT_BUILD / LONG_UNWIND | `buildup`, `of_window` | same library |
+| All-months OI | `oi_all_months` (per-contract history) | near + next 2 futures subscribed on the existing WebSocket |
+| Volume delta / CVD | BVC on 5m bars (**estimated**) | BVC + live quote-rule/tick-rule from packets (**estimated**, method shares shown) |
+| VWAP, relative volume (same time of day, 10 sessions) | ✓ | ✓ |
+| Order-book imbalance (total qty and 5-level weighted, spread) | from `/marketfeed/quote` each cycle | from FULL packets (already subscribed) |
+| NIFTY 50 breadth + sector median/lean, leaders/laggards | one `/marketfeed/quote` call per cycle | 50 constituents in quote mode on the same WebSocket |
+| Explainable signal | `orderflow_state`: 6–9 PASS/FAIL/n-a checks, OF_BULLISH/OF_BEARISH if ≥ 60 % pass and fresh positions not contradicted | same |
+| Alerts | Telegram on change ("research signal, not a trade") | Telegram via existing `Alerter` |
+| Paper trading | ledger records whether order flow agreed at entry; summary split agreed vs not | TECH signals store order-flow state in `signals.features` |
+| Dashboard | Telegram card section | `orderflow.html` + `/api/orderflow` (manual REFRESH, history of last 30 snapshots) |
+| Historical validation | audit **PHASE OF**: coverage, OF signals traded alone, forward hit rate vs unconditional, random-entry permutation, F3+F4 split by agreement, F3+F4+OF confirmation | — (uses the cloud audit) |
+| Tests | self-test +5 checks (30/30) | `tests/test_orderflow.py` (12 tests); suite 52 passed |
+
+No data pipeline was duplicated: the cloud reuses `intraday()` / `post()`; the VPS reuses `MarketFeed`, `MinuteBars`,
+`Database`, `Alerter` and the health server, and loads the single order-flow library from `dhan_cloud_single/main.py`.
+
+**Limitations that remain**
+1. Delta/CVD are estimates (BVC, quote/tick rule). They can be wrong on any individual bar.
+2. Breadth and book cannot be back-tested; the historical test covers price + OI + estimated volume only.
+3. Futures history is ~2.5 months (the same period F3/F4 were selected on): PHASE OF is in-sample, no OOS yet.
+4. Breadth is equal-weight; the constituent list is as of the Sep-2025 rebalance and must be updated each review.
+5. VPS all-months OI starts at engine start (earlier minutes: near month only).
+6. The "F3+F4 + order-flow confirmation" variant is reported but **not enabled** for paper or live; enabling it would be
+   parameter selection on the same data. Mock-data run of PHASE OF showed no edge for order-flow signals alone.

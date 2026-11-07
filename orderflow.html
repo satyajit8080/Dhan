@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NIFTY Order Flow</title>
+<style>
+:root{
+  --bg:#0d1117;--panel:#161b22;--panel2:#1c2330;--line:#2a3340;--text:#e6edf3;--muted:#8b98a8;
+  --long:#2ea043;--short:#f85149;--wait:#d29922;--flat:#6e7681;--accent:#58a6ff;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+header{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--line);background:var(--panel)}
+h1{font-size:16px;margin:0;font-weight:600;letter-spacing:.3px}
+a{color:var(--accent)}
+.controls{display:flex;gap:8px;align-items:center}
+button{background:var(--accent);color:#04111f;border:1px solid var(--accent);border-radius:6px;padding:8px 12px;font:inherit;font-weight:600;cursor:pointer;min-width:110px}
+button:disabled{opacity:.55;cursor:wait}
+main{max-width:1100px;margin:0 auto;padding:16px;display:grid;gap:16px;grid-template-columns:1fr}
+@media(min-width:900px){main{grid-template-columns:380px 1fr}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;min-width:0}
+.card h2{font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin:0 0 10px;font-weight:600}
+.sig{font-size:28px;font-weight:700;letter-spacing:1px}
+.sig.OF_BULLISH{color:var(--long)}.sig.OF_BEARISH{color:var(--short)}.sig.NONE{color:var(--flat)}
+table{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:13px}
+td,th{padding:6px 8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{color:var(--muted);font-weight:500;font-family:system-ui,sans-serif}
+td.v{text-align:right;word-break:break-word}
+.ok{color:var(--long)}.bad{color:var(--short)}.mut{color:var(--muted)}
+.est{display:inline-block;font-size:11px;padding:0 6px;border-radius:999px;border:1px solid var(--wait);color:var(--wait);margin-left:6px;font-family:system-ui,sans-serif}
+.act{display:inline-block;font-size:11px;padding:0 6px;border-radius:999px;border:1px solid var(--long);color:var(--long);margin-left:6px;font-family:system-ui,sans-serif}
+.meta{font-size:12px;color:var(--muted);margin-top:10px}
+.err{color:var(--short);font-size:12px;margin-top:8px;white-space:pre-wrap}
+.wide{grid-column:1/-1}
+svg{width:100%;height:160px;display:block}
+ul.lim{margin:0;padding-left:18px;color:var(--muted);font-size:12px}
+@media(max-width:620px){td,th{padding:5px 4px;font-size:12px}}
+</style>
+</head>
+<body>
+<header>
+  <h1>NIFTY · Order Flow Intelligence <span class="mut" style="font-weight:400">(research only, no orders)</span></h1>
+  <div class="controls">
+    <a href="index.html">Signal page</a>
+    <button id="refresh">REFRESH</button>
+  </div>
+</header>
+<main>
+  <section class="card">
+    <h2>Order-flow reading</h2>
+    <div class="sig NONE" id="sig">—</div>
+    <div class="mut" id="side">Press REFRESH. The page never polls.</div>
+    <table id="summary"></table>
+    <div class="err" id="err"></div>
+    <div class="meta" id="meta"></div>
+  </section>
+  <section class="card">
+    <h2>Evidence (each check: PASS / FAIL / n/a)</h2>
+    <table id="checks"><tr><td class="mut">No data yet.</td></tr></table>
+  </section>
+  <section class="card">
+    <h2>Futures OI build-up</h2>
+    <table id="buildup"></table>
+  </section>
+  <section class="card">
+    <h2>Volume delta / CVD <span class="est">ESTIMATED</span></h2>
+    <table id="delta"></table>
+  </section>
+  <section class="card wide">
+    <h2>Session: futures price vs estimated CVD (completed 5m bars)</h2>
+    <svg id="chart" viewBox="0 0 1000 160" preserveAspectRatio="none" role="img" aria-label="price and estimated CVD"></svg>
+    <div class="meta"><span style="color:var(--accent)">━ price</span> &nbsp; <span style="color:var(--wait)">━ estimated CVD (BVC)</span></div>
+  </section>
+  <section class="card">
+    <h2>Order book (resting orders) <span class="act">LIVE DEPTH</span></h2>
+    <table id="book"></table>
+  </section>
+  <section class="card">
+    <h2>NIFTY 50 breadth &amp; sectors</h2>
+    <table id="breadth"></table>
+  </section>
+  <section class="card wide">
+    <h2>Recent snapshots</h2>
+    <table id="hist"></table>
+  </section>
+  <section class="card wide">
+    <h2>Data limitations</h2>
+    <ul class="lim" id="lim"></ul>
+  </section>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const n = (v, d=2) => (v === null || v === undefined || Number.isNaN(v)) ? "n/a" : Number(v).toLocaleString("en-IN", {maximumFractionDigits:d, minimumFractionDigits:0});
+const pct = v => (v === null || v === undefined) ? "n/a" : (v >= 0 ? "+" : "") + Number(v).toFixed(2) + "%";
+const rows = (pairs) => pairs.map(([k, v]) => `<tr><th>${k}</th><td class="v">${v}</td></tr>`).join("");
+const cls = b => b === true ? "ok" : (b === false ? "bad" : "mut");
+
+function chart(series) {
+  const s = (series || []).filter(x => x.close != null);
+  if (s.length < 2) { $("chart").innerHTML = ""; return; }
+  const day = new Date(s[s.length-1].ts * 1000).toDateString();
+  const t = s.filter(x => new Date(x.ts * 1000).toDateString() === day);
+  const use = t.length >= 2 ? t : s;
+  const line = (vals, color) => {
+    const lo = Math.min(...vals), hi = Math.max(...vals), r = (hi - lo) || 1;
+    const pts = vals.map((v, i) => `${(i / (vals.length - 1) * 1000).toFixed(1)},${(150 - (v - lo) / r * 140).toFixed(1)}`).join(" ");
+    return `<polyline fill="none" stroke="${color}" stroke-width="2" vector-effect="non-scaling-stroke" points="${pts}"/>`;
+  };
+  $("chart").innerHTML = line(use.map(x => x.close), "var(--accent)") + line(use.map(x => x.est_cvd ?? 0), "var(--wait)");
+}
+
+async function refresh() {
+  const b = $("refresh"); b.disabled = true; b.textContent = "Loading…"; $("err").textContent = "";
+  try {
+    const qs = new URLSearchParams(location.search);
+    const tok = qs.get("token") ? `&token=${encodeURIComponent(qs.get("token"))}` : "";
+    const r = await fetch(`/api/orderflow?index=NIFTY${tok}`, {cache: "no-store"});
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || r.statusText);
+    $("lim").innerHTML = (d.limitations || []).map(x => `<li>${esc(x)}</li>`).join("");
+    if (!d.ok) { $("sig").textContent = "—"; $("side").textContent = d.reason || "not available"; return; }
+    $("sig").textContent = d.signal; $("sig").className = "sig " + d.signal;
+    $("side").textContent = `side ${d.side} · score ${d.score == null ? "n/a" : d.score.toFixed(2)} over ${d.counted} counted checks`;
+    $("summary").innerHTML = rows([
+      ["Series", esc(d.series_name)], ["Last completed bar", esc(d.bar_ist)], ["Close", n(d.close, 1)],
+      ["VWAP", n(d.vwap, 1)], ["Relative volume", d.relvol == null ? "n/a" : n(d.relvol) + "x"],
+      ["Futures OI" + (d.all_months_oi ? " (all months)" : " (near month)"), n(d.oi, 0)],
+    ]);
+    $("checks").innerHTML = (d.checks || []).map(c =>
+      `<tr><td class="${cls(c.pass)}">${c.pass === true ? "PASS" : c.pass === false ? "FAIL" : "n/a"}</td><td>${esc(c.name)}<div class="mut">${esc(c.evidence)}</div></td></tr>`
+    ).join("") || `<tr><td class="mut">Rangebound: no side, no checks.</td></tr>`;
+    const w = (lab, x) => x ? [lab, `${pct(x.dp_pct)} price, OI ${x.doi_pct == null ? "n/a" : pct(x.doi_pct)} → <b>${esc(x.buildup)}</b>`] : [lab, "n/a"];
+    const z = d.zone;
+    $("buildup").innerHTML = rows([w("15 min", d.w15), w("60 min", d.w60), w("Day vs prev close", d.day),
+      ["OI zone", z ? `${n(z.low,1)}–${n(z.high,1)} from ${new Date(z.from*1000).toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit",timeZone:"Asia/Kolkata"})} (+${n(z.oi_added,0)} OI)` : "n/a"]]);
+    const tk = d.tick;
+    $("delta").innerHTML = rows([
+      ["Session CVD (bars, BVC) <span class='est'>EST</span>", n(d.bvc.est_cvd, 0)],
+      ["Last bar delta (BVC) <span class='est'>EST</span>", n(d.bvc.est_delta_last_bar, 0)],
+      ["Session CVD (live packets) <span class='est'>EST</span>", tk ? n(tk.est_cvd, 0) : "n/a (no live ticks yet)"],
+      ["Est. buy / sell volume", tk ? `${n(tk.est_buy_vol,0)} / ${n(tk.est_sell_vol,0)}` : "n/a"],
+      ["Classified by quote rule / tick rule", tk ? `${(tk.quote_rule_share*100).toFixed(0)}% / ${(tk.tick_rule_share*100).toFixed(0)}%` : "n/a"],
+      ["Trade-side data from exchange", "<span class='bad'>not provided by Dhan</span>"],
+    ]);
+    const bk = d.book;
+    $("book").innerHTML = bk ? rows([
+      ["Total buy / sell qty", `${n(bk.total_buy_qty,0)} / ${n(bk.total_sell_qty,0)}`],
+      ["Total imbalance", `<span class="${bk.total_imb > 0.1 ? "ok" : bk.total_imb < -0.1 ? "bad" : "mut"}">${n(bk.total_imb)}</span>`],
+      ["5-level weighted imbalance", n(bk.depth_imb)], ["Best bid / ask", `${n(bk.bid,2)} / ${n(bk.ask,2)}`], ["Spread", n(bk.spread,2)],
+    ]) : `<tr><td class="mut">No depth packet yet (futures are subscribed in FULL mode).</td></tr>`;
+    const br = d.breadth;
+    if (br) {
+      const sec = Object.entries(br.sectors || {}).sort((a, b) => b[1].median_pct - a[1].median_pct)
+        .map(([k, v]) => [`${esc(k)} (${v.n})`, `<span class="${v.lean === "bullish" ? "ok" : v.lean === "bearish" ? "bad" : "mut"}">${v.lean}</span> ${pct(v.median_pct)} · ${v.up}↑ ${v.down}↓`]);
+      $("breadth").innerHTML = rows([["Advances / declines / flat", `${br.advances} / ${br.declines} / ${br.unchanged} of ${br.n}`],
+        ["Equal-weight change", pct(br.mean_pct)],
+        ["Leaders", esc((br.leaders || []).map(x => `${x[0]} ${pct(x[1])}`).join(", "))],
+        ["Laggards", esc((br.laggards || []).map(x => `${x[0]} ${pct(x[1])}`).join(", "))], ...sec]);
+    } else $("breadth").innerHTML = `<tr><td class="mut">No constituent quotes yet.</td></tr>`;
+    chart(d.series);
+    const h = d.history || [];
+    $("hist").innerHTML = h.length ? `<tr><th>IST</th><th>signal</th><th>side</th><th>score</th><th>CVD bars (est)</th><th>CVD live (est)</th><th>OI</th><th>15m build-up</th><th>book imb</th><th>A/D</th></tr>` +
+      h.map(x => `<tr><td>${esc(x.ts_ist)}</td><td>${esc(x.signal)}</td><td>${esc(x.side)}</td><td>${n(x.score)}</td><td>${n(x.est_cvd_bvc,0)}</td><td>${n(x.est_cvd_tick,0)}</td><td>${n(x.fut_oi,0)}</td><td>${esc(x.buildup_15m)}</td><td>${n(x.book_total_imb)}</td><td>${x.advances ?? "-"}/${x.declines ?? "-"}</td></tr>`).join("")
+      : `<tr><td class="mut">No stored snapshots yet (one per completed 5m bar).</td></tr>`;
+    $("meta").textContent = `computed ${d.computed_ist} IST · constituents: ${d.constituents_as_of}`;
+  } catch (e) {
+    $("err").textContent = "Refresh failed: " + e.message;
+  } finally { b.disabled = false; b.textContent = "REFRESH"; }
+}
+$("refresh").addEventListener("click", refresh);
+</script>
+</body>
+</html>
