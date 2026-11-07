@@ -5701,6 +5701,9 @@ async def download_history(eng: "Engine", months: int, names: List[str], out_dir
 
 def run_tech_backtest_files(cfg: Config, names: List[str], in_dir: Path, lots: Dict[str, float]) -> Dict[str, Any]:
     out: Dict[str, Any] = {}
+    in_dir.mkdir(parents=True, exist_ok=True)
+    if not any(in_dir.glob("*_fut_5m.csv")):
+        return {"status": f"no downloaded data in {in_dir}: run `main.py download --months 6` first"}
     for n in names:
         b5 = read_csv_bars(in_dir / f"{n}_fut_5m.csv")
         dly = read_csv_bars(in_dir / f"{n}_daily.csv")
