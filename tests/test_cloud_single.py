@@ -1,9 +1,13 @@
-"""Single-file Dhan Cloud strategy: self-test passes and results match the full engine exactly."""
+"""NIFTY single-file Dhan Cloud engine: self-test, parity with the VPS engine, execution realism,
+roll adjustment, incomplete-candle guard, persistent (replayed) paper ledger and the full audit pipeline."""
+import datetime as dt
 import importlib.util
+import io
+import math
+import random
 import sys
+from contextlib import redirect_stdout
 from pathlib import Path
-
-import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -20,8 +24,12 @@ def test_selftest_passes():
     assert S.selftest()
 
 
-def test_indicator_and_signal_parity():
-    for b in (TI.rnd_bars(700, 4), TI.rnd_bars(700, 8), TI.load_fixture()):
+def test_nifty_only_scope():
+    assert list(S.INDICES) == ["NIFTY"] and S.INDICES["NIFTY"]["sid"] == 13
+
+
+def test_indicator_and_signal_parity_with_vps_engine():
+    for b in (TI.rnd_bars(700, 4), TI.load_fixture()):
         a, c = M.compute_indicators(b), S.compute(b)
         for k in a:
             TI.same(a[k], c[k], 1e-7)
@@ -31,14 +39,176 @@ def test_indicator_and_signal_parity():
             assert (s1["signal"], s1["setup"]) == (s2["signal"], s2["setup"])
 
 
-def test_backtest_parity():
+def test_backtest_parity_legacy_mode():
     b = TI.rnd_bars(3000, 11)
     dl = [{"ts": TI.T0 + d * 86400 - 86400, "high": 24300, "low": 23700, "close": 24000} for d in range(60)]
-    r1, r2 = M.backtest_tech(b, dl, 65, "NSE"), S.backtest(b, dl, 65, "NSE")
-    assert r1["trades"] == r2["trades"] > 0
-    for t1, t2 in zip(r1["trades_list"], r2["trades_list"]):
+    r1 = M.backtest_tech(b, dl, 65, "NSE", levels="index_daily")
+    r2 = S.backtest(b, 65, "NSE", S.PARAMS, None, "legacy", "index_daily", dl, 2026)["trades"]
+    assert r1["trades"] == len(r2) > 0
+    for t1, t2 in zip(r1["trades_list"], r2):
         assert t1["entry_ts"] == t2["entry_ts"] and t1["why"] == t2["why"] and abs(t1["net"] - t2["net"]) < 1e-6
-    assert abs(r1["net_rupees"] - r2["net_rupees"]) < 1e-6
+
+
+def test_series_levels_parity():
+    b = TI.rnd_bars(3000, 12)
+    r1 = M.backtest_tech(b, [], 65, "NSE")
+    r2 = S.backtest(b, 65, "NSE", S.PARAMS, None, "legacy", "series", None, 2026)["trades"]
+    assert r1["trades"] == len(r2)
+    assert abs(r1["net_rupees"] - sum(t["net"] for t in r2)) < 1e-6
+
+
+def _bars(rows, t0):
+    return [{"ts": t0 + k * 300, "open": o, "high": h, "low": l, "close": c, "volume": 1000.0} for k, (o, h, l, c) in enumerate(rows)]
+
+
+def test_gap_through_stop_fills_at_open():
+    base = S.synthetic_bars(800, seed=8)
+    tr = S.backtest(base, 65, "NSE", S.PARAMS, None, "realistic")["trades"]
+    tr = [x for x in tr if x["exit_ts"] > x["entry_ts"] + 300]
+    assert tr
+    t = tr[0]
+    i = next(k for k, b in enumerate(base) if b["ts"] == t["entry_ts"])
+    stop = t["entry"] - t["dir"] * t["sd"]
+    g = [dict(b) for b in base]
+    j = i + 1
+    gap_px = stop - t["dir"] * 20
+    g[j] = dict(g[j], open=gap_px, high=max(gap_px, g[j]["high"]) if t["dir"] < 0 else gap_px + 1,
+                low=min(gap_px, g[j]["low"]) if t["dir"] > 0 else gap_px - 1, close=gap_px)
+    tr2 = S.backtest(g, 65, "NSE", S.PARAMS, None, "realistic")["trades"]
+    t2 = next(x for x in tr2 if x["entry_ts"] == t["entry_ts"])
+    assert t2["why"] == "SL_GAP" and abs(t2["exit"] - (gap_px - t["dir"] * 1.0)) < 1e-6
+    tl = S.backtest(g, 65, "NSE", S.PARAMS, None, "legacy")["trades"]
+    tl2 = next(x for x in tl if x["entry_ts"] == t["entry_ts"])
+    assert tl2["why"] == "SL" and abs(tl2["exit"] - (tl2["entry"] - t["dir"] * tl2["sd"])) < 1e-6   # legacy filled at the stop
+
+
+def test_both_touched_never_favourable_in_realistic():
+    for seed in (1, 2, 3):
+        b = S.synthetic_bars(2500, seed=seed, vol=0.003)
+        r = S.backtest(b, 65, "NSE", S.PARAMS, None, "realistic")["trades"]
+        o = S.backtest(b, 65, "NSE", S.PARAMS, None, "optimistic")["trades"]
+        assert sum(t["pts"] for t in o) >= sum(t["pts"] for t in r)
+
+
+def test_charges_2026_vs_2025():
+    c26 = S.charges("fut", "NSE", 25000 * 65, 25000 * 65, 2026)
+    c25 = S.charges("fut", "NSE", 25000 * 65, 25000 * 65, 2025)
+    assert abs((c26 - c25) - 0.0003 * 25000 * 65) < 1e-6
+    assert S.charges("fut", "NSE", 1, 1, None, dt.date(2026, 3, 31)) == S.charges("fut", "NSE", 1, 1, 2025)
+    assert abs(S.charges("fut", "NSE", 25000 * 65, 25000 * 65, 2026) - M.trade_charges("fut", "NSE", 25000 * 65, 25000 * 65)["total"]) < 1e-6
+
+
+def test_complete_candle_guard_drops_gappy_bucket():
+    d = dt.datetime(2026, 11, 9, 9, 15, tzinfo=S.IST).timestamp()
+    m1 = [{"ts": d + k * 60, "open": 1, "high": 2, "low": 0.5, "close": 1.5, "volume": 1} for k in range(10) if k != 9]
+    assert len(S.complete_5m(m1, d + 3600)) == 1
+
+
+def _mock_market(seed=2, days=9):
+    rnd = random.Random(seed)
+    t0 = dt.datetime(2026, 11, 2, 9, 15, tzinfo=S.IST).timestamp()
+    m1, px = [], 25000.0
+    for k_day in range(days):
+        day = t0 + k_day * 86400
+        if S.ist(day).weekday() >= 5:
+            continue
+        for k in range(375):
+            o = px
+            px *= math.exp(rnd.gauss(0, 0.0006))
+            m1.append({"ts": day + k * 60, "open": o, "high": max(o, px) + 2, "low": min(o, px) - 2, "close": px, "volume": 1000.0})
+    return m1
+
+
+def _patch_live(monkeypatch, m1, now_dt):
+    m1 = [b for b in m1 if b["ts"] < now_dt.timestamp() - 30]
+    monkeypatch.setattr(S, "nifty_futures", lambda: [{"sid": 1, "expiry": "2026-11-24", "lot": 65.0, "segment": "NSE_FNO",
+                                                      "display": "NIFTY NOV FUT"}])
+    monkeypatch.setattr(S, "intraday", lambda sid, seg, ins, frm, to, interval=5, oi=False:
+                        [b for b in m1 if frm <= S.ist(b["ts"]).date() <= to])
+    monkeypatch.setattr(S, "option_chain", lambda sid: (None, {}))
+    monkeypatch.setattr(S, "vix", lambda: 12.0)
+    sent = []
+    monkeypatch.setattr(S, "telegram", lambda t: sent.append(t) or True)
+    monkeypatch.setattr(S, "now_ist", lambda: now_dt)
+    monkeypatch.setattr(S.time, "time", lambda: now_dt.timestamp())
+    monkeypatch.setattr(S, "LEDGER_START", "2026-11-03")
+    return sent
+
+
+def test_paper_ledger_survives_restart_without_duplicates(monkeypatch):
+    m1 = _mock_market()
+    now_dt = dt.datetime(2026, 11, 10, 12, 7, 30, tzinfo=S.IST)
+    sent = _patch_live(monkeypatch, m1, now_dt)
+    st = {"sent": set(), "last_bar": None, "start_ts": now_dt.timestamp() - 7 * 86400}
+    with redirect_stdout(io.StringIO()):
+        S.cycle(st)
+        S.cycle(st)
+    ids = [t["id"] for t in st["ledger"]]
+    assert ids and len(ids) == len(set(ids))
+    paper_msgs = [m for m in sent if m.startswith("[PAPER")]
+    assert len(paper_msgs) == len(set(paper_msgs))
+    st2 = {"sent": set(), "last_bar": None, "start_ts": now_dt.timestamp()}
+    before = len(sent)
+    with redirect_stdout(io.StringIO()):
+        S.cycle(st2)
+    assert [t["id"] for t in st2["ledger"]] == ids
+    assert st2["open"] == st["open"]
+    assert not [m for m in sent[before:] if m.startswith("[PAPER")]
+    for t in st["ledger"]:
+        assert abs(t["net"] - (t["pts"] * 65 - t["charges"])) < 1e-6
+    assert "since 2026-11-03" in S.ledger_summary(st["ledger"], "2026-11-10")
+
+
+def test_card_applies_f3_f4():
+    b = S.synthetic_bars(1500, seed=21)
+    x = S.compute(S.adjusted(b))
+    lvls = S.prior_session_levels(b)
+    n_checked = 0
+    for i in range(80, len(b)):
+        t = S.ist(b[i]["ts"])
+        sig = S.signal_at(x, i, lvls.get(t.date(), {}))
+        if sig["signal"] not in ("LONG", "SHORT"):
+            continue
+        card, _ = S.build_card(b[:i + 1], {}, None, None, 12.0, 65, S.LIVE_FILTER)
+        if t.time() >= dt.time(13, 0) and S.ENTRY_START <= t.time():
+            assert card["signal"] == "NO_TRADE"
+        elif sig["setup"] == "SQUEEZE_BREAKOUT" and S.ENTRY_START <= t.time():
+            band = x["bb_up"][i] if sig["signal"] == "LONG" else x["bb_lo"][i]
+            brk = abs(x["close"][i] - band) / x["close"][i] * 1e4
+            assert (card["signal"] == "NO_TRADE") == (brk < 2.0)
+        n_checked += 1
+    assert n_checked > 0
+
+
+def test_full_audit_pipeline_runs_on_mock_data(monkeypatch):
+    end = dt.datetime(2026, 11, 6, 15, 25, tzinfo=S.IST)
+    idx = [b for b in S.synthetic_bars(125 * 75, seed=4, t0=dt.datetime(2026, 5, 8, 9, 15, tzinfo=S.IST).timestamp())
+           if b["ts"] <= end.timestamp()]
+    for b in idx:
+        b["volume"] = 0.0
+    split = dt.datetime(2026, 8, 26, 9, 15, tzinfo=S.IST).timestamp()
+    c1 = [dict(b, open=b["open"] + 60, high=b["high"] + 60, low=b["low"] + 60, close=b["close"] + 60, volume=5.0) for b in idx if b["ts"] >= split]
+    c2 = [dict(b, open=b["open"] + 140, high=b["high"] + 140, low=b["low"] + 140, close=b["close"] + 140, volume=3.0) for b in idx if b["ts"] >= split]
+    monkeypatch.setattr(S, "nifty_futures", lambda: [{"sid": 1, "expiry": "2026-09-29", "lot": 65.0, "segment": "NSE_FNO", "display": "SEP"},
+                                                     {"sid": 2, "expiry": "2026-12-29", "lot": 65.0, "segment": "NSE_FNO", "display": "DEC"}])
+    monkeypatch.setattr(S, "intraday", lambda sid, seg, ins, frm, to, interval=5, oi=False:
+                        [b for b in {13: idx, 1: c1, 2: c2}[sid] if frm <= S.ist(b["ts"]).date() <= to])
+    days = sorted({S.ist(b["ts"]).date() for b in idx})
+    dl = []
+    for d in days:
+        bs = [b for b in idx if S.ist(b["ts"]).date() == d]
+        dl.append({"ts": dt.datetime.combine(d, dt.time(0, 0), S.IST).timestamp(), "open": bs[0]["open"],
+                   "high": max(b["high"] for b in bs), "low": min(b["low"] for b in bs), "close": bs[-1]["close"], "volume": 0})
+    monkeypatch.setattr(S, "daily", lambda sid, n: dl)
+    monkeypatch.setattr(S, "now_ist", lambda: end)
+    monkeypatch.setattr(S, "PERMUTATIONS", 30)
+    buf = io.StringIO()
+    with redirect_stdout(buf):
+        S.run_audit(6)
+    out = buf.getvalue()
+    for key in ("PHASE 1", "PHASE 3a", "PHASE 3b", "PERMUTATION", "FILTER ATTRIBUTION", "slippage 5.0", "REGIME",
+                "ML INDEX", "Hurst", "VERDICT"):
+        assert key in out, key
 
 
 def test_dhan_cloud_restrictions():
@@ -46,123 +216,4 @@ def test_dhan_cloud_restrictions():
     for bad in ("import os", "os.environ", "os.getenv", "os.path", "subprocess", "open(", "socket", "sqlite", ".write(", "eval(", "exec("):
         assert bad not in src, bad
     assert "{{DHAN_ACCESS_TOKEN}}" in src
-
-
-def test_pull_and_backtest_with_mocked_dhan(monkeypatch):
-    bars = TI.rnd_bars(1500, 3)
-
-    def fake_post(path, payload, retries=3):
-        if path == "/charts/historical":
-            return {"timestamp": [TI.T0 + d * 86400 - 86400 for d in range(30)], "open": [24000] * 30,
-                    "high": [24300] * 30, "low": [23700] * 30, "close": [24000] * 30, "volume": [0] * 30}
-        sel = [x for x in bars if payload["fromDate"][:10] <= S.dt.datetime.fromtimestamp(x["ts"], S.IST).date().isoformat() <= payload["toDate"][:10]]
-        return {k: [x[k2] for x in sel] for k, k2 in (("timestamp", "ts"), ("open", "open"), ("high", "high"),
-                                                      ("low", "low"), ("close", "close"), ("volume", "volume"))}
-    monkeypatch.setattr(S, "post", fake_post)
-    monkeypatch.setattr(S, "all_futures", lambda: {n: [{"sid": 1, "expiry": "2099-01-01", "lot": 65.0, "segment": "NSE_FNO",
-                                                        "display": "X"}] for n in S.INDICES})
-    monkeypatch.setattr(S, "now_ist", lambda: S.dt.datetime.fromtimestamp(bars[-1]["ts"], S.IST))
-    monkeypatch.setattr(S, "BACKTEST_INDICES", [])
-    out = S.pull_and_backtest(1)
-    assert {k for k in out if not k.endswith("-INDEX")} == set(S.INDICES)
-    assert all(v["trades"] > 0 for k, v in out.items() if not k.endswith("-INDEX"))
-    monkeypatch.setattr(S, "BACKTEST_INDICES", ["BANKEX"])
-    out = S.pull_and_backtest(1)
-    assert set(out) == {"BANKEX", "BANKEX-INDEX"}
-    assert all(t["setup"] == "SQUEEZE_BREAKOUT" for t in out["BANKEX-INDEX"].get("by_setup", {}) and [{"setup": k} for k in out["BANKEX-INDEX"]["by_setup"]])
-
-
-def test_fixed_point_backtest():
-    b1 = []
-    t0 = S.dt.datetime(2026, 11, 2, 9, 15, tzinfo=S.IST).timestamp()
-    import random
-    r = random.Random(5)
-    px = 24000.0
-    for day in range(20):
-        for k in range(375):
-            px += r.gauss(0, 4)
-            b1.append({"ts": t0 + day * 86400 + k * 60, "open": px, "high": px + abs(r.gauss(0, 3)),
-                       "low": px - abs(r.gauss(0, 3)), "close": px, "volume": 1000.0})
-    b5 = S.resample(b1, 5)
-    dl = [{"ts": t0 + d * 86400 - 86400, "high": 24300, "low": 23700, "close": 24000} for d in range(25)]
-    tr = S.backtest_fixed(b5, b1, dl, 65, "NSE", 10, 10)
-    assert tr
-    for t in tr:
-        assert t["why"] in ("SL", "TARGET", "EOD")
-        if t["why"] == "SL":
-            assert abs(t["pts"] + 10) < 1e-9
-        if t["why"] == "TARGET":
-            assert abs(t["pts"] - 10) < 1e-9
-        assert abs(t["net"] - (t["pts"] * 65 - t["charges"])) < 1e-9
-    assert "trades" in S.summarize_fixed("x", tr, 65)
-
-
-def test_orb_rule():
-    t0 = S.dt.datetime(2026, 11, 2, 9, 15, tzinfo=S.IST).timestamp()
-    px = [100, 102, 101, 103.5, 103.6, 104, 105, 106, 107, 108] + [108] * 65
-    bars = [{"ts": t0 + i * 300, "open": px[i - 1] if i else px[0], "high": px[i] + 0.2, "low": min(px[i], px[i - 1] if i else px[i]) - 0.2,
-             "close": px[i], "volume": 1.0} for i in range(75)]
-    tl = S.backtest_orb(bars, 65, "NSE", 15, 1.0)
-    assert len(tl) == 1 and tl[0]["dir"] == 1 and tl[0]["why"] == "TARGET"
-    assert abs(tl[0]["net"] - (tl[0]["pts"] * 65 - tl[0]["charges"])) < 1e-9
-
-
-def _mk1(t0, closes, spread=1.0):
-    out = []
-    for i, c in enumerate(closes):
-        o = closes[i - 1] if i else c
-        out.append({"ts": t0 + i * 60, "open": o, "high": max(o, c) + spread, "low": min(o, c) - spread, "close": c, "volume": 1000.0})
-    return out
-
-
-def test_live_filters_f3_f4():
-    b = TI.load_fixture()
-    now = b[-1]["ts"] + 300
-    prev = {"high": 24641.6, "low": 24330, "close": 24580.2}
-    flt = S.LIVE_FILTERS["NIFTY"]
-    assert flt == {"entry_end": S.dt.time(13, 0), "min_break_bps": 2.0}
-    x = S.compute(b)
-    lv = S.pivots(prev["high"], prev["low"], prev["close"])
-    seen = {"F3": 0, "F4": 0, "PASS": 0}
-    for i in range(60, len(b)):
-        sig = S.signal_at(x, i, lv)
-        if sig["signal"] not in ("LONG", "SHORT"):
-            continue
-        card, _ = S.build_card("NIFTY", b[:i + 1], prev, {}, "2026-11-09", 14.0, 65, b[i]["ts"] + 300, S.PARAMS, flt)
-        bt = S.dt.datetime.fromtimestamp(b[i]["ts"], S.IST).time()
-        if not (S.ENTRY_START <= bt < S.ENTRY_END):
-            continue
-        if bt >= S.dt.time(13, 0):
-            assert card["setup"] == "FILTER_F3_TIME"
-            seen["F3"] += 1
-        elif sig["setup"] == "SQUEEZE_BREAKOUT":
-            band = x["bb_up"][i] if sig["signal"] == "LONG" else x["bb_lo"][i]
-            brk = abs(x["close"][i] - band) / x["close"][i] * 1e4
-            if brk < 2:
-                assert card["setup"] == "FILTER_F4_WEAK_BREAK"
-                seen["F4"] += 1
-            else:
-                assert card["signal"] == sig["signal"]
-                seen["PASS"] += 1
-    assert sum(seen.values()) > 0
-    assert now
-
-
-def test_paper_trade_flow():
-    t0 = S.dt.datetime(2026, 11, 9, 10, 0, tzinfo=S.IST).timestamp()
-    paper = {}
-    card = {"index": "NIFTY", "signal": "LONG", "setup": "SQUEEZE_BREAKOUT", "stop_dist": 20.0, "targets": [24020, 24040],
-            "bar_ts": t0 - 300, "reason": "test"}
-    S.paper_enter(paper, card, 65, "NSE")
-    assert paper["pos"]["entry"] is None
-    b1 = _mk1(t0, [24000, 24005, 24010, 24020, 24030, 24045, 24050], spread=0.5)
-    msgs = S.paper_update(paper, b1, b1[-1]["ts"] + 60)
-    assert any("ENTER" in m for m in msgs) and any("EXIT" in m and "TARGET" in m for m in msgs)
-    tr = paper["trades"][0]
-    assert tr["entry"] == 24000 and tr["exit"] == 24040 and abs(tr["net"] - (40 * 65 - tr["charges"])) < 1e-9
-    assert paper["pos"] is None
-    S.paper_enter(paper, dict(card, signal="SHORT", bar_ts=t0 + 600), 65, "NSE")
-    b2 = _mk1(t0 + 900, [24050, 24060, 24075], spread=0.5)
-    msgs = S.paper_update(paper, b2, b2[-1]["ts"] + 60)
-    assert any("SL" in m for m in msgs) and paper["trades"][-1]["why"] == "SL"
-    assert "2 trades" in S.paper_summary(paper, "2026-11-09")
+    assert "place_order" not in src and "/orders" in src     # /orders only appears in the blocked-endpoint self-test

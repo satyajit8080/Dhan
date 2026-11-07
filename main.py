@@ -199,7 +199,7 @@ class Config:
     db_path: Path = Path("data/engine.db")
     log_dir: Path = Path("logs")
     log_level: str = "INFO"
-    indices: List[str] = field(default_factory=lambda: ["NIFTY", "BANKNIFTY", "FINNIFTY", "SENSEX", "BANKEX"])
+    indices: List[str] = field(default_factory=lambda: ["NIFTY"])   # NIFTY-only research scope
     strike_window: int = 15                 # ATM +/- N strikes monitored
     ws_full_window: int = 15                # strikes subscribed in FULL mode (depth + OI)
     chain_min_interval_s: float = 3.2       # Dhan: 1 unique option-chain request / 3 s
@@ -254,7 +254,7 @@ class Config:
             c.db_path = base / c.db_path
         c.log_dir = base / _env("LOG_DIR", "logs")
         c.log_level = _env("LOG_LEVEL", "INFO").upper()
-        idx = _env("INDICES", ",".join(c.indices))
+        idx = _env("INDICES", "NIFTY")
         c.indices = [s.strip().upper() for s in idx.split(",") if s.strip()]
         c.strike_window = _env_i("STRIKE_WINDOW", c.strike_window)
         c.ws_full_window = min(_env_i("WS_FULL_WINDOW", c.ws_full_window), c.strike_window)
@@ -551,6 +551,34 @@ def black76_greeks(F: float, K: float, T: float, r: float, sigma: float, is_call
     theta = -dVdT / 365.0
     rho = -T * price * 0.01
     return Greeks(price, delta, gamma, vega, theta, rho)
+
+
+def black76_vanna_charm(F: float, K: float, T: float, r: float, sigma: float, is_call: bool) -> Tuple[float, float]:
+    """vanna = d(delta)/d(sigma) per 1 vol point; charm = d(delta)/d(calendar day) (time decay of delta)."""
+    df = math.exp(-r * T)
+    d1, d2 = _d1d2(F, K, T, sigma)
+    n1 = norm_pdf(d1)
+    delta = df * (norm_cdf(d1) if is_call else norm_cdf(d1) - 1.0)
+    vanna = -df * n1 * d2 / sigma * 0.01
+    charm = -(-r * delta + df * n1 * (-d2 / (2 * T))) / 365.0
+    return vanna, charm
+
+
+def iv_rank_percentile(history: Sequence[float], iv: float) -> Tuple[float, float]:
+    h = [x for x in history if x is not None and math.isfinite(x)]
+    if len(h) < 20 or not math.isfinite(iv):
+        return float("nan"), float("nan")
+    lo, hi = min(h), max(h)
+    return ((iv - lo) / (hi - lo) * 100 if hi > lo else float("nan")), 100.0 * sum(1 for x in h if x < iv) / len(h)
+
+
+def hurst_exponent(prices: Sequence[float], lags: Sequence[int] = (2, 4, 8, 16, 32, 64)) -> float:
+    lp = np.log(np.asarray([p for p in prices if p > 0], float))
+    pts = [(math.log(t), math.log(np.std(lp[t:] - lp[:-t], ddof=1))) for t in lags if len(lp) > t + 10]
+    if len(pts) < 3:
+        return float("nan")
+    a = np.array(pts)
+    return float(np.polyfit(a[:, 0], a[:, 1], 1)[0])
 
 
 def implied_vol_black76(price: float, F: float, K: float, T: float, r: float, is_call: bool,
@@ -1385,13 +1413,13 @@ def liquidity_score(spread_pct_v: Optional[float], volume: float, oi: float, top
 
 def option_costs_bps(premium: float, qty: int, side_sell: bool) -> float:
     """Approximate Indian index-option charges as bps of premium turnover (one side).
-    STT 0.1% on sell premium (2024 revision), exchange txn ~0.035-0.05%, SEBI 0.0001%,
+    STT 0.15% on sell premium (Budget 2026, from 01-Apr-2026), exchange txn ~0.035-0.05%, SEBI 0.0001%,
     stamp 0.003% on buy, GST 18% on (brokerage+txn). Flat Rs20 brokerage per order.
     These are approximations for research costing only; override with COST_BPS_ROUNDTRIP."""
     turnover = premium * qty
     if turnover <= 0:
         return 0.0
-    stt = 0.001 * turnover if side_sell else 0.0
+    stt = 0.0015 * turnover if side_sell else 0.0
     txn = 0.0004 * turnover
     stamp = 0.00003 * turnover if not side_sell else 0.0
     brokerage = 20.0
@@ -5244,8 +5272,9 @@ def oi_change_by_strike(legs: Dict[Tuple[float, str], "Leg"], top: int = 5) -> L
 # Indian F&O statutory charges (approximation, editable here). Rates as of 2026 schedule:
 CHARGES = {
     "brokerage_per_order": 20.0,
-    "fut": {"stt_sell": 0.0002, "txn_NSE": 0.0000173, "txn_BSE": 0.0, "stamp_buy": 0.00002},
-    "opt": {"stt_sell": 0.001, "txn_NSE": 0.0003503, "txn_BSE": 0.000325, "stamp_buy": 0.00003},
+    # STT raised by Union Budget 2026 (effective 01-Apr-2026): futures 0.02% -> 0.05%, options 0.10% -> 0.15%
+    "fut": {"stt_sell": 0.0005, "txn_NSE": 0.0000173, "txn_BSE": 0.0, "stamp_buy": 0.00002},
+    "opt": {"stt_sell": 0.0015, "txn_NSE": 0.0003503, "txn_BSE": 0.000325, "stamp_buy": 0.00003},
     "sebi": 0.000001, "gst": 0.18,
 }
 
@@ -5495,14 +5524,23 @@ def tech_snapshot(name: str, bars5: List[Dict[str, float]], prev_day: Optional[D
 # ---------------------------------------------------------------- backtest --
 
 def backtest_tech(bars5: List[Dict[str, float]], daily: List[Dict[str, float]], lot: float, exch: str = "NSE",
-                  p: Optional[TechParams] = None, eod: dt.time = dt.time(15, 20)) -> Dict[str, Any]:
-    """Futures backtest of the rule set. Signal on CLOSED bar i -> fill at OPEN of bar i+1 (no look-ahead).
+                  p: Optional[TechParams] = None, eod: dt.time = dt.time(15, 20),
+                  levels: str = "series") -> Dict[str, Any]:
+    """levels='series' (default): previous-session pivots from the traded series itself. levels='index_daily' is the
+    pre-audit behaviour that compared futures prices with INDEX daily H/L/C (basis error of 50-200 points).
+    Futures backtest of the rule set. Signal on CLOSED bar i -> fill at OPEN of bar i+1 (no look-ahead).
     Exits: 2*ATR stop / final target / EOD 15:20; stop assumed first if both hit in one bar.
     P&L per trade = points * qty - full statutory charges (brokerage, STT, txn, SEBI, stamp, GST)."""
     p = p or TechParams()
     if len(bars5) < 60:
         return {"status": f"INSUFFICIENT DATA ({len(bars5)} bars)"}
     ind = compute_indicators(bars5)
+    if levels == "series":
+        sess: Dict[dt.date, List[Dict[str, float]]] = {}
+        for b in bars5:
+            sess.setdefault(dt.datetime.fromtimestamp(b["ts"], IST).date(), []).append(b)
+        daily = [{"ts": dt.datetime.combine(d, dt.time(0, 0), IST).timestamp(), "high": max(x["high"] for x in v),
+                  "low": min(x["low"] for x in v), "close": v[-1]["close"]} for d, v in sorted(sess.items())]
     dmap = {dt.datetime.fromtimestamp(d["ts"], IST).date(): d for d in daily}
     ddays = sorted(dmap)
     trades: List[Dict[str, Any]] = []

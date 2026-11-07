@@ -5,8 +5,8 @@ from indicators import ok
 
 CHARGES = {
     "brokerage_per_order": 20.0,
-    "fut": {"stt_sell": 0.0002, "txn_NSE": 0.0000173, "txn_BSE": 0.0, "stamp_buy": 0.00002},
-    "opt": {"stt_sell": 0.001, "txn_NSE": 0.0003503, "txn_BSE": 0.000325, "stamp_buy": 0.00003},
+    "fut": {"stt_sell": 0.0005, "txn_NSE": 0.0000173, "txn_BSE": 0.0, "stamp_buy": 0.00002},
+    "opt": {"stt_sell": 0.0015, "txn_NSE": 0.0003503, "txn_BSE": 0.000325, "stamp_buy": 0.00003},
     "sebi": 0.000001, "gst": 0.18,
 }
 

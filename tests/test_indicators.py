@@ -152,7 +152,7 @@ def test_cloud_parity_rules_and_charges():
 
 def test_charges_components():
     ch = M.trade_charges("opt", "NSE", 100000, 110000)
-    assert abs(ch["stt"] - 110.0) < 1e-9 and ch["brokerage"] == 40
+    assert abs(ch["stt"] - 165.0) < 1e-9 and ch["brokerage"] == 40
     assert abs(ch["gst"] - 0.18 * (40 + ch["txn"] + ch["sebi"])) < 1e-9
 
 

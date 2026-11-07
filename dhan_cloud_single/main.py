@@ -1,33 +1,31 @@
 """
-DHAN QUANT - single-file Dhan Cloud strategy (read-only, never places orders)
+NIFTY QUANT ENGINE - single-file Dhan Cloud build (NIFTY only, read-only, never places orders)
 
-On start:  1) offline self-test of every formula
-           2) pulls BACKTEST_MONTHS of 5m data from Dhan (in memory) and backtests the rules
-           3) live loop: on every closed 5m bar computes indicators + rules for each index,
-              prints the signal card, and sends Telegram on a new LONG/SHORT
-Nothing is written to disk; no ports. Secrets come from the Env Variables tab ({{NAME}}).
+MODES (set below):
+  RUN_AUDIT_ON_START   full institutional audit of the NIFTY strategy (data quality, reproduction of the
+                       reported numbers, corrections, execution scenarios, statistics, filter attribution,
+                       permutation / bootstrap / Monte Carlo / Deflated Sharpe, regimes, ML research)
+  LIVE loop            closed-5m-bar signals on NIFTY front-month futures with filters F3 + F4,
+                       Telegram cards, and a PAPER LEDGER that is rebuilt deterministically from Dhan data
+                       (survives restarts, unique trade ids, lifecycle states, no duplicates)
 
-Indicators: VWAP (typical price, session reset), ATR(14) Wilder, Supertrend(10,3), ADX/DI(14),
-RSI(14) Wilder, Bollinger(20,2) bandwidth, Efficiency Ratio(10), Z-score(20), floor pivots +
-previous-day H/L/C, PCR (volume and OI).
-Rules: trend filter ADX>25 and ER>0.3; LONG = close>VWAP, Supertrend long, DI+>DI-, RSI pullback
-40-55 turning up (SHORT mirror); mean reversion only if ADX<20 (|z|>2 fade to VWAP); squeeze
-(bandwidth at 20-bar low) -> breakout in Supertrend direction; skip entries within 0.2*ATR of
-R1/R2/S1/S2/PDH/PDL unless closing through; stop 2*ATR; lots = risk / (stop * lot size);
-P&L includes brokerage, STT, exchange txn, SEBI, stamp, GST. Entries 09:30-15:10 IST only.
+DATA SETS ARE KEPT SEPARATE: NIFTY index (spot, IDX_I 13), NIFTY futures (NSE_FNO, stitched front month,
+additively back-adjusted for indicators only), NIFTY options (option chain, Black-76 on the carry-adjusted
+futures forward).
 """
 import bisect
 import csv
 import datetime as dt
+import hashlib
 import math
+import random
 import time
 import traceback
 
 import requests
 
 # =============================================================== CONFIG ==
-# Dhan Cloud replaces {{NAME}} with the Variable's value. Single quotes here mean the value
-# works whether it is entered in the Variables page with or without double quotes.
+# Dhan Cloud replaces {{NAME}} with the Variable's value (Env Variables tab).
 
 
 def _var(v):
@@ -35,8 +33,6 @@ def _var(v):
 
 
 def _first(*vals):
-    """First placeholder Dhan Cloud actually substituted (the automatic Global Variable name is not
-    published; common names are tried in order)."""
     for v in vals:
         v = _var(v)
         if v and not v.startswith("{{"):
@@ -50,41 +46,22 @@ TELEGRAM_TOKEN = _var('{{TELEGRAM_BOT_TOKEN}}')
 TELEGRAM_CHAT = _var('{{TELEGRAM_CHAT_ID}}')
 
 RUN_SELFTEST_ON_START = True
-RUN_BACKTEST_ON_START = False  # set True to rerun the 6-month NIFTY backtest + filter tests on start
-BACKTEST_MONTHS = 6
-# ---- LIVE ----
-LIVE_INDICES = ["NIFTY"]        # indices the live loop signals (others lost money in the 6-month tests)
-LIVE_FILTERS = {                # F3 + F4, validated on unseen May-Aug NIFTY data
-    "NIFTY": {"entry_end": dt.time(13, 0), "min_break_bps": 2.0},
-}
-PAPER_TRADE = True              # simulate every live signal on 1 futures lot (no orders), Telegram entry/exit + daily summary
-BACKTEST_INDICES = ["NIFTY"]   # [] = all indices
-INDEX_PROXY_BACKTEST = True     # also backtest on 6 months of INDEX 5m bars (no volume -> only squeeze can fire)
-FIXED_POINT_TESTS = []   # (stop pts, target pts) compared vs 2xATR
-PRINT_ALL_TRADES = False
-# NIFTY improvement filters (derived from Aug-Nov futures trades; checked on unseen May-Aug index bars)
-FILTER_SETS = {
-    "F1 max 1 trade/day": {"max_trades_per_day": 1},
-    "F2 stop after 1st loss": {"stop_after_loss": True},
-    "F3 entries 09:30-13:00": {"entry_end": dt.time(13, 0)},
-    "F4 squeeze break >= 2bps": {"min_break_bps": 2.0},
-    "F5 breakeven at +1R": {"breakeven_r": 1.0},
-    "F6 squeeze setup only": {"setups": ("SQUEEZE_BREAKOUT",)},
-    "ALL F1+F3+F4+F5": {"max_trades_per_day": 1, "entry_end": dt.time(13, 0), "min_break_bps": 2.0, "breakeven_r": 1.0},
-    "F3+F4 (time + 2bps)": {"entry_end": dt.time(13, 0), "min_break_bps": 2.0},
-    "F3+F4+F1 (+1 trade/day)": {"entry_end": dt.time(13, 0), "min_break_bps": 2.0, "max_trades_per_day": 1},
-    "F3+F4+F6 (squeeze only)": {"entry_end": dt.time(13, 0), "min_break_bps": 2.0, "setups": ("SQUEEZE_BREAKOUT",)},
-}         # print every backtest trade as WIN / LOSS with entry + exit reason
+RUN_AUDIT_ON_START = True          # NIFTY audit report in the logs (takes ~1-3 minutes)
+AUDIT_MONTHS = 6
+PERMUTATIONS = 400                 # random-entry permutation test size
+BOOTSTRAPS = 3000
+LIVE = True
+LIVE_FILTER = {"entry_end": dt.time(13, 0), "min_break_bps": 2.0}   # F3 + F4 (frozen; not re-optimised)
+PAPER_TRADE = True
+LEDGER_START = "2026-11-09"        # first paper-trading session; the ledger is replayed from here on every restart
+EXEC_LIVE = "realistic"            # execution scenario used for the paper ledger
+
+# research-history bookkeeping: every rule/filter variant evaluated on this data so far (for Deflated Sharpe)
+VARIANTS_TESTED = 26               # 3 setups x baseline + 7 single filters + 3 combos + 4 ORB + 4 fixed-point + 5 indices
 
 BASE = "https://api.dhan.co/v2"
 SCRIP_MASTER = "https://images.dhan.co/api-data/api-scrip-master-detailed.csv"
-INDICES = {   # index security ids verified against the Dhan instrument master (IDX_I)
-    "NIFTY": {"sid": 13, "exch": "NSE", "step": 50},
-    "BANKNIFTY": {"sid": 25, "exch": "NSE", "step": 100},
-    "FINNIFTY": {"sid": 27, "exch": "NSE", "step": 50},
-    "SENSEX": {"sid": 51, "exch": "BSE", "step": 100},
-    "BANKEX": {"sid": 69, "exch": "BSE", "step": 100},
-}
+INDICES = {"NIFTY": {"sid": 13, "exch": "NSE", "step": 50}}   # NIFTY 50, IDX_I security id 13 (Dhan instrument master)
 VIX_SID = 21
 PARAMS = {"adx_trend": 25.0, "er_trend": 0.3, "adx_mr": 20.0, "z_mr": 2.0, "rsi_lo": 40.0, "rsi_hi": 55.0,
           "squeeze_lookback": 20, "squeeze_memory": 5, "level_atr": 0.2, "stop_atr": 2.0,
@@ -92,6 +69,19 @@ PARAMS = {"adx_trend": 25.0, "er_trend": 0.3, "adx_mr": 20.0, "z_mr": 2.0, "rsi_
 RISK_FREE = 0.065
 LOOP_SLEEP_S = 20
 ENTRY_START, ENTRY_END, EOD_EXIT = dt.time(9, 30), dt.time(15, 10), dt.time(15, 20)
+SESSION_BARS_5M = 75               # 09:15 ... 15:25
+
+# Execution scenarios. slip = adverse points per market fill (entry, stop, time exit). Targets are limit orders.
+#   legacy     = engine before this audit (stop and target at exact price, no gaps, no slippage)
+#   optimistic = no slippage, target assumed first when both are touched in one bar
+#   realistic  = 1.0 pt slippage, gaps through the stop fill at the open, stop assumed first
+#   stress     = 3.0 pt slippage, gap fills, stop first, target needs a 0.5 pt trade-through
+EXEC = {
+    "legacy": {"slip": 0.0, "gap": False, "both": "sl", "tg_through": 0.0},
+    "optimistic": {"slip": 0.0, "gap": False, "both": "tg", "tg_through": 0.0},
+    "realistic": {"slip": 1.0, "gap": True, "both": "sl", "tg_through": 0.0},
+    "stress": {"slip": 3.0, "gap": True, "both": "sl", "tg_through": 0.5},
+}
 
 NAN = float("nan")
 IST = dt.timezone(dt.timedelta(hours=5, minutes=30))
@@ -107,6 +97,10 @@ def configured():
 
 def ok(x):
     return isinstance(x, (int, float)) and math.isfinite(x)
+
+
+def ist(ts):
+    return dt.datetime.fromtimestamp(ts, IST)
 
 
 # =========================================================== INDICATORS ==
@@ -258,21 +252,6 @@ def compute(b):
 
 
 # ================================================================ RULES ==
-CHARGES = {"brokerage_per_order": 20.0,
-           "fut": {"stt_sell": 0.0002, "txn_NSE": 0.0000173, "txn_BSE": 0.0, "stamp_buy": 0.00002},
-           "opt": {"stt_sell": 0.001, "txn_NSE": 0.0003503, "txn_BSE": 0.000325, "stamp_buy": 0.00003},
-           "sebi": 0.000001, "gst": 0.18}
-
-
-def charges(kind, exch, buy_value, sell_value):
-    """Round trip in Rupees: brokerage x2, STT on sell, exchange txn, SEBI, stamp on buy, GST 18%."""
-    r = CHARGES[kind]
-    brk = 2 * CHARGES["brokerage_per_order"]
-    txn = r.get("txn_" + exch, r["txn_NSE"]) * (buy_value + sell_value)
-    sebi = CHARGES["sebi"] * (buy_value + sell_value)
-    return brk + r["stt_sell"] * sell_value + txn + sebi + r["stamp_buy"] * buy_value + CHARGES["gst"] * (brk + txn + sebi)
-
-
 def _is_squeeze(bw, j, lb):
     if j < lb:
         return False
@@ -335,12 +314,45 @@ def signal_at(x, i, levels, p=PARAMS):
     return cand
 
 
+
+# ===================================================== CHARGES (INDIA) ==
+# Statutory schedule. STT was raised by Union Budget 2026, effective 01-Apr-2026:
+#   futures 0.02% -> 0.05% of sell value; options 0.10% -> 0.15% of sell premium.
+# NSE exchange transaction charge: futures 0.00173%, options 0.03503% of turnover (Oct-2024 schedule).
+# SEBI fee Rs10/crore; stamp duty on buy side: futures 0.002%, options 0.003%; GST 18% on brokerage+txn+SEBI.
+# Brokerage: Rs20 per executed order (Dhan flat fee).
+CHARGES = {
+    2026: {"fut": {"stt_sell": 0.0005, "txn_NSE": 0.0000173, "stamp_buy": 0.00002},
+           "opt": {"stt_sell": 0.0015, "txn_NSE": 0.0003503, "stamp_buy": 0.00003}},
+    2025: {"fut": {"stt_sell": 0.0002, "txn_NSE": 0.0000173, "stamp_buy": 0.00002},
+           "opt": {"stt_sell": 0.001, "txn_NSE": 0.0003503, "stamp_buy": 0.00003}},
+}
+BROKERAGE_PER_ORDER, SEBI_RATE, GST = 20.0, 0.000001, 0.18
+STT_CHANGE_DATE = dt.date(2026, 4, 1)
+
+
+def charges(kind, exch, buy_value, sell_value, year=None, trade_date=None):
+    """Round-trip statutory + brokerage charges in Rupees."""
+    if year is None:
+        year = 2026 if (trade_date is None or trade_date >= STT_CHANGE_DATE) else 2025
+    r = CHARGES[year][kind]
+    brk = 2 * BROKERAGE_PER_ORDER
+    txn = r["txn_NSE"] * (buy_value + sell_value)
+    sebi = SEBI_RATE * (buy_value + sell_value)
+    return brk + r["stt_sell"] * sell_value + txn + sebi + r["stamp_buy"] * buy_value + GST * (brk + txn + sebi)
+
+
 def lots_for(risk_rupees, stop_pts, lot):
     return int(risk_rupees // (stop_pts * lot)) if stop_pts > 0 and lot > 0 else 0
 
 
+# ========================================================= OPTIONS MATH ==
 def norm_cdf(x):
     return 0.5 * math.erfc(-x / math.sqrt(2))
+
+
+def norm_pdf(x):
+    return math.exp(-0.5 * x * x) / math.sqrt(2 * math.pi)
 
 
 def black76(F, K, T, r, s, call):
@@ -352,9 +364,31 @@ def black76(F, K, T, r, s, call):
     return df * (F * norm_cdf(d1) - K * norm_cdf(d2)) if call else df * (K * norm_cdf(-d2) - F * norm_cdf(-d1))
 
 
+def greeks76(F, K, T, r, s, call):
+    """Black-76 Greeks. delta dV/dF, gamma per pt^2, vega per 1 vol pt, theta per calendar day,
+    rho per 1% rate, vanna d(delta)/d(vol pt), charm d(delta)/d(calendar day)."""
+    df = math.exp(-r * T)
+    sq = math.sqrt(T)
+    d1 = (math.log(F / K) + 0.5 * s * s * T) / (s * sq)
+    d2 = d1 - s * sq
+    n1 = norm_pdf(d1)
+    price = black76(F, K, T, r, s, call)
+    delta = df * (norm_cdf(d1) if call else norm_cdf(d1) - 1.0)
+    gamma = df * n1 / (F * s * sq)
+    vega = df * F * n1 * sq * 0.01
+    theta = -(-r * price + df * F * n1 * s / (2 * sq)) / 365.0
+    rho = -T * price * 0.01
+    vanna = -df * n1 * d2 / s * 0.01
+    ddelta_dT = -r * delta + df * n1 * (-d2 / (2 * T))
+    charm = -ddelta_dT / 365.0
+    return {"price": price, "delta": delta, "gamma": gamma, "vega": vega, "theta": theta, "rho": rho,
+            "vanna": vanna, "charm": charm}
+
+
 def implied_vol(px, F, K, T, r, call):
+    """Bisection on Black-76 (monotone in vol). None if outside no-arbitrage bounds."""
     lo, hi = 1e-4, 5.0
-    if px <= 0 or black76(F, K, T, r, hi, call) < px or black76(F, K, T, r, lo, call) > px:
+    if px <= 0 or T <= 0 or black76(F, K, T, r, hi, call) < px or black76(F, K, T, r, lo, call) > px:
         return None
     for _ in range(100):
         mid = 0.5 * (lo + hi)
@@ -363,6 +397,92 @@ def implied_vol(px, F, K, T, r, call):
         else:
             lo = mid
     return 0.5 * (lo + hi)
+
+
+def parity_residual(C, P, F, K, T, r):
+    """C - P - DF(F - K): zero under put-call parity."""
+    return C - P - math.exp(-r * T) * (F - K)
+
+
+def year_frac(expiry, now=None):
+    now = now or dt.datetime.now(IST)
+    e = dt.datetime.fromisoformat(expiry[:10] + "T15:30:00+05:30")
+    return max((e - now).total_seconds() / (365.0 * 86400), 1.0 / (365 * 1440))
+
+
+def option_forward(fut_px, fut_expiry, opt_expiry, r=RISK_FREE, now=None):
+    """Forward for an option expiry from the listed future: F_opt = F_fut * exp(-r (T_fut - T_opt))."""
+    return fut_px * math.exp(-r * (year_frac(fut_expiry, now) - year_frac(opt_expiry, now)))
+
+
+def max_pain(legs):
+    ks = sorted({k for k, _ in legs})
+    best, bk = None, None
+    for s in ks:
+        pay = sum(float(o.get("oi") or 0) * max(s - k, 0) for (k, sd), o in legs.items() if sd == "CE") + \
+            sum(float(o.get("oi") or 0) * max(k - s, 0) for (k, sd), o in legs.items() if sd == "PE")
+        if best is None or pay < best:
+            best, bk = pay, s
+    return bk
+
+
+def iv_rank(hist, iv):
+    h = [x for x in hist if ok(x)]
+    if len(h) < 20 or not ok(iv):
+        return NAN, NAN
+    lo, hi = min(h), max(h)
+    rank = (iv - lo) / (hi - lo) * 100 if hi > lo else NAN
+    pct = 100.0 * sum(1 for x in h if x < iv) / len(h)
+    return rank, pct
+
+
+def chain_analytics(legs, F, T, step, r=RISK_FREE):
+    """ATM IV (own Black-76 on the futures forward), 2-strike skew, parity check, max pain, PCR, OI-weighted
+    gamma concentration and a dealer-GEX sign convention (estimate only)."""
+    if not legs or not ok(F):
+        return {}
+    ks = sorted({k for k, _ in legs})
+    atm = min(ks, key=lambda k: abs(k - F))
+
+    def mid(o):
+        b, a = float(o.get("top_bid_price") or 0), float(o.get("top_ask_price") or 0)
+        return (a + b) / 2 if a > 0 and b > 0 and (a - b) <= 0.05 * (a + b) / 2 else float(o.get("last_price") or 0)
+    out = {"atm": atm}
+    ivs = {}
+    for side in ("CE", "PE"):
+        o = legs.get((atm, side))
+        if o:
+            ivs[side] = implied_vol(mid(o), F, atm, T, r, side == "CE")
+    if ivs.get("CE") and ivs.get("PE"):
+        out["atm_iv"] = (ivs["CE"] + ivs["PE"]) / 2
+    vend = [float(legs[(atm, s)].get("implied_volatility") or 0) / 100 for s in ("CE", "PE") if (atm, s) in legs]
+    out["atm_iv_vendor"] = sum(vend) / len(vend) if vend else NAN
+    oc, op = legs.get((atm + 2 * step, "CE")), legs.get((atm - 2 * step, "PE"))
+    if oc and op:
+        ic = implied_vol(mid(oc), F, atm + 2 * step, T, r, True)
+        ip = implied_vol(mid(op), F, atm - 2 * step, T, r, False)
+        if ic and ip:
+            out["skew_2strike"] = ip - ic
+    ce, pe = legs.get((atm, "CE")), legs.get((atm, "PE"))
+    if ce and pe:
+        out["parity_residual"] = parity_residual(mid(ce), mid(pe), F, atm, T, r)
+        out["straddle"] = mid(ce) + mid(pe)
+    out["max_pain"] = max_pain(legs)
+    gex, conc, tot = 0.0, {}, 0.0
+    for (k, sd), o in legs.items():
+        if abs(k - F) > 15 * step:
+            continue
+        iv = float(o.get("implied_volatility") or 0) / 100
+        if iv <= 0:
+            continue
+        g = greeks76(F, k, T, r, iv, sd == "CE")["gamma"] * float(o.get("oi") or 0)
+        gex += (g if sd == "CE" else -g) * F * F * 0.01
+        conc[k] = conc.get(k, 0) + g
+        tot += g
+    if tot > 0:
+        pk = max(conc, key=conc.get)
+        out.update({"gex_sign_conv": gex, "gamma_peak": pk, "gamma_conc": conc[pk] / tot})
+    return out
 
 
 # ============================================================ DHAN DATA ==
@@ -415,7 +535,7 @@ def candles(d):
 def all_futures():
     """Stream the instrument master; every live FUTIDX contract per index (sid, segment, lot, expiry)."""
     today = now_ist().date().isoformat()
-    res = {n: [] for n in INDICES}
+    res = {n: [] for n in INDICES}  # NIFTY only
     with requests.get(SCRIP_MASTER, stream=True, timeout=180) as r:
         r.raise_for_status()
         rd = csv.reader(ln.decode("utf-8", "replace") for ln in r.iter_lines() if ln)
@@ -454,6 +574,11 @@ def intraday(sid, seg, instrument, frm, to, interval=5, oi=False):
             seen.add(x["ts"])
             uniq.append(x)
     return uniq
+
+
+def nifty_futures():
+    """Live NIFTY index futures contracts from the instrument master (nearest expiry first)."""
+    return all_futures().get("NIFTY", [])
 
 
 def daily(index_sid, days):
@@ -502,17 +627,94 @@ def telegram(text):
         return False
 
 
-def stitch_front_month(per, expiries):
-    """Continuous front month: each date uses the contract with the nearest expiry >= that date."""
-    by_date = {}
+
+
+# ================================================ FUTURES STITCH + DATA QUALITY ==
+def stitch_front_month(per, expiries, adjust=True):
+    """Continuous front-month NIFTY futures. Each date uses the contract with the nearest expiry >= date
+    (the expiring contract is traded on its expiry day; positions are intraday so nothing is carried).
+    adjust=True adds field 'adj' (additive back-adjustment): raw + adj is a gap-free series for indicators,
+    removing the artificial jump at each roll. Trade P&L in points is unchanged (all trades are intraday);
+    charges must use raw prices (= adjusted - adj). Returns (bars, rolls)."""
+    day_bars = {}
     for sid, bars in per.items():
         for b in bars:
-            by_date.setdefault(dt.datetime.fromtimestamp(b["ts"], IST).date(), set()).add((expiries[sid], sid))
-    out = []
-    for d in sorted(by_date):
-        c = sorted(x for x in by_date[d] if x[0] >= d.isoformat())
+            day_bars.setdefault(ist(b["ts"]).date(), {}).setdefault(sid, []).append(b)
+    days = sorted(day_bars)
+    choice = []
+    for d in days:
+        c = sorted((expiries[s], s) for s in day_bars[d] if expiries[s] >= d.isoformat())
         if c:
-            out += [dict(b, contract=c[0][1]) for b in per[c[0][1]] if dt.datetime.fromtimestamp(b["ts"], IST).date() == d]
+            choice.append((d, c[0][1]))
+    rolls = []
+    for k in range(1, len(choice)):
+        (d0, a), (d1, bsid) = choice[k - 1], choice[k]
+        if a == bsid:
+            continue
+        diff, how = 0.0, "none"
+        a_last = day_bars[d0][a][-1]
+        bb = {x["ts"]: x for x in day_bars[d0].get(bsid, [])}
+        if a_last["ts"] in bb:
+            diff, how = bb[a_last["ts"]]["close"] - a_last["close"], "same-bar close"
+        elif day_bars[d0].get(bsid):
+            diff, how = day_bars[d0][bsid][-1]["close"] - a_last["close"], "last close prev day"
+        rolls.append({"date": d1.isoformat(), "from": a, "to": bsid, "diff": diff, "method": how})
+    out = []
+    for d, sid in choice:
+        adj = 0.0
+        if adjust:
+            adj = sum(r["diff"] for r in rolls if r["date"] > d.isoformat())
+        out += [dict(b, contract=sid, adj=adj) for b in day_bars[d][sid]]
+    return out, rolls
+
+
+def adjusted(bars):
+    """Price series with the back-adjustment applied (identity when bars carry no 'adj')."""
+    out = []
+    for b in bars:
+        a = b.get("adj", 0.0) or 0.0
+        if a:
+            out.append(dict(b, open=b["open"] + a, high=b["high"] + a, low=b["low"] + a, close=b["close"] + a))
+        else:
+            out.append(b)
+    return out
+
+
+def dq_report(bars, label, minutes=5, expect_volume=True):
+    days = {}
+    for b in bars:
+        days.setdefault(ist(b["ts"]).date(), []).append(b)
+    exp = SESSION_BARS_5M if minutes == 5 else 375
+    ts = [b["ts"] for b in bars]
+    dup = len(ts) - len(set(ts))
+    unordered = sum(1 for i in range(1, len(ts)) if ts[i] <= ts[i - 1])
+    short = {d.isoformat(): len(v) for d, v in days.items() if len(v) < exp - 5}
+    gaps = []
+    for d, v in days.items():
+        for i in range(1, len(v)):
+            g = (v[i]["ts"] - v[i - 1]["ts"]) / 60
+            if g > minutes:
+                gaps.append(g)
+    outside = sum(1 for b in bars if not (dt.time(9, 15) <= ist(b["ts"]).time() <= dt.time(15, 30)))
+    zero_vol = sum(1 for b in bars if expect_volume and not b.get("volume")) if expect_volume else 0
+    bad_ohlc = sum(1 for b in bars if not (b["low"] <= min(b["open"], b["close"]) <= max(b["open"], b["close"]) <= b["high"]))
+    log("  DATA %-34s days %3d bars %6d | expected/day %d | short days %d %s | missing bars %d | dup ts %d | "
+        "out-of-order %d | bars outside session %d | max intraday gap %.0f min | zero-volume %d | bad OHLC %d" % (
+            label, len(days), len(bars), exp, len(short), (list(short.items())[:6] if short else ""),
+            sum(max(exp - len(v), 0) for v in days.values()), dup, unordered, outside, max(gaps) if gaps else 0,
+            zero_vol, bad_ohlc))
+    return {"days": len(days), "short_days": short, "dup": dup, "unordered": unordered, "bad_ohlc": bad_ohlc}
+
+
+def complete_5m(b1, now):
+    """5-minute bars built ONLY from complete buckets: the bucket's last minute (start+4m) must exist and be closed.
+    A forming or gappy last bucket never reaches the completed-candle strategy."""
+    b1 = [b for b in b1 if b["ts"] + 60 <= now + 1]
+    have = {b["ts"] for b in b1}
+    out = []
+    for b in resample(b1, 5):
+        if (b["ts"] + 240) in have and b["ts"] + 300 <= now + 1:
+            out.append(b)
     return out
 
 
@@ -580,67 +782,6 @@ def pick_strike(legs, fwd, step, d, max_spread):
     return best, notes
 
 
-def build_card(name, b1, prev, legs, expiry, vix_v, lot, now, p=PARAMS, flt=None):
-    bars5 = closed(resample(closed(b1, 1, now)), 5, now)
-    card = {"index": name, "signal": "NO_TRADE", "setup": "NO_DATA", "reason": "only %d closed 5m bars" % len(bars5)}
-    if len(bars5) < 40:
-        return card, {}
-    x = compute(bars5)
-    i = len(bars5) - 1
-    lv = pivots(prev["high"], prev["low"], prev["close"]) if prev else {}
-    sig = signal_at(x, i, lv, p)
-    bt = dt.datetime.fromtimestamp(bars5[i]["ts"], IST).time()
-    if sig["signal"] in ("LONG", "SHORT") and not (ENTRY_START <= bt < ENTRY_END):
-        sig = {"signal": "NO_TRADE", "setup": "OUTSIDE_WINDOW",
-               "reason": "%s %s ignored: bar %s outside entry window 09:30-15:10" % (sig["setup"], sig["signal"], bt.strftime("%H:%M"))}
-    flt = flt or {}
-    if sig["signal"] in ("LONG", "SHORT") and flt.get("entry_end") and bt >= flt["entry_end"]:
-        sig = {"signal": "NO_TRADE", "setup": "FILTER_F3_TIME",
-               "reason": "%s %s filtered (F3): no entries at/after %s" % (sig["setup"], sig["signal"], flt["entry_end"].strftime("%H:%M"))}
-    if sig["signal"] in ("LONG", "SHORT") and flt.get("min_break_bps") and sig["setup"] == "SQUEEZE_BREAKOUT":
-        band = x["bb_up"][i] if sig["signal"] == "LONG" else x["bb_lo"][i]
-        brk = abs(x["close"][i] - band) / x["close"][i] * 1e4
-        if brk < flt["min_break_bps"]:
-            sig = {"signal": "NO_TRADE", "setup": "FILTER_F4_WEAK_BREAK",
-                   "reason": "squeeze %s filtered (F4): close only %.1f bps beyond band (< %.1f)" % (
-                       sig["signal"], brk, flt["min_break_bps"])}
-    card = {"index": name, "signal": sig["signal"], "setup": sig["setup"], "reason": sig["reason"], "bar": bt.strftime("%H:%M"),
-            "bar_ts": bars5[i]["ts"]}
-    table = {k: v[i] for k, v in x.items()}
-    pv, po = pcr(legs)
-    flags = [lab for lab, v in (("PCR vol", pv), ("PCR oi", po)) if ok(v) and (v < p["pcr_low"] or v > p["pcr_high"])]
-    card["context"] = "PCR vol %.2f oi %.2f%s | VIX %.2f | OI chg %s" % (
-        pv, po, (" EXTREME:" + ",".join(flags)) if flags else "", vix_v,
-        " ".join("%.0f%s %+.0f" % r for r in oi_change_top(legs)))
-    card["levels"] = lv
-    if sig["signal"] not in ("LONG", "SHORT"):
-        return card, table
-    d = 1 if sig["signal"] == "LONG" else -1
-    card.update({"entry": sig["entry_ref"], "sl": sig["stop"], "targets": sig["targets"], "stop_dist": sig["stop_dist"],
-                 "fut_lots": lots_for(p["risk_rupees"], sig["stop_dist"], lot)})
-    best, notes = pick_strike(legs, sig["entry_ref"], INDICES[name]["step"], d, p["max_spread_pct"])
-    card["strike_notes"] = notes
-    if not best:
-        card["reason"] += " | no liquid ATM/ITM strike passed the spread check"
-        return card, table
-    _, K, side, bid, ask, sp = best
-    T = max((dt.datetime.fromisoformat(expiry + "T15:30:00+05:30") - dt.datetime.now(IST)).total_seconds() / 31536000, 1e-5)
-    F = sig["entry_ref"]
-    iv = implied_vol((bid + ask) / 2, F, K, T, RISK_FREE, side == "CE")
-    if iv:
-        adj = ask - black76(F, K, T, RISK_FREE, iv, side == "CE")
-        sl = max(black76(F - d * sig["stop_dist"], K, T, RISK_FREE, iv, side == "CE") + adj, 0.05)
-        tg = [black76(t, K, T, RISK_FREE, iv, side == "CE") + adj for t in sig["targets"]]
-    else:
-        sl, tg = max(ask - 0.5 * sig["stop_dist"], 0.05), [ask + 0.5 * abs(t - F) for t in sig["targets"]]
-    lots = lots_for(p["risk_rupees"], ask - sl, lot)
-    q = max(lots, 1) * lot
-    card["option"] = {"strike": K, "side": side, "entry": round(ask, 2), "sl": round(sl, 2), "targets": [round(t, 2) for t in tg],
-                      "spread_pct": round(sp, 2), "iv": round(iv * 100, 2) if iv else None, "lots": lots,
-                      "charges_at_sl": round(charges("opt", INDICES[name]["exch"], ask * q, sl * q), 2)}
-    return card, table
-
-
 def card_text(card, table=None):
     s = "[%s] %s %s @%s\n%s" % (card["index"], card["signal"], card.get("setup"), card.get("bar", ""), card.get("reason"))
     if table:
@@ -658,7 +799,207 @@ def card_text(card, table=None):
     return s
 
 
-# ============================================================== BACKTEST ==
+
+
+def build_card(bars5, legs, opt_expiry, fut_expiry, vix_v, lot, flt=None, p=PARAMS, now=None):
+    """Signal card for the LAST COMPLETE 5m bar, using exactly the engine's rules (same series, levels, filters).
+    bars5 = complete 5m NIFTY futures bars (may carry 'adj'; the last session's adj is 0)."""
+    card = {"index": "NIFTY", "signal": "NO_TRADE", "setup": "NO_DATA", "reason": "only %d complete 5m bars" % len(bars5)}
+    if len(bars5) < 60:
+        return card, {}
+    A = adjusted(bars5)
+    x = compute(A)
+    i = len(A) - 1
+    t = ist(A[i]["ts"])
+    lv = prior_session_levels(A).get(t.date(), {})
+    sig = signal_at(x, i, lv, p)
+    flt = flt or {}
+    if sig["signal"] in ("LONG", "SHORT") and not (ENTRY_START <= t.time() < flt.get("entry_end", ENTRY_END)):
+        why = "FILTER_F3_TIME" if flt.get("entry_end") and t.time() >= flt["entry_end"] else "OUTSIDE_WINDOW"
+        sig = {"signal": "NO_TRADE", "setup": why, "reason": "%s %s ignored at %s (%s)" % (
+            sig["setup"], sig["signal"], t.strftime("%H:%M"), why)}
+    if sig["signal"] in ("LONG", "SHORT") and sig["setup"] == "SQUEEZE_BREAKOUT" and flt.get("min_break_bps"):
+        band = x["bb_up"][i] if sig["signal"] == "LONG" else x["bb_lo"][i]
+        brk = abs(x["close"][i] - band) / x["close"][i] * 1e4
+        if brk < flt["min_break_bps"]:
+            sig = {"signal": "NO_TRADE", "setup": "FILTER_F4_WEAK_BREAK",
+                   "reason": "squeeze %s filtered (F4): %.1f bps beyond band < %.1f" % (sig["signal"], brk, flt["min_break_bps"])}
+    card = {"index": "NIFTY", "signal": sig["signal"], "setup": sig["setup"], "reason": sig["reason"],
+            "bar": t.strftime("%Y-%m-%d %H:%M"), "bar_ts": A[i]["ts"]}
+    table = {k: v[i] for k, v in x.items()}
+    fut_px = bars5[i]["close"]
+    T = year_frac(opt_expiry, now) if opt_expiry else NAN
+    F = option_forward(fut_px, fut_expiry, opt_expiry, RISK_FREE, now) if opt_expiry and fut_expiry else fut_px
+    ca = chain_analytics(legs, F, T, INDICES["NIFTY"]["step"]) if legs and ok(T) else {}
+    pv, po = pcr(legs)
+    flags = [lab for lab, v in (("PCR vol", pv), ("PCR oi", po)) if ok(v) and (v < p["pcr_low"] or v > p["pcr_high"])]
+    card["context"] = ("fut %.1f fwd(%s) %.1f | ATM IV %.2f%% (vendor %.2f%%) skew2 %.2f%% | straddle %.1f | parity res %.2f | "
+                       "maxpain %s | GEX(sign conv) %.3g peak %s conc %.2f | PCR vol %.2f oi %.2f%s | VIX %.2f | OI chg %s" % (
+                           fut_px, opt_expiry, F, 100 * ca.get("atm_iv", NAN), 100 * ca.get("atm_iv_vendor", NAN),
+                           100 * ca.get("skew_2strike", NAN), ca.get("straddle", NAN), ca.get("parity_residual", NAN),
+                           ca.get("max_pain"), ca.get("gex_sign_conv", NAN), ca.get("gamma_peak"), ca.get("gamma_conc", NAN),
+                           pv, po, (" EXTREME:" + ",".join(flags)) if flags else "", vix_v,
+                           " ".join("%.0f%s %+.0f" % r for r in oi_change_top(legs))))
+    card["analytics"] = ca
+    if sig["signal"] not in ("LONG", "SHORT"):
+        return card, table
+    d = 1 if sig["signal"] == "LONG" else -1
+    sd = sig["stop_dist"]
+    card.update({"entry": fut_px, "sl": fut_px - d * sd, "targets": [fut_px + d * sd, fut_px + d * 2 * sd] if sig["setup"] != "MEAN_REVERSION"
+                 else [sig["targets"][0] - (A[i].get("adj", 0) or 0)], "stop_dist": sd,
+                 "fut_lots": lots_for(p["risk_rupees"], sd, lot)})
+    best, notes = pick_strike(legs, F, INDICES["NIFTY"]["step"], d, p["max_spread_pct"])
+    card["strike_notes"] = notes
+    if not best:
+        card["reason"] += " | no liquid ATM/ITM strike passed the spread check"
+        return card, table
+    _, K, side, bid, ask, sp = best
+    iv = implied_vol((bid + ask) / 2, F, K, T, RISK_FREE, side == "CE")
+    if iv:
+        g = greeks76(F, K, T, RISK_FREE, iv, side == "CE")
+        adj = ask - g["price"]
+        sl = max(black76(F - d * sd, K, T, RISK_FREE, iv, side == "CE") + adj, 0.05)
+        tg = [black76(F + (tt - fut_px), K, T, RISK_FREE, iv, side == "CE") + adj for tt in card["targets"]]
+    else:
+        g, sl, tg = {}, max(ask - 0.5 * sd, 0.05), [ask + 0.5 * abs(tt - fut_px) for tt in card["targets"]]
+    lots = lots_for(p["risk_rupees"], ask - sl, lot)
+    q = max(lots, 1) * lot
+    card["option"] = {"strike": K, "side": side, "entry": round(ask, 2), "sl": round(sl, 2), "targets": [round(v, 2) for v in tg],
+                      "spread_pct": round(sp, 2), "iv": round(iv * 100, 2) if iv else None, "lots": lots,
+                      "delta": round(g.get("delta", NAN), 3), "gamma": g.get("gamma"), "theta_day": round(g.get("theta", NAN), 2),
+                      "vega_pt": round(g.get("vega", NAN), 2), "vanna": g.get("vanna"), "charm_day": g.get("charm"),
+                      "charges_at_sl": round(charges("opt", "NSE", ask * q, sl * q), 2)}
+    return card, table
+
+
+# ====================================================== EXECUTION ENGINE ==
+def prior_session_levels(bars):
+    """{date: pivots of the previous session} from the SAME series being traded (fixes the old basis error:
+    index daily H/L/C was compared with futures prices that trade at a 50-200 pt premium)."""
+    days = {}
+    for b in bars:
+        days.setdefault(ist(b["ts"]).date(), []).append(b)
+    ds = sorted(days)
+    out = {}
+    for k in range(1, len(ds)):
+        p = days[ds[k - 1]]
+        out[ds[k]] = pivots(max(x["high"] for x in p), min(x["low"] for x in p), p[-1]["close"])
+    return out
+
+
+def backtest(bars5, lot, exch="NSE", p=PARAMS, flt=None, ex="realistic", levels="series", dly=None,
+             charge_year=None, with_open=False):
+    """Event-driven NIFTY backtest on CLOSED 5m bars.
+      signal on bar i (data <= close of i) -> market entry at OPEN of bar i+1 (+slippage)
+      exits checked from the entry bar on: stop (market, gap-aware), target (limit), 15:20 time exit
+      one position at a time; flat every day; filters F1..F6 via flt
+    bars may carry 'adj' (back-adjusted futures): indicators/levels use adjusted prices, charges use raw prices.
+    levels: 'series' = prior-session pivots of the traded series; 'index_daily' = legacy (needs dly).
+    Returns dict with trades (and the open position when with_open=True)."""
+    E = EXEC[ex] if isinstance(ex, str) else ex
+    slip, gap, both, thr = E["slip"], E["gap"], E["both"], E["tg_through"]
+    if len(bars5) < 60:
+        return {"status": "INSUFFICIENT DATA (%d bars)" % len(bars5), "trades": [], "open": None}
+    A = adjusted(bars5)
+    x = compute(A)
+    flt = flt or {}
+    if levels == "index_daily":
+        dmap = {ist(d["ts"]).date(): d for d in (dly or [])}
+        ddays = sorted(dmap)
+        lvl = {}
+        for d in {ist(b["ts"]).date() for b in A}:
+            j = bisect.bisect_left(ddays, d) - 1
+            lvl[d] = pivots(dmap[ddays[j]]["high"], dmap[ddays[j]]["low"], dmap[ddays[j]]["close"]) if j >= 0 else {}
+    else:
+        lvl = prior_session_levels(A)
+    trades, pos = [], None
+    day_n, day_loss = {}, {}
+    n = len(A)
+    for i in range(1, n):
+        b = A[i]
+        t = ist(b["ts"])
+        last = i == n - 1
+        tn = ist(A[i + 1]["ts"]) if not last else None
+        if pos is not None:
+            d = pos["d"]
+            fav = (b["high"] - pos["entry"]) if d > 0 else (pos["entry"] - b["low"])
+            adv = (b["low"] - pos["entry"]) if d > 0 else (pos["entry"] - b["high"])
+            pos["mfe"] = max(pos["mfe"], fav / pos["sd"])
+            pos["mae"] = min(pos["mae"], adv / pos["sd"])
+            stop, tgt = pos["stop"], pos["target"]
+            hit_sl = (b["low"] <= stop) if d > 0 else (b["high"] >= stop)
+            hit_tg = (b["high"] >= tgt + thr) if d > 0 else (b["low"] <= tgt - thr)
+            exit_px = why = None
+            if hit_sl and (both == "sl" or not hit_tg):
+                gapped = gap and ((b["open"] <= stop) if d > 0 else (b["open"] >= stop)) and b["ts"] != pos["entry_bar_ts"]
+                exit_px = (b["open"] if gapped else stop) - d * slip
+                why = "BE" if stop == pos["entry"] else ("SL_GAP" if gapped else "SL")
+            elif hit_tg:
+                exit_px, why = tgt, "TARGET"
+            elif (t + dt.timedelta(minutes=5)).time() >= EOD_EXIT or (tn is not None and tn.date() != t.date()):
+                exit_px, why = b["close"] - d * slip, "EOD"
+            if exit_px is not None:
+                adj = b.get("adj", 0.0) or 0.0
+                q = pos["qty"]
+                e_raw, x_raw = pos["entry"] - pos["adj"], exit_px - adj
+                buy, sell = (e_raw, x_raw) if d > 0 else (x_raw, e_raw)
+                ch = charges("fut", exch, buy * q, sell * q, charge_year, t.date())
+                pts = d * (exit_px - pos["entry"])
+                trades.append(dict(pos["feat"], id=trade_id("NIFTY", pos["ts"], pos["setup"], d), entry_ts=pos["ts"],
+                                   exit_ts=b["ts"], setup=pos["setup"], dir=d, entry=e_raw, exit=x_raw, why=why, pts=pts,
+                                   gross=pts * q, charges=ch, net=pts * q - ch, r=pts / pos["sd"], mfe_r=pos["mfe"],
+                                   mae_r=pos["mae"], entry_reason=pos["reason"], sd=pos["sd"], date=t.date().isoformat(),
+                                   bars_held=int(round((b["ts"] - pos["ts"]) / 300)) + 1))
+                if pts * q - ch <= 0:
+                    day_loss[ist(pos["ts"]).date()] = True
+                pos = None
+            elif flt.get("breakeven_r") and pos["mfe"] >= flt["breakeven_r"]:
+                pos["stop"] = max(pos["stop"], pos["entry"]) if d > 0 else min(pos["stop"], pos["entry"])
+            continue
+        if last or not (ENTRY_START <= t.time() < flt.get("entry_end", ENTRY_END)) or tn.date() != t.date():
+            continue
+        if flt.get("max_trades_per_day") and day_n.get(t.date(), 0) >= flt["max_trades_per_day"]:
+            continue
+        if flt.get("stop_after_loss") and day_loss.get(t.date()):
+            continue
+        sig = signal_at(x, i, lvl.get(t.date(), {}), p)
+        if sig["signal"] not in ("LONG", "SHORT"):
+            continue
+        if flt.get("setups") and sig["setup"] not in flt["setups"]:
+            continue
+        brk = NAN
+        if sig["setup"] == "SQUEEZE_BREAKOUT":
+            band = x["bb_up"][i] if sig["signal"] == "LONG" else x["bb_lo"][i]
+            brk = abs(x["close"][i] - band) / x["close"][i] * 1e4
+            if flt.get("min_break_bps") and brk < flt["min_break_bps"]:
+                continue
+        d = 1 if sig["signal"] == "LONG" else -1
+        nb = A[i + 1]
+        entry, sd = nb["open"] + d * slip, sig["stop_dist"]
+        mr = sig["setup"] == "MEAN_REVERSION"
+        tgt = sig["targets"][0] if mr else entry + d * 2 * sd
+        if (tgt - entry) * d <= 0:
+            continue
+        day_n[t.date()] = day_n.get(t.date(), 0) + 1
+        feat = {"f_adx": x["adx"][i], "f_er": x["er"][i], "f_rsi": x["rsi"][i], "f_bw": x["bw"][i], "f_z": x["z"][i],
+                "f_brk": brk if ok(brk) else 0.0, "f_hour": t.hour + t.minute / 60.0,
+                "f_atr_bps": x["atr"][i] / x["close"][i] * 1e4,
+                "f_vwap_bps": ((x["close"][i] / x["vwap"][i] - 1) * 1e4 * d) if ok(x["vwap"][i]) else 0.0,
+                "f_di": (x["di_plus"][i] - x["di_minus"][i]) * d, "f_dir": d}
+        pos = {"ts": nb["ts"], "entry_bar_ts": nb["ts"], "signal_ts": b["ts"], "d": d, "entry": entry,
+               "stop": entry - d * sd, "target": tgt, "sd": sd, "setup": sig["setup"], "qty": lot, "mfe": 0.0, "mae": 0.0,
+               "reason": sig["reason"], "adj": nb.get("adj", 0.0) or 0.0, "feat": feat}
+    res = {"status": "OK" if trades else "NO TRADES", "trades": trades, "bars": n}
+    if with_open:
+        res["open"] = pos
+    return res
+
+
+def trade_id(sym, entry_ts, setup, d):
+    return hashlib.sha1(("%s|%d|%s|%d" % (sym, int(entry_ts), setup, d)).encode()).hexdigest()[:12]
+
+
+# ============================================================ STATISTICS ==
 def wilson(k, n, z=1.959964):
     if n == 0:
         return NAN, NAN, NAN
@@ -669,412 +1010,705 @@ def wilson(k, n, z=1.959964):
     return p, max(0.0, c - h), min(1.0, c + h)
 
 
-def backtest(bars5, dly, lot, exch, p=PARAMS, flt=None):
-    """Signal on CLOSED bar i -> fill at OPEN of bar i+1. Exit at 2xATR stop / target / 15:20.
-    Stop assumed first if both are hit inside one bar. Net = gross - full charges."""
-    if len(bars5) < 60:
-        return {"status": "INSUFFICIENT DATA (%d bars)" % len(bars5)}
-    x = compute(bars5)
-    dmap = {dt.datetime.fromtimestamp(d["ts"], IST).date(): d for d in dly}
-    ddays = sorted(dmap)
-    trades, pos = [], None
-    flt = flt or {}
-    day_n, day_loss = {}, {}
-    for i in range(1, len(bars5) - 1):
-        b, nb = bars5[i], bars5[i + 1]
-        t = dt.datetime.fromtimestamp(b["ts"], IST)
-        tn = dt.datetime.fromtimestamp(nb["ts"], IST)
-        if pos is not None:
-            fav = (b["high"] - pos["entry"]) if pos["d"] > 0 else (pos["entry"] - b["low"])
-            adv = (b["low"] - pos["entry"]) if pos["d"] > 0 else (pos["entry"] - b["high"])
-            pos["mfe"] = max(pos["mfe"], fav / pos["sd"])
-            pos["mae"] = min(pos["mae"], adv / pos["sd"])
-            hit_sl = (b["low"] <= pos["stop"]) if pos["d"] > 0 else (b["high"] >= pos["stop"])
-            hit_tg = (b["high"] >= pos["target"]) if pos["d"] > 0 else (b["low"] <= pos["target"])
-            exit_px = why = None
-            if hit_sl:
-                exit_px, why = pos["stop"], ("BE" if pos["stop"] == pos["entry"] else "SL")
-            elif hit_tg:
-                exit_px, why = pos["target"], "TARGET"
-            elif (t + dt.timedelta(minutes=5)).time() >= EOD_EXIT or tn.date() != t.date():
-                exit_px, why = b["close"], "EOD"
-            if exit_px is not None:
-                q = pos["qty"]
-                buy, sell = (pos["entry"], exit_px) if pos["d"] > 0 else (exit_px, pos["entry"])
-                ch = charges("fut", exch, buy * q, sell * q)
-                gross = pos["d"] * (exit_px - pos["entry"]) * q
-                trades.append({"entry_ts": pos["ts"], "exit_ts": b["ts"], "setup": pos["setup"], "dir": pos["d"],
-                               "entry": pos["entry"], "exit": exit_px, "why": why, "gross": gross, "charges": ch,
-                               "net": gross - ch, "r": pos["d"] * (exit_px - pos["entry"]) / pos["sd"],
-                               "mfe_r": pos["mfe"], "mae_r": pos["mae"], "entry_reason": pos["reason"],
-                               "bars_held": int(round((b["ts"] - pos["ts"]) / 300)) + 1})
-                if gross - ch <= 0:
-                    day_loss[dt.datetime.fromtimestamp(pos["ts"], IST).date()] = True
-                pos = None
-            elif flt.get("breakeven_r") and pos["mfe"] >= flt["breakeven_r"]:
-                pos["stop"] = max(pos["stop"], pos["entry"]) if pos["d"] > 0 else min(pos["stop"], pos["entry"])
-            continue
-        if not (ENTRY_START <= t.time() < flt.get("entry_end", ENTRY_END)) or tn.date() != t.date():
-            continue
-        if flt.get("max_trades_per_day") and day_n.get(t.date(), 0) >= flt["max_trades_per_day"]:
-            continue
-        if flt.get("stop_after_loss") and day_loss.get(t.date()):
-            continue
-        j = bisect.bisect_left(ddays, t.date()) - 1
-        lv = pivots(dmap[ddays[j]]["high"], dmap[ddays[j]]["low"], dmap[ddays[j]]["close"]) if j >= 0 else {}
-        sig = signal_at(x, i, lv, p)
-        if sig["signal"] in ("LONG", "SHORT"):
-            if flt.get("setups") and sig["setup"] not in flt["setups"]:
-                continue
-            if flt.get("min_break_bps") and sig["setup"] == "SQUEEZE_BREAKOUT":
-                band = x["bb_up"][i] if sig["signal"] == "LONG" else x["bb_lo"][i]
-                if abs(x["close"][i] - band) / x["close"][i] * 1e4 < flt["min_break_bps"]:
-                    continue
-            d = 1 if sig["signal"] == "LONG" else -1
-            entry, sd = nb["open"], sig["stop_dist"]
-            mr = sig["setup"] == "MEAN_REVERSION"
-            tgt = sig["targets"][0] if mr else sig["targets"][-1]
-            if (tgt - entry) * d <= 0:
-                continue
-            day_n[t.date()] = day_n.get(t.date(), 0) + 1
-            pos = {"ts": nb["ts"], "d": d, "entry": entry, "stop": entry - d * sd,
-                   "target": tgt if mr else entry + d * 2 * sd, "sd": sd, "setup": sig["setup"], "qty": lot,
-                   "mfe": 0.0, "mae": 0.0, "reason": sig["reason"]}
-    res = {"status": "OK" if trades else "NO TRADES", "bars": len(bars5), "trades": len(trades), "lot": lot,
-           "from": dt.datetime.fromtimestamp(bars5[0]["ts"], IST).strftime("%Y-%m-%d"),
-           "to": dt.datetime.fromtimestamp(bars5[-1]["ts"], IST).strftime("%Y-%m-%d"), "trades_list": trades}
-    if not trades:
-        return res
-    net = [t["net"] for t in trades]
-    wins = sum(1 for v in net if v > 0)
-    eq, peak, mdd = 0.0, 0.0, 0.0
-    for v in net:
-        eq += v
-        peak = max(peak, eq)
-        mdd = min(mdd, eq - peak)
-    gp, gl = sum(v for v in net if v > 0), -sum(v for v in net if v < 0)
-    by = {}
-    for t in trades:
-        s = by.setdefault(t["setup"], {"n": 0, "net": 0.0, "wins": 0})
-        s["n"] += 1
-        s["net"] += t["net"]
-        s["wins"] += t["net"] > 0
-    exits = {}
-    for t in trades:
-        exits[t["why"]] = exits.get(t["why"], 0) + 1
-    res.update({"gross_rupees": sum(t["gross"] for t in trades), "charges_rupees": sum(t["charges"] for t in trades),
-                "net_rupees": sum(net), "win_rate_ci95": wilson(wins, len(net)), "avg_net": sum(net) / len(net),
-                "avg_r": sum(t["r"] for t in trades) / len(trades), "profit_factor": gp / gl if gl > 0 else float("inf"),
-                "max_drawdown_rupees": mdd, "by_setup": by, "exits": exits,
-                "sample_status": "OK" if len(trades) >= 30 else "INSUFFICIENT (<30 trades): not evidence"})
-    return res
-
-
-def backtest_fixed(bars5, bars1, dly, lot, exch, sl_pts, tg_pts, p=PARAMS):
-    """Same entries as backtest() (signal on closed 5m bar, fill at next 5m open), but a FIXED stop and
-    target in points. Exits are walked on 1-minute bars; if stop and target fall in the same minute the
-    stop is assumed first. One position at a time; flat at 15:20."""
-    x = compute(bars5)
-    dmap = {dt.datetime.fromtimestamp(d["ts"], IST).date(): d for d in dly}
-    ddays = sorted(dmap)
-    ts1 = [b["ts"] for b in bars1]
-    trades, busy = [], 0.0
-    for i in range(1, len(bars5) - 1):
-        b, nb = bars5[i], bars5[i + 1]
-        if nb["ts"] < busy:
-            continue
-        t = dt.datetime.fromtimestamp(b["ts"], IST)
-        tn = dt.datetime.fromtimestamp(nb["ts"], IST)
-        if not (ENTRY_START <= t.time() < ENTRY_END) or tn.date() != t.date():
-            continue
-        j = bisect.bisect_left(ddays, t.date()) - 1
-        lv = pivots(dmap[ddays[j]]["high"], dmap[ddays[j]]["low"], dmap[ddays[j]]["close"]) if j >= 0 else {}
-        sig = signal_at(x, i, lv, p)
-        if sig["signal"] not in ("LONG", "SHORT"):
-            continue
-        k = bisect.bisect_left(ts1, nb["ts"])
-        if k >= len(bars1) or bars1[k]["ts"] - nb["ts"] > 120:
-            continue
-        d = 1 if sig["signal"] == "LONG" else -1
-        entry = bars1[k]["open"]
-        stop, tgt = entry - d * sl_pts, entry + d * tg_pts
-        exit_px = why = None
-        ex_ts = nb["ts"]
-        while k < len(bars1):
-            m = bars1[k]
-            mt = dt.datetime.fromtimestamp(m["ts"], IST)
-            if mt.date() != tn.date():
-                exit_px, why, ex_ts = bars1[k - 1]["close"], "EOD", bars1[k - 1]["ts"]
-                break
-            if (m["low"] <= stop) if d > 0 else (m["high"] >= stop):
-                exit_px, why, ex_ts = stop, "SL", m["ts"]
-                break
-            if (m["high"] >= tgt) if d > 0 else (m["low"] <= tgt):
-                exit_px, why, ex_ts = tgt, "TARGET", m["ts"]
-                break
-            if (mt + dt.timedelta(minutes=1)).time() >= EOD_EXIT:
-                exit_px, why, ex_ts = m["close"], "EOD", m["ts"]
-                break
-            k += 1
-        if exit_px is None:
+def _betacf(a, b, x):
+    qab, qap, qam = a + b, a + 1, a - 1
+    c, d = 1.0, 1 - qab * x / qap
+    d = 1 / (d if abs(d) > 1e-300 else 1e-300)
+    h = d
+    for m in range(1, 300):
+        m2 = 2 * m
+        aa = m * (b - m) * x / ((qam + m2) * (a + m2))
+        d = 1 + aa * d
+        d = 1 / (d if abs(d) > 1e-300 else 1e-300)
+        c = 1 + aa / c if abs(1 + aa / c) > 1e-300 else 1e-300
+        h *= d * c
+        aa = -(a + m) * (qab + m) * x / ((a + m2) * (qap + m2))
+        d = 1 + aa * d
+        d = 1 / (d if abs(d) > 1e-300 else 1e-300)
+        c = 1 + aa / c if abs(1 + aa / c) > 1e-300 else 1e-300
+        de = d * c
+        h *= de
+        if abs(de - 1) < 3e-14:
             break
-        buy, sell = (entry, exit_px) if d > 0 else (exit_px, entry)
-        ch = charges("fut", exch, buy * lot, sell * lot)
-        pts = d * (exit_px - entry)
-        trades.append({"ts": nb["ts"], "setup": sig["setup"], "dir": d, "pts": pts, "why": why,
-                       "gross": pts * lot, "charges": ch, "net": pts * lot - ch})
-        busy = ex_ts + 60
-    return trades
+    return h
 
 
-def summarize_fixed(label, tr, lot):
-    if not tr:
-        return "%-14s no trades" % label
-    n = len(tr)
-    w = sum(1 for t in tr if t["net"] > 0)
-    pts = sum(t["pts"] for t in tr)
-    net = sum(t["net"] for t in tr)
-    ch = sum(t["charges"] for t in tr)
-    gp = sum(t["net"] for t in tr if t["net"] > 0)
-    gl = -sum(t["net"] for t in tr if t["net"] < 0)
-    ex = {}
-    for t in tr:
-        ex[t["why"]] = ex.get(t["why"], 0) + 1
-    return ("%-14s trades %3d | wins %3d (%4.1f%%) | pts/trade %+6.1f | total pts %+7.0f | charges/trade %4.1f pts | "
-            "net Rs%+8.0f | PF %4.2f | exits %s" % (label, n, w, 100.0 * w / n, pts / n, pts, ch / n / lot, net,
-                                                    gp / gl if gl > 0 else float("inf"), ex))
+def betainc(a, b, x):
+    """Regularized incomplete beta I_x(a, b) (Numerical Recipes continued fraction)."""
+    if x <= 0:
+        return 0.0
+    if x >= 1:
+        return 1.0
+    lb = math.lgamma(a + b) - math.lgamma(a) - math.lgamma(b) + a * math.log(x) + b * math.log(1 - x)
+    if x < (a + 1) / (a + b + 2):
+        return math.exp(lb) * _betacf(a, b, x) / a
+    return 1 - math.exp(lb) * _betacf(b, a, 1 - x) / b
 
 
-RUN_ORB_TEST = False
+def t_sf2(t, df):
+    """Two-sided p-value of Student's t."""
+    return betainc(df / 2.0, 0.5, df / (df + t * t))
 
 
-def backtest_orb(bars5, lot, exch, or_minutes=15, target_r=1.0, last_entry=dt.time(13, 0)):
-    """Opening-range breakout as in github.com/Jakeschincariol/day-trader-skill:
-    range = first `or_minutes` (09:15-09:30); entry on the first 5m CLOSE beyond the range, filled at the next
-    bar's open; stop = range midpoint; target = target_r x risk; flat by 15:20; one trade per day."""
-    days = {}
-    for b in bars5:
-        days.setdefault(dt.datetime.fromtimestamp(b["ts"], IST).date(), []).append(b)
-    trades = []
-    or_end = (dt.datetime.combine(dt.date.today(), dt.time(9, 15)) + dt.timedelta(minutes=or_minutes)).time()
-    for d, bs in sorted(days.items()):
-        rng = [b for b in bs if dt.datetime.fromtimestamp(b["ts"], IST).time() < or_end]
-        if len(rng) < or_minutes // 5:
-            continue
-        hi, lo = max(b["high"] for b in rng), min(b["low"] for b in rng)
-        mid = (hi + lo) / 2
-        rest = [b for b in bs if dt.datetime.fromtimestamp(b["ts"], IST).time() >= or_end]
-        for k in range(len(rest) - 1):
-            tt = dt.datetime.fromtimestamp(rest[k]["ts"], IST).time()
-            if tt >= last_entry:
-                break
-            c = rest[k]["close"]
-            if c > hi or c < lo:
-                dr = 1 if c > hi else -1
-                entry = rest[k + 1]["open"]
-                risk = (entry - mid) * dr
-                if risk <= 0:
-                    break
-                stop, tgt = mid, entry + dr * target_r * risk
-                exit_px = why = None
-                for m in rest[k + 1:]:
-                    mt = dt.datetime.fromtimestamp(m["ts"], IST)
-                    if (m["low"] <= stop) if dr > 0 else (m["high"] >= stop):
-                        exit_px, why = stop, "SL"
-                    elif (m["high"] >= tgt) if dr > 0 else (m["low"] <= tgt):
-                        exit_px, why = tgt, "TARGET"
-                    elif (mt + dt.timedelta(minutes=5)).time() >= EOD_EXIT:
-                        exit_px, why = m["close"], "EOD"
-                    if exit_px is not None:
-                        break
-                if exit_px is None:
-                    exit_px, why = rest[-1]["close"], "EOD"
-                buy, sell = (entry, exit_px) if dr > 0 else (exit_px, entry)
-                ch = charges("fut", exch, buy * lot, sell * lot)
-                g = dr * (exit_px - entry) * lot
-                trades.append({"entry_ts": rest[k + 1]["ts"], "dir": dr, "why": why, "gross": g, "charges": ch,
-                               "net": g - ch, "pts": dr * (exit_px - entry), "risk_pts": risk})
-                break
-    return trades
+def mean_sd(x):
+    n = len(x)
+    if n < 2:
+        return (x[0] if x else NAN), NAN
+    m = sum(x) / n
+    return m, math.sqrt(sum((v - m) ** 2 for v in x) / (n - 1))
 
 
-def orb_report(name, bars, lot, exch, split_ts, label):
-    log("----- %s OPENING-RANGE BREAKOUT (day-trader-skill rule) on %s -----" % (name, label))
-    for orm, tr in ((15, 1.0), (15, 2.0), (30, 1.0), (30, 2.0)):
-        tl = backtest_orb(bars, lot, exch, orm, tr)
-        ex = {}
-        for t in tl:
-            ex[t["why"]] = ex.get(t["why"], 0) + 1
-        avg_risk = sum(t["risk_pts"] for t in tl) / len(tl) if tl else 0
-        log("  OR %2dm target %.0fR ALL    %s | exits %s | avg risk %.1f pts" % (orm, tr, period_stats(tl), ex, avg_risk))
-        if split_ts:
-            log("                        BEFORE %s" % period_stats(tl, None, split_ts))
-            log("                        AFTER  %s" % period_stats(tl, split_ts, None))
+def skew_kurt(x):
+    n = len(x)
+    if n < 4:
+        return 0.0, 3.0
+    m = sum(x) / n
+    s2 = sum((v - m) ** 2 for v in x) / n
+    if s2 <= 0:
+        return 0.0, 3.0
+    return sum((v - m) ** 3 for v in x) / n / s2 ** 1.5, sum((v - m) ** 4 for v in x) / n / s2 ** 2
 
 
-def period_stats(tl, lo=None, hi=None):
-    S = [t for t in tl if (lo is None or t["entry_ts"] >= lo) and (hi is None or t["entry_ts"] < hi)]
-    if not S:
-        return "n=0"
-    net = [t["net"] for t in S]
+def max_dd(seq):
     eq = pk = dd = 0.0
-    for v in net:
+    for v in seq:
         eq += v
         pk = max(pk, eq)
         dd = min(dd, eq - pk)
-    gp, gl = sum(v for v in net if v > 0), -sum(v for v in net if v < 0)
-    return "n=%3d win=%4.1f%% net=Rs%+8.0f PF=%4.2f maxDD=Rs%.0f" % (
-        len(S), 100.0 * sum(v > 0 for v in net) / len(S), sum(net), gp / gl if gl > 0 else float("inf"), dd)
+    return dd
 
 
-def filter_report(name, bars, dly, lot, exch, split_ts, label):
-    log("----- %s FILTER TEST on %s%s -----" % (name, label, (" (split %s: BEFORE = unseen data)" % dt.datetime.fromtimestamp(
-        split_ts, IST).strftime("%Y-%m-%d")) if split_ts else ""))
-    for fname, flt in [("BASELINE (current rules)", None)] + list(FILTER_SETS.items()):
-        tl = backtest(bars, dly, lot, exch, PARAMS, flt).get("trades_list", [])
-        log("  %-26s ALL    %s" % (fname, period_stats(tl)))
-        if split_ts:
-            log("  %-26s BEFORE %s" % ("", period_stats(tl, None, split_ts)))
-            log("  %-26s AFTER  %s" % ("", period_stats(tl, split_ts, None)))
+def max_consec_losses(net):
+    best = cur = 0
+    for v in net:
+        cur = cur + 1 if v <= 0 else 0
+        best = max(best, cur)
+    return best
 
 
-def outcome_reason(t):
-    """Plain-language reason a trade won or lost (from exit type, best/worst excursion in R, charges)."""
-    if t["net"] > 0:
-        if t["why"] == "TARGET":
-            return "target hit (+%.1fR) - move continued as signalled" % t["r"]
-        return "time exit 15:20 in profit (+%.2fR, best +%.1fR)" % (t["r"], t["mfe_r"])
-    if t["gross"] > 0:
-        return "small gross gain Rs%.0f eaten by charges Rs%.0f" % (t["gross"], t["charges"])
-    if t["why"] == "SL":
-        if t["mfe_r"] >= 1.0:
-            return "was +%.1fR in profit, then reversed to stop (no trailing/breakeven stop)" % t["mfe_r"]
-        if t["mfe_r"] < 0.3:
-            return "went against immediately (best only +%.1fR) - false signal" % t["mfe_r"]
-        return "small favourable move (+%.1fR) then stopped out at 2xATR" % t["mfe_r"]
-    if t["why"] == "EOD":
-        return "no follow-through; closed at 15:20 at %.2fR (best +%.1fR)" % (t["r"], t["mfe_r"])
-    return "target reached but net negative after charges"
+def daily_pnl(tr):
+    d = {}
+    for t in tr:
+        d[t["date"]] = d.get(t["date"], 0.0) + t["net"]
+    return [d[k] for k in sorted(d)]
 
 
-def print_trade_lists(name, tl):
-    wins = [t for t in tl if t["net"] > 0]
-    losses = [t for t in tl if t["net"] <= 0]
-    for title, rows in (("WIN", wins), ("LOSS", losses)):
-        log("----- %s %s TRADES (%d) -----" % (name, title, len(rows)))
-        for t in rows:
-            log("  %s %s %-16s %-5s entry %.1f exit %.1f %-6s %dbars net Rs%.0f (chg %.0f) | ENTRY: %s | RESULT: %s" % (
-                title, dt.datetime.fromtimestamp(t["entry_ts"], IST).strftime("%Y-%m-%d %H:%M"), t["setup"],
-                "LONG" if t["dir"] > 0 else "SHORT", t["entry"], t["exit"], t["why"], t["bars_held"], t["net"],
-                t["charges"], t["entry_reason"], outcome_reason(t)))
-    cats = {}
-    for t in losses:
-        r = outcome_reason(t)
-        k = ("GAVE BACK PROFIT (was >= +1R, hit stop)" if r.startswith("was +") else
-             "FALSE SIGNAL (went against immediately)" if r.startswith("went against") else
-             "WEAK MOVE then stopped at 2xATR" if r.startswith("small favourable") else
-             "CHARGES turned small gain into loss" if r.startswith("small gross") else
-             "NO FOLLOW-THROUGH (closed 15:20)" if r.startswith("no follow") else r)
-        c = cats.setdefault(k, [0, 0.0])
-        c[0] += 1
-        c[1] += t["net"]
-    log("----- %s LOSS REASONS SUMMARY -----" % name)
-    for k, (n, v) in sorted(cats.items(), key=lambda kv: kv[1][1]):
-        log("  %-75s n=%-3d net Rs%.0f" % (k, n, v))
-    for side in (1, -1):
-        rows = [t for t in tl if t["dir"] == side]
-        if rows:
-            log("  %s: %d trades, wins %d, net Rs%.0f" % ("LONG " if side > 0 else "SHORT", len(rows),
-                                                          sum(t["net"] > 0 for t in rows), sum(t["net"] for t in rows)))
-    hours = {}
-    for t in tl:
-        h = dt.datetime.fromtimestamp(t["entry_ts"], IST).hour
-        e = hours.setdefault(h, [0, 0, 0.0])
-        e[0] += 1
-        e[1] += t["net"] > 0
-        e[2] += t["net"]
-    log("  by entry hour: " + "  ".join("%02d:00 n=%d w=%d Rs%.0f" % (h, *hours[h]) for h in sorted(hours)))
+def summarize(tr, all_days=None):
+    """Trade-level and daily statistics. all_days = number of sessions in the sample (zero-P&L days count)."""
+    net = [t["net"] for t in tr]
+    n = len(net)
+    if n == 0:
+        return {"n": 0}
+    wins = [v for v in net if v > 0]
+    loss = [v for v in net if v <= 0]
+    m, sd = mean_sd(net)
+    tstat = m / (sd / math.sqrt(n)) if n > 1 and sd > 0 else NAN
+    dp = daily_pnl(tr)
+    if all_days and all_days > len(dp):
+        dp = dp + [0.0] * (all_days - len(dp))
+    dm, dsd = mean_sd(dp)
+    down = [min(v, 0.0) for v in dp]
+    dd_dev = math.sqrt(sum(v * v for v in down) / len(down)) if down else NAN
+    sk, ku = skew_kurt(net)
+    gp, gl = sum(wins), -sum(loss)
+    return {"n": n, "wins": len(wins), "win": wilson(len(wins), n), "net": sum(net), "gross": sum(t["gross"] for t in tr),
+            "charges": sum(t["charges"] for t in tr), "expectancy": m, "avg_win": (gp / len(wins)) if wins else 0.0,
+            "avg_loss": (-gl / len(loss)) if loss else 0.0, "payoff": (gp / len(wins)) / (gl / len(loss)) if wins and loss and gl > 0 else NAN,
+            "pf": gp / gl if gl > 0 else float("inf"), "max_dd": max_dd(net), "max_consec_losses": max_consec_losses(net),
+            "sharpe_trade": m / sd if sd and sd > 0 else NAN, "t": tstat, "p_t": t_sf2(tstat, n - 1) if ok(tstat) else NAN,
+            "sharpe_daily_ann": dm / dsd * math.sqrt(252) if dsd and dsd > 0 else NAN,
+            "sortino_daily_ann": dm / dd_dev * math.sqrt(252) if dd_dev and dd_dev > 0 else NAN,
+            "skew": sk, "kurt": ku, "avg_pts": sum(t["pts"] for t in tr) / n}
 
 
-def pull_and_backtest(months):
-    log("=== DATA PULL + BACKTEST: last %s months of 5m data ===" % months)
-    futs = all_futures()
+def fmt_sum(s):
+    if not s or s.get("n", 0) == 0:
+        return "n=0"
+    w = s["win"]
+    return ("n=%3d win=%4.1f%% [%2.0f-%2.0f] net=Rs%+9.0f exp/trade=Rs%+7.0f avgW=%6.0f avgL=%7.0f PF=%4.2f maxDD=Rs%8.0f "
+            "maxL-run=%d Sharpe(d,ann)=%5.2f Sortino=%5.2f t=%5.2f p=%.3f" % (
+                s["n"], 100 * w[0], 100 * w[1], 100 * w[2], s["net"], s["expectancy"], s["avg_win"], s["avg_loss"],
+                s["pf"], s["max_dd"], s["max_consec_losses"], s["sharpe_daily_ann"], s["sortino_daily_ann"],
+                s["t"], s["p_t"]))
+
+
+def bootstrap(net, B=BOOTSTRAPS, seed=11):
+    rnd = random.Random(seed)
+    n = len(net)
+    if n < 5:
+        return {}
+    tots = sorted(sum(net[rnd.randrange(n)] for _ in range(n)) for _ in range(B))
+    return {"total_ci95": (tots[int(0.025 * B)], tots[int(0.975 * B) - 1]),
+            "p_total_le_0": sum(1 for v in tots if v <= 0) / B}
+
+
+def mc_drawdown(net, B=2000, seed=5):
+    rnd = random.Random(seed)
+    if len(net) < 5:
+        return {}
+    dds = []
+    v = list(net)
+    for _ in range(B):
+        rnd.shuffle(v)
+        dds.append(max_dd(v))
+    dds.sort()
+    return {"dd_median": dds[B // 2], "dd_p95": dds[int(0.05 * B)], "dd_p99": dds[int(0.01 * B)]}
+
+
+def deflated_sharpe(sr, n_obs, n_trials, sk, ku, var_trials):
+    """Bailey & Lopez de Prado (2014). sr per observation. Returns P(true SR > 0) after selection bias."""
+    if n_obs < 3 or not ok(sr):
+        return NAN
+    emc = 0.5772156649
+
+    def inv(p):
+        lo, hi = -10.0, 10.0
+        for _ in range(100):
+            mid = (lo + hi) / 2
+            if norm_cdf(mid) < p:
+                lo = mid
+            else:
+                hi = mid
+        return (lo + hi) / 2
+    sd = math.sqrt(max(var_trials, 1e-12))
+    sr0 = sd * ((1 - emc) * inv(1 - 1.0 / n_trials) + emc * inv(1 - 1.0 / (n_trials * math.e))) if n_trials > 1 else 0.0
+    den = math.sqrt(max(1 - sk * sr + (ku - 1) / 4.0 * sr * sr, 1e-12))
+    return norm_cdf((sr - sr0) * math.sqrt(n_obs - 1) / den)
+
+
+def bh_adjust(pvals):
+    m = len(pvals)
+    order = sorted(range(m), key=lambda i: pvals[i])
+    adj = [0.0] * m
+    prev = 1.0
+    for rank in range(m - 1, -1, -1):
+        i = order[rank]
+        prev = min(prev, pvals[i] * m / (rank + 1))
+        adj[i] = prev
+    return adj
+
+
+# ----------------------------------------------------------- time series --
+def autocorr(x, lag):
+    n = len(x)
+    if n <= lag + 2:
+        return NAN
+    m = sum(x) / n
+    den = sum((v - m) ** 2 for v in x)
+    return sum((x[i] - m) * (x[i - lag] - m) for i in range(lag, n)) / den if den > 0 else NAN
+
+
+def hurst(prices, lags=(2, 4, 8, 16, 32, 64)):
+    """H from the scaling of std(log P[t+tau] - log P[t]) ~ tau^H (0.5 random walk, <0.5 mean-reverting)."""
+    lp = [math.log(p) for p in prices if p > 0]
+    pts = []
+    for tau in lags:
+        if len(lp) <= tau + 10:
+            continue
+        d = [lp[i + tau] - lp[i] for i in range(len(lp) - tau)]
+        m, s = mean_sd(d)
+        if s > 0:
+            pts.append((math.log(tau), math.log(s)))
+    if len(pts) < 3:
+        return NAN
+    mx = sum(a for a, _ in pts) / len(pts)
+    my = sum(b for _, b in pts) / len(pts)
+    return sum((a - mx) * (b - my) for a, b in pts) / sum((a - mx) ** 2 for a, _ in pts)
+
+
+def variance_ratio(r, q=5):
+    n = len(r)
+    if n < 10 * q:
+        return NAN, NAN
+    m, s = mean_sd(r)
+    v1 = s * s
+    rq = [sum(r[i:i + q]) for i in range(n - q + 1)]
+    _, sq = mean_sd(rq)
+    vr = sq * sq / q / v1 if v1 > 0 else NAN
+    z = (vr - 1) / math.sqrt(2 * (2 * q - 1) * (q - 1) / (3 * q * n))
+    return vr, z
+
+
+def cusum_change_point(x, B=500, seed=3):
+    """Single change point in the mean: argmax |S_k| of the centred cumulative sum; permutation p-value."""
+    n = len(x)
+    if n < 20:
+        return None
+    def stat(v):
+        m = sum(v) / len(v)
+        s, best, bk = 0.0, 0.0, 0
+        for k, a in enumerate(v):
+            s += a - m
+            if abs(s) > best:
+                best, bk = abs(s), k
+        return best, bk
+    st, k = stat(x)
+    rnd = random.Random(seed)
+    v = list(x)
+    cnt = 0
+    for _ in range(B):
+        rnd.shuffle(v)
+        if stat(v)[0] >= st:
+            cnt += 1
+    return {"index": k, "stat": st, "p": (cnt + 1) / (B + 1),
+            "mean_before": sum(x[:k + 1]) / (k + 1), "mean_after": sum(x[k + 1:]) / max(n - k - 1, 1)}
+
+
+# ----------------------------------------------------- logistic regression --
+def logit_fit(X, y, l2=1.0, iters=400, lr=0.1):
+    k = len(X[0])
+    w = [0.0] * (k + 1)
+    n = len(X)
+    for _ in range(iters):
+        g = [0.0] * (k + 1)
+        for xi, yi in zip(X, y):
+            z = w[0] + sum(a * b for a, b in zip(w[1:], xi))
+            p = 1 / (1 + math.exp(-max(min(z, 30), -30)))
+            e = p - yi
+            g[0] += e
+            for j in range(k):
+                g[j + 1] += e * xi[j]
+        for j in range(k + 1):
+            w[j] -= lr * (g[j] / n + (l2 * w[j] / n if j else 0))
+    return w
+
+
+def logit_pred(w, xi):
+    z = w[0] + sum(a * b for a, b in zip(w[1:], xi))
+    return 1 / (1 + math.exp(-max(min(z, 30), -30)))
+
+
+def auc(scores, labels):
+    pos = [s for s, l in zip(scores, labels) if l]
+    neg = [s for s, l in zip(scores, labels) if not l]
+    if not pos or not neg:
+        return NAN
+    c = sum(1.0 if a > b else (0.5 if a == b else 0.0) for a in pos for b in neg)
+    return c / (len(pos) * len(neg))
+
+
+# ============================================================ NIFTY AUDIT ==
+VARIANTS = {
+    "BASELINE": None,
+    "F3 09:30-13:00": {"entry_end": dt.time(13, 0)},
+    "F4 break>=2bps": {"min_break_bps": 2.0},
+    "F3+F4": {"entry_end": dt.time(13, 0), "min_break_bps": 2.0},
+}
+REPORTED = {  # numbers reported in the earlier runs (index proxy, legacy engine, 2025 STT) -> must be reproduced
+    "BASELINE": 25595, "F3 09:30-13:00": 54773, "F4 break>=2bps": 43748, "F3+F4": 41518,
+}
+
+
+def simulate_exit(A, i, d, sd, E, lot, exch):
+    """Exit of a position entered at the open of bar i (same rules as the engine, stop/target 2x/4x ATR)."""
+    slip = E["slip"]
+    entry = A[i]["open"] + d * slip
+    stop, tgt = entry - d * sd, entry + d * 2 * sd
+    day = ist(A[i]["ts"]).date()
+    for j in range(i, len(A)):
+        b = A[j]
+        t = ist(b["ts"])
+        if t.date() != day:
+            exit_px = A[j - 1]["close"] - d * slip
+            break
+        hit_sl = (b["low"] <= stop) if d > 0 else (b["high"] >= stop)
+        hit_tg = (b["high"] >= tgt + E["tg_through"]) if d > 0 else (b["low"] <= tgt - E["tg_through"])
+        if hit_sl and (E["both"] == "sl" or not hit_tg):
+            gapped = E["gap"] and j != i and ((b["open"] <= stop) if d > 0 else (b["open"] >= stop))
+            exit_px = (b["open"] if gapped else stop) - d * slip
+            break
+        if hit_tg:
+            exit_px = tgt
+            break
+        if (t + dt.timedelta(minutes=5)).time() >= EOD_EXIT:
+            exit_px = b["close"] - d * slip
+            break
+    else:
+        exit_px = A[-1]["close"]
+    raw_e = entry - (A[i].get("adj", 0) or 0)
+    raw_x = exit_px - (A[i].get("adj", 0) or 0)
+    buy, sell = (raw_e, raw_x) if d > 0 else (raw_x, raw_e)
+    return d * (exit_px - entry) * lot - charges("fut", exch, buy * lot, sell * lot, None, day)
+
+
+def permutation_random_entries(bars, trades, lot, exch, E, entry_end, P=PERMUTATIONS, seed=21):
+    """H0: the strategy's entries are no better than random entries with the SAME count, the same entry window,
+    the same long/short mix, the same 2xATR stop / 4xATR target / 15:20 exit and the same costs."""
+    if len(trades) < 10:
+        return {}
+    A = adjusted(bars)
+    x = compute(A)
+    cand = [i for i in range(1, len(A) - 1) if ok(x["atr"][i]) and ENTRY_START <= ist(A[i]["ts"]).time() < entry_end
+            and ist(A[i + 1]["ts"]).date() == ist(A[i]["ts"]).date()]
+    dirs = [t["dir"] for t in trades]
+    actual = sum(t["net"] for t in trades)
+    rnd = random.Random(seed)
+    dist = []
+    for _ in range(P):
+        tot = 0.0
+        for d in dirs:
+            i = rnd.choice(cand)
+            tot += simulate_exit(A, i + 1, d, PARAMS["stop_atr"] * x["atr"][i], E, lot, exch)
+        dist.append(tot)
+    dist.sort()
+    return {"actual": actual, "random_median": dist[P // 2], "random_p95": dist[int(0.95 * P)],
+            "p_value": (sum(1 for v in dist if v >= actual) + 1) / (P + 1)}
+
+
+def filter_attribution(base, filt, label, B=2000, seed=9):
+    """Trades removed by a filter: if they have negative expectancy the filter adds value. Random-removal test:
+    remove the same number of random baseline trades; p = P(random keeps >= the filter's remaining net)."""
+    ids_f = {t["id"] for t in filt}
+    ids_b = {t["id"] for t in base}
+    removed = [t for t in base if t["id"] not in ids_f]
+    added = [t for t in filt if t["id"] not in ids_b]
+    kept = [t for t in base if t["id"] in ids_f]
+    rnd = random.Random(seed)
+    k = len(removed)
+    nets = [t["net"] for t in base]
+    target = sum(t["net"] for t in kept)
+    cnt = 0
+    for _ in range(B):
+        idx = set(rnd.sample(range(len(nets)), k)) if k <= len(nets) else set()
+        if sum(v for j, v in enumerate(nets) if j not in idx) >= target:
+            cnt += 1
+    rm = summarize(removed) if removed else {"n": 0}
+    log("  %-14s removed %3d trades: %s" % (label, k, fmt_sum(rm) if removed else "-"))
+    log("  %-14s added %3d trades (path effect) net Rs%.0f | random-removal p = %.3f (low = filter better than chance)" % (
+        "", len(added), sum(t["net"] for t in added), (cnt + 1) / (B + 1)))
+    return {"removed_net": sum(t["net"] for t in removed), "p_random_removal": (cnt + 1) / (B + 1)}
+
+
+def regime_table(tr, label, key_fn, title):
+    groups = {}
+    for t in tr:
+        groups.setdefault(key_fn(t), []).append(t)
+    log("  %s - %s" % (label, title))
+    for k in sorted(groups):
+        s = summarize(groups[k])
+        log("    %-16s n=%3d win=%4.1f%% net=Rs%+8.0f exp=Rs%+6.0f PF=%.2f" % (
+            k, s["n"], 100 * s["win"][0], s["net"], s["expectancy"], s["pf"]))
+
+
+def ml_research(tr, label):
+    """Chronological walk-forward logistic regression on entry-time features -> P(win). Research only."""
+    feats = ["f_adx", "f_er", "f_rsi", "f_bw", "f_z", "f_brk", "f_hour", "f_atr_bps", "f_vwap_bps", "f_di", "f_dir"]
+    rows = sorted(tr, key=lambda t: t["entry_ts"])
+    n = len(rows)
+    if n < 80:
+        log("  ML %s: %d trades < 80 -> not enough data for a leakage-free walk-forward; skipped" % (label, n))
+        return
+    X = [[float(t.get(f) or 0.0) for f in feats] for t in rows]
+    y = [1 if t["net"] > 0 else 0 for t in rows]
+    folds = 5
+    size = n // folds
+    P, Yt, Nt = [], [], []
+    for k in range(2, folds):
+        tr_end = k * size
+        te = range(tr_end, n if k == folds - 1 else tr_end + size)
+        Xtr, ytr = X[:tr_end], y[:tr_end]
+        mu = [sum(c) / len(c) for c in zip(*Xtr)]
+        sd = [max(math.sqrt(sum((v - m) ** 2 for v in c) / len(c)), 1e-9) for c, m in zip(zip(*Xtr), mu)]
+        Z = [[(v - m) / s for v, m, s in zip(r, mu, sd)] for r in Xtr]
+        w = logit_fit(Z, ytr, l2=5.0)
+        base = sum(ytr) / len(ytr)
+        for j in te:
+            p = logit_pred(w, [(v - m) / s for v, m, s in zip(X[j], mu, sd)])
+            P.append(p)
+            Yt.append(y[j])
+            Nt.append((rows[j]["net"], p > base))
+    if not P:
+        return
+    base_all = sum(Yt) / len(Yt)
+    brier = sum((p - a) ** 2 for p, a in zip(P, Yt)) / len(P)
+    brier0 = sum((base_all - a) ** 2 for a in Yt) / len(Yt)
+    sel = [v for v, s in Nt if s]
+    tp = sum(1 for p, a in zip(P, Yt) if p > 0.5 and a)
+    fp = sum(1 for p, a in zip(P, Yt) if p > 0.5 and not a)
+    fn = sum(1 for p, a in zip(P, Yt) if p <= 0.5 and a)
+    log("  ML %s logistic walk-forward (train on past folds only): OOS n=%d | base win %.1f%% | AUC %.3f | Brier %.4f vs "
+        "naive %.4f | precision %.2f recall %.2f | expectancy all OOS Rs%.0f vs model-selected Rs%.0f (n=%d)" % (
+            label, len(P), 100 * base_all, auc(P, Yt), brier, brier0, tp / (tp + fp) if tp + fp else NAN,
+            tp / (tp + fn) if tp + fn else NAN, sum(v for v, _ in Nt) / len(Nt), (sum(sel) / len(sel)) if sel else NAN,
+            len(sel)))
+
+
+def run_audit(months=AUDIT_MONTHS):
+    log("=" * 100)
+    log("NIFTY QUANT AUDIT  (in-sample = data used to choose rules/filters; OOS = data not used)")
+    log("=" * 100)
     today = now_ist().date()
     start = today - dt.timedelta(days=int(months * 30.5))
-    summary = {}
-    for name, spec in INDICES.items():
-        if BACKTEST_INDICES and name not in BACKTEST_INDICES:
+    lot_info = nifty_futures()
+    futs = lot_info
+    lot = futs[0]["lot"] if futs else 65.0
+    sid = INDICES["NIFTY"]["sid"]
+    dly = daily(sid, int(months * 31) + 30)
+    idx5 = intraday(sid, "IDX_I", "INDEX", start, today, 5)
+    per, exp = {}, {}
+    for f in futs:
+        per[f["sid"]] = intraday(f["sid"], f["segment"], "FUTIDX", start, today, 5, oi=True)
+        exp[f["sid"]] = f["expiry"]
+    fut_adj, rolls = stitch_front_month(per, exp, adjust=True)
+    fut_raw, _ = stitch_front_month(per, exp, adjust=False)
+    ib = [dict(b, volume=0.0) for b in idx5]
+    split = fut_raw[0]["ts"] if fut_raw else None
+    log("PHASE 1  DATA: lot %s | contracts %s | futures from %s | index from %s | rolls %s" % (
+        lot, [(f["display"], f["expiry"]) for f in futs], ist(fut_raw[0]["ts"]).date() if fut_raw else None,
+        ist(idx5[0]["ts"]).date() if idx5 else None, [(r["date"], round(r["diff"], 1), r["method"]) for r in rolls]))
+    dq_report(fut_raw, "NIFTY futures 5m (stitched)")
+    dq_report(idx5, "NIFTY index 5m", expect_volume=False)
+    for f in futs:
+        dq_report(per[f["sid"]], "contract %s" % f["display"])
+    if not fut_raw or not idx5:
+        log("AUDIT ABORTED: missing data")
+        return
+    oos_days = len({ist(b["ts"]).date() for b in idx5 if b["ts"] < split})
+
+    log("-" * 100)
+    log("PHASE 3a REPRODUCTION of reported numbers (legacy engine: index-daily pivots, no gaps/slippage, 2025 STT)")
+    for name, flt in VARIANTS.items():
+        tr = backtest(ib, lot, "NSE", PARAMS, flt, "legacy", "index_daily", dly, 2025)["trades"]
+        s = summarize(tr)
+        rep = REPORTED.get(name)
+        log("  %-16s INDEX %s | reported Rs%s -> %s" % (name, fmt_sum(s), rep,
+                                                       "MATCH" if rep is not None and abs(s.get("net", 0) - rep) < 2 else "DIFFERENT"))
+    trl = backtest(fut_raw, lot, "NSE", PARAMS, None, "legacy", "index_daily", dly, 2025)["trades"]
+    log("  %-16s FUT   %s | reported Rs46912" % ("BASELINE", fmt_sum(summarize(trl))))
+
+    log("-" * 100)
+    log("PHASE 3b CORRECTIONS applied one at a time to F3+F4 (attributes the P&L impact of each fix)")
+    f34 = VARIANTS["F3+F4"]
+    steps = [
+        ("legacy", dict(ex="legacy", levels="index_daily", charge_year=2025)),
+        ("+2026 STT (0.05% fut)", dict(ex="legacy", levels="index_daily", charge_year=2026)),
+        ("+pivots from same series", dict(ex="legacy", levels="series", charge_year=2026)),
+        ("+realistic execution", dict(ex="realistic", levels="series", charge_year=2026)),
+    ]
+    for lab, kw in steps:
+        si = summarize(backtest(ib, lot, "NSE", PARAMS, f34, kw["ex"], kw["levels"], dly, kw["charge_year"])["trades"])
+        fr = fut_raw if lab != "+realistic execution" else fut_adj
+        sf = summarize(backtest(fr, lot, "NSE", PARAMS, f34, kw["ex"], kw["levels"], dly, kw["charge_year"])["trades"])
+        log("  %-26s INDEX net Rs%+8.0f PF %.2f n=%d | FUT net Rs%+8.0f PF %.2f n=%d" % (
+            lab, si.get("net", 0), si.get("pf", 0), si.get("n", 0), sf.get("net", 0), sf.get("pf", 0), sf.get("n", 0)))
+    sf_noadj = summarize(backtest(fut_raw, lot, "NSE", PARAMS, f34, "realistic")["trades"])
+    log("  %-26s FUT net Rs%+8.0f (roll back-adjustment OFF, for comparison)" % ("", sf_noadj.get("net", 0)))
+
+    log("-" * 100)
+    log("PHASE 4/5 CORRECTED ENGINE, realistic execution, 2026 costs")
+    res = {}
+    for name, flt in VARIANTS.items():
+        ti = backtest(ib, lot, "NSE", PARAMS, flt, "realistic")["trades"]
+        tf = backtest(fut_adj, lot, "NSE", PARAMS, flt, "realistic")["trades"]
+        res[name] = (ti, tf)
+        log("  %-16s OOS   May-Aug INDEX %s" % (name, fmt_sum(summarize([t for t in ti if t["entry_ts"] < split], oos_days))))
+        log("  %-16s IS    Aug-Nov INDEX %s" % ("", fmt_sum(summarize([t for t in ti if t["entry_ts"] >= split]))))
+        log("  %-16s IS    Aug-Nov FUT   %s" % ("", fmt_sum(summarize(tf))))
+    ti, tf = res["F3+F4"]
+    oos = [t for t in ti if t["entry_ts"] < split]
+
+    log("-" * 100)
+    log("PHASE 4  SIGNIFICANCE of F3+F4 (corrected, realistic)")
+    for lab, tr in (("INDEX 6m", ti), ("INDEX OOS", oos), ("FUT IS", tf)):
+        if len(tr) < 5:
             continue
-        try:
-            dly = daily(spec["sid"], int(months * 31) + 15)
-            idx5 = intraday(spec["sid"], "IDX_I", "INDEX", start, today, 5)
-            per, exp = {}, {}
-            for f in futs.get(name, []):
-                per[f["sid"]] = intraday(f["sid"], f["segment"], "FUTIDX", start, today, 5, oi=True)
-                exp[f["sid"]] = f["expiry"]
-            fut5 = stitch_front_month(per, exp)
-            per1 = {sid: intraday(sid, futs[name][[f["sid"] for f in futs[name]].index(sid)]["segment"], "FUTIDX",
-                                  start, today, 1) for sid in exp} if FIXED_POINT_TESTS else {}
-            fut1 = stitch_front_month(per1, exp) if per1 else []
-            lot = futs[name][0]["lot"] if futs.get(name) else 1.0
-            log("%s: daily %d, index 5m %d (%s..), front-month futures 5m %d (%s..), lot %s" % (
-                name, len(dly), len(idx5), _d(idx5), len(fut5), _d(fut5), lot))
-            r = backtest(fut5, dly, lot, spec["exch"])
-            tl = r.pop("trades_list", [])
-            summary[name] = r
-            log("%s RESULT: %s" % (name, {k: (round(v, 2) if isinstance(v, float) else v) for k, v in r.items() if k != "by_setup"}))
-            log("%s by setup: %s" % (name, r.get("by_setup")))
-            if PRINT_ALL_TRADES:
-                print_trade_lists(name, tl)
-            if RUN_ORB_TEST:
-                orb_report(name, fut5, lot, spec["exch"], None, "FUTURES 5m")
-                if idx5:
-                    orb_report(name, idx5, lot, spec["exch"], fut5[0]["ts"] if fut5 else None, "INDEX 5m, 6 months")
-            if FILTER_SETS:
-                filter_report(name, fut5, dly, lot, spec["exch"], None, "FUTURES 5m")
-                if idx5:
-                    filter_report(name, [dict(b, volume=0.0) for b in idx5], dly, lot, spec["exch"],
-                                  fut5[0]["ts"] if fut5 else None, "INDEX 5m proxy (squeeze only, no VWAP)")
-            if INDEX_PROXY_BACKTEST and idx5:
-                ib = [dict(b, volume=0.0) for b in idx5]
-                ri = backtest(ib, dly, lot, spec["exch"])
-                til = ri.pop("trades_list", [])
-                summary[name + "-INDEX"] = ri
-                log("%s-INDEX PROXY (index 5m bars %s..%s, futures lot %s & charges; VWAP n/a so only SQUEEZE fires): %s" % (
-                    name, _d(idx5), ri.get("to"), lot,
-                    {k: (round(v, 2) if isinstance(v, float) else v) for k, v in ri.items() if k != "by_setup"}))
-                log("%s-INDEX by setup: %s" % (name, ri.get("by_setup")))
-                if PRINT_ALL_TRADES and til:
-                    print_trade_lists(name + "-INDEX", til)
-                    by_month = {}
-                    for t in til:
-                        mk = dt.datetime.fromtimestamp(t["entry_ts"], IST).strftime("%Y-%m")
-                        e = by_month.setdefault(mk, [0, 0, 0.0])
-                        e[0] += 1
-                        e[1] += t["net"] > 0
-                        e[2] += t["net"]
-                    log("  %s-INDEX by month: %s" % (name, "  ".join("%s n=%d w=%d Rs%.0f" % (m, *by_month[m]) for m in sorted(by_month))))
-            if FIXED_POINT_TESTS and fut1:
-                log("----- %s STOP/TARGET COMPARISON (same entries; exits on 1m bars, %d bars) -----" % (name, len(fut1)))
-                log("  " + summarize_fixed("2xATR / 4xATR", [{"pts": t["net"] / lot + t["charges"] / lot, "net": t["net"],
-                                                              "charges": t["charges"], "why": t["why"]} for t in tl], lot))
-                for slp, tgp in FIXED_POINT_TESTS:
-                    log("  " + summarize_fixed("SL %d / TGT %d" % (slp, tgp),
-                                               backtest_fixed(fut5, fut1, dly, lot, spec["exch"], slp, tgp), lot))
-        except Exception:
-            log(name, "backtest failed:", traceback.format_exc()[-600:])
-    tot = sum(v.get("net_rupees", 0) for k, v in summary.items() if not k.endswith("-INDEX"))
-    log("=== TOTAL net across indices: Rs%.0f ===" % tot)
-    log("NOTE: Dhan lists only live futures contracts, so futures history starts at the oldest live contract's listing "
-        "(~3 months). Index bars carry no volume (no VWAP), so they are reported but not traded.")
-    return summary
+        net = [t["net"] for t in tr]
+        bs = bootstrap(net)
+        mc = mc_drawdown(net)
+        s = summarize(tr)
+        log("  %-10s bootstrap total 95%% CI Rs%.0f..%.0f  P(total<=0)=%.3f | MC maxDD median Rs%.0f p95 Rs%.0f p99 Rs%.0f" % (
+            lab, bs["total_ci95"][0], bs["total_ci95"][1], bs["p_total_le_0"], mc["dd_median"], mc["dd_p95"], mc["dd_p99"]))
+        srs = [summarize(res[v][0]).get("sharpe_trade", NAN) for v in VARIANTS]
+        srs = [v for v in srs if ok(v)]
+        m, sdv = mean_sd(srs) if len(srs) > 1 else (NAN, NAN)
+        dsr = deflated_sharpe(s["sharpe_trade"], s["n"], VARIANTS_TESTED, s["skew"], s["kurt"],
+                              (sdv ** 2) if ok(sdv) else 0.0)
+        log("  %-10s per-trade Sharpe %.3f | Deflated Sharpe P(SR>0 | %d variants tried) = %.3f" % (
+            lab, s["sharpe_trade"], VARIANTS_TESTED, dsr))
+    perm = permutation_random_entries(ib, ti, lot, "NSE", EXEC["realistic"], dt.time(13, 0))
+    if perm:
+        log("  PERMUTATION (INDEX 6m, %d random-entry strategies, same count/window/direction mix/exits/costs): "
+            "actual Rs%.0f | random median Rs%.0f | random 95th pct Rs%.0f | p = %.3f" % (
+                PERMUTATIONS, perm["actual"], perm["random_median"], perm["random_p95"], perm["p_value"]))
+    perm_o = permutation_random_entries([b for b in ib if b["ts"] < split], oos, lot, "NSE", EXEC["realistic"], dt.time(13, 0))
+    if perm_o:
+        log("  PERMUTATION (OOS May-Aug only): actual Rs%.0f | random median Rs%.0f | p = %.3f" % (
+            perm_o["actual"], perm_o["random_median"], perm_o["p_value"]))
+    pv = []
+    for name in VARIANTS:
+        s = summarize([t for t in res[name][0] if t["entry_ts"] < split])
+        pv.append(s.get("p_t", 1.0) if ok(s.get("p_t", NAN)) else 1.0)
+    log("  Benjamini-Hochberg adjusted OOS p-values: %s" % dict(zip(VARIANTS, [round(v, 3) for v in bh_adjust(pv)])))
+
+    log("-" * 100)
+    log("PHASE 5  FILTER ATTRIBUTION (does each filter add independent value?) - INDEX 6m, realistic")
+    b, f3, f4, f34t = res["BASELINE"][0], res["F3 09:30-13:00"][0], res["F4 break>=2bps"][0], res["F3+F4"][0]
+    filter_attribution(b, f3, "F3 vs base")
+    filter_attribution(b, f4, "F4 vs base")
+    filter_attribution(f3, f34t, "F4 given F3")
+    filter_attribution(f4, f34t, "F3 given F4")
+    filter_attribution([t for t in b if t["entry_ts"] < split], [t for t in f34t if t["entry_ts"] < split], "F3+F4 OOS")
+
+    log("-" * 100)
+    log("PHASE 6  EXECUTION SCENARIOS and SLIPPAGE SENSITIVITY (F3+F4)")
+    for sc in ("optimistic", "legacy", "realistic", "stress"):
+        log("  %-10s INDEX %s" % (sc, fmt_sum(summarize(backtest(ib, lot, "NSE", PARAMS, f34, sc)["trades"]))))
+        log("  %-10s FUT   %s" % ("", fmt_sum(summarize(backtest(fut_adj, lot, "NSE", PARAMS, f34, sc)["trades"]))))
+    for sl in (0.0, 0.5, 1.0, 2.0, 3.0, 5.0):
+        e = dict(EXEC["realistic"], slip=sl)
+        si = summarize(backtest(ib, lot, "NSE", PARAMS, f34, e)["trades"])
+        sf = summarize(backtest(fut_adj, lot, "NSE", PARAMS, f34, e)["trades"])
+        log("  slippage %.1f pt/fill: INDEX net Rs%+8.0f PF %.2f | FUT net Rs%+8.0f PF %.2f" % (
+            sl, si.get("net", 0), si.get("pf", 0), sf.get("net", 0), sf.get("pf", 0)))
+    s = summarize(ti)
+    if s.get("n"):
+        log("  cost per trade: Rs%.0f (= %.1f NIFTY points on 1 lot); breakeven slippage = point edge / 2 fills = %.1f pts" % (
+            s["charges"] / s["n"], s["charges"] / s["n"] / lot, (s["gross"] / s["n"] / lot - s["charges"] / s["n"] / lot) / 2))
+
+    log("-" * 100)
+    log("PHASE 5b REGIME STABILITY (F3+F4, INDEX 6m, realistic)")
+    dret = {}
+    dl = sorted(dly, key=lambda d: d["ts"])
+    for k in range(21, len(dl)):
+        r = [math.log(dl[j]["close"] / dl[j - 1]["close"]) for j in range(k - 20, k)]
+        dret[ist(dl[k]["ts"]).date().isoformat()] = mean_sd(r)[1] * math.sqrt(252)
+    vols = sorted(v for v in dret.values() if ok(v))
+    q1, q2 = (vols[len(vols) // 3], vols[2 * len(vols) // 3]) if len(vols) > 6 else (NAN, NAN)
+
+    def vol_bucket(t):
+        v = dret.get(t["date"])
+        return "n/a" if not ok(v) else ("1 low RV" if v < q1 else ("2 mid RV" if v < q2 else "3 high RV"))
+    regime_table(ti, "F3+F4", vol_bucket, "prior 20-day realized vol tercile")
+    regime_table(ti, "F3+F4", lambda t: t["date"][:7], "month")
+    regime_table(ti, "F3+F4", lambda t: ("LONG" if t["dir"] > 0 else "SHORT") + " " + t["setup"][:8], "direction x setup")
+    regime_table(ti, "F3+F4", lambda t: ["Mon", "Tue (approx expiry)", "Wed", "Thu", "Fri"][dt.date.fromisoformat(t["date"]).weekday()],
+                 "weekday (NIFTY weekly expiry is Tuesday; holiday shifts not modelled)")
+    gaps = {}
+    days = {}
+    for bb in ib:
+        days.setdefault(ist(bb["ts"]).date(), []).append(bb)
+    ds = sorted(days)
+    for k in range(1, len(ds)):
+        gaps[ds[k].isoformat()] = abs(days[ds[k]][0]["open"] / days[ds[k - 1]][-1]["close"] - 1) * 100
+    regime_table(ti, "F3+F4", lambda t: "gap>0.5%" if gaps.get(t["date"], 0) > 0.5 else "gap<=0.5%", "opening gap")
+    regime_table(ti, "F3+F4", lambda t: "ADX<20" if t["f_adx"] < 20 else ("ADX20-30" if t["f_adx"] < 30 else "ADX>=30"),
+                 "ADX at entry")
+    regime_table(ti, "F3+F4", lambda t: t["why"], "exit type")
+
+    log("-" * 100)
+    log("PHASE 8  ML / regime models (research only, never traded)")
+    ml_research(res["BASELINE"][0], "INDEX baseline")
+    ml_research(ti, "INDEX F3+F4")
+    log("  Kronos / XGBoost / RandomForest / HMM: not runnable inside Dhan Cloud (pure Python, 1 vCPU, no PyTorch/"
+        "sklearn); evaluate on a VPS with the same chronological split before considering them.")
+
+    log("-" * 100)
+    log("PHASE 2b MARKET STATISTICS (NIFTY index)")
+    cl = [bb["close"] for bb in idx5]
+    r5 = [math.log(cl[k] / cl[k - 1]) for k in range(1, len(cl)) if ist(idx5[k]["ts"]).date() == ist(idx5[k - 1]["ts"]).date()]
+    rd = [math.log(dl[k]["close"] / dl[k - 1]["close"]) for k in range(1, len(dl))]
+    vr, z = variance_ratio(r5, 5)
+    log("  5m returns: autocorr lag1..3 %s | variance ratio(5) %.3f z %.2f | Hurst(5m log price) %.3f" % (
+        [round(autocorr(r5, k), 4) for k in (1, 2, 3)], vr, z, hurst(cl)))
+    cp = cusum_change_point(rd)
+    if cp:
+        log("  daily returns CUSUM change point at %s (p=%.3f): mean %.3f%% -> %.3f%%" % (
+            ist(dl[cp["index"] + 1]["ts"]).date(), cp["p"], 100 * cp["mean_before"], 100 * cp["mean_after"]))
+    cpv = cusum_change_point([abs(v) for v in rd])
+    if cpv:
+        log("  daily |returns| (volatility) change point at %s (p=%.3f): %.3f%% -> %.3f%%" % (
+            ist(dl[cpv["index"] + 1]["ts"]).date(), cpv["p"], 100 * cpv["mean_before"], 100 * cpv["mean_after"]))
+
+    log("-" * 100)
+    s_oos = summarize(oos, oos_days)
+    bs = bootstrap([t["net"] for t in oos]) if len(oos) >= 5 else {}
+    checks = [
+        ("OOS net > 0 after realistic costs", s_oos.get("net", -1) > 0),
+        ("OOS bootstrap P(total<=0) < 0.05", bs.get("p_total_le_0", 1) < 0.05),
+        ("permutation p < 0.05 (6m)", perm.get("p_value", 1) < 0.05 if perm else False),
+        ("OOS trades >= 100", s_oos.get("n", 0) >= 100),
+        ("stress scenario net > 0", summarize(backtest(ib, lot, "NSE", PARAMS, f34, "stress")["trades"]).get("net", -1) > 0),
+    ]
+    for lab, okk in checks:
+        log("  [%s] %s" % ("PASS" if okk else "FAIL", lab))
+    log("VERDICT: %s" % ("EDGE SUPPORTED (still requires paper-trading confirmation)" if all(o for _, o in checks)
+                         else "EDGE NOT ESTABLISHED - keep paper trading only; do not trade real money"))
+    log("=" * 100)
 
 
-def _d(rows):
-    return dt.datetime.fromtimestamp(rows[0]["ts"], IST).strftime("%Y-%m-%d") if rows else "none"
+# ========================================================== PAPER LEDGER ==
+# Dhan Cloud has no persistent storage, so the ledger is a deterministic REPLAY of the frozen rules over Dhan's own
+# historical data from LEDGER_START. Every restart rebuilds the identical ledger:
+#   * positions survive restarts (an open trade is re-derived from the data)
+#   * every trade has a stable unique id = sha1(symbol | entry time | setup | side) -> no duplicates
+#   * lifecycle: SIGNAL -> PENDING_FILL -> OPEN -> CLOSED(SL / SL_GAP / TARGET / EOD)
+#   * events are notified once per process; events older than the process start are not re-sent
+#   * every execution line is logged with id, timestamps, prices, reason, charges and net P&L (audit trail)
+
+def fetch_series(futs, frm, to, interval=1):
+    per, exp = {}, {}
+    for f in futs:
+        per[f["sid"]] = intraday(f["sid"], f["segment"], "FUTIDX", frm, to, interval)
+        exp[f["sid"]] = f["expiry"]
+    bars, rolls = stitch_front_month(per, exp, adjust=True)
+    return bars, rolls
+
+
+def ledger_build(bars5, lot, start_date):
+    res = backtest(bars5, lot, "NSE", PARAMS, LIVE_FILTER, EXEC_LIVE, with_open=True)
+    closed_tr = [t for t in res["trades"] if t["date"] >= start_date]
+    events = []
+    for t in closed_tr:
+        events.append((t["entry_ts"], t["id"], "OPEN", "[PAPER %s] OPEN %s %s @ %.1f (stop dist %.1f) | %s" % (
+            t["id"], "LONG" if t["dir"] > 0 else "SHORT", t["setup"], t["entry"], t["sd"], t["entry_reason"])))
+        events.append((t["exit_ts"] + 300, t["id"], "CLOSED", "[PAPER %s] CLOSED %s @ %.1f (%s) | %+.1f pts | gross Rs%.0f | "
+                       "charges Rs%.0f | net Rs%.0f" % (t["id"], "LONG" if t["dir"] > 0 else "SHORT", t["exit"], t["why"],
+                                                       t["pts"], t["gross"], t["charges"], t["net"])))
+    op = res.get("open")
+    open_pos = None
+    if op and ist(op["ts"]).date().isoformat() >= start_date:
+        oid = trade_id("NIFTY", op["ts"], op["setup"], op["d"])
+        raw = op["entry"] - op["adj"]
+        state = "OPEN" if op["ts"] <= bars5[-1]["ts"] else "PENDING_FILL"
+        open_pos = {"id": oid, "state": state, "dir": op["d"], "setup": op["setup"], "entry": raw,
+                    "stop": op["stop"] - op["adj"], "target": op["target"] - op["adj"], "entry_ts": op["ts"]}
+        msg = ("[PAPER %s] %s %s %s @ %.1f | SL %.1f | T %.1f" % (
+            oid, state, "LONG" if op["d"] > 0 else "SHORT", op["setup"], raw, open_pos["stop"], open_pos["target"]))
+        events.append((op["ts"], oid, state, msg))
+    return closed_tr, open_pos, sorted(events)
+
+
+def ledger_summary(closed_tr, day):
+    def line(S):
+        if not S:
+            return "0 trades"
+        w = sum(t["net"] > 0 for t in S)
+        return "%d trades, %d wins (%.0f%%), net Rs%.0f, charges Rs%.0f" % (
+            len(S), w, 100.0 * w / len(S), sum(t["net"] for t in S), sum(t["charges"] for t in S))
+    td = [t for t in closed_tr if t["date"] == day]
+    s = summarize(closed_tr) if closed_tr else {"n": 0}
+    return "[PAPER] %s today: %s | since %s: %s | maxDD Rs%.0f" % (
+        day, line(td), LEDGER_START, line(closed_tr), s.get("max_dd", 0.0))
 
 
 # ============================================================= SELF-TEST ==
+def synthetic_bars(n=3000, seed=7, t0=None, vol=0.0012):
+    rnd = random.Random(seed)
+    t0 = t0 or dt.datetime(2026, 5, 4, 9, 15, tzinfo=IST).timestamp()
+    px, bars, day, k = 24000.0, [], 0, 0
+    for i in range(n):
+        if k == SESSION_BARS_5M:
+            day, k = day + 1, 0
+            while ist(t0 + day * 86400).weekday() >= 5:
+                day += 1
+        o = bars[-1]["close"] if bars and k else px
+        px *= math.exp(rnd.gauss(0, vol))
+        bars.append({"ts": t0 + day * 86400 + k * 300, "open": o, "high": max(o, px) + abs(rnd.gauss(0, 8)),
+                     "low": min(o, px) - abs(rnd.gauss(0, 8)), "close": px, "volume": float(rnd.randint(1000, 50000))})
+        k += 1
+    return bars
+
+
 def selftest():
     res = []
 
@@ -1090,8 +1724,8 @@ def selftest():
          {"ts": t0 + 86400, "high": 30, "low": 30, "close": 30, "volume": 5}]
     v = vwap(b)
     check("VWAP typical price + session reset", v[0] == 9 and abs(v[1] - 11.25) < 1e-12 and v[2] == 30)
-    tb = [{"high": 10, "low": 8, "close": 9}, {"high": 12, "low": 11, "close": 11.5}, {"high": 11, "low": 7, "close": 8}]
-    check("True range", true_range(tb) == [2, 3, 4.5])
+    check("True range", true_range([{"high": 10, "low": 8, "close": 9}, {"high": 12, "low": 11, "close": 11.5},
+                                    {"high": 11, "low": 7, "close": 8}]) == [2, 3, 4.5])
     w = wilder([1, 2, 3, 4, 5, 6.0], 3)
     check("Wilder smoothing", w[2] == 2 and abs(w[3] - 8 / 3) < 1e-12)
     up = mk([100 + i for i in range(60)])
@@ -1110,38 +1744,72 @@ def selftest():
     check("Supertrend flips long -> short on close cross", dr[38] == 1 and dr[-1] == -1)
     F = 100 * math.exp(0.05)
     check("Black-76 vs Hull reference 10.4506", abs(black76(F, 100, 1, 0.05, 0.2, True) - 10.4506) < 1e-3)
+    worst = 0.0
+    for call in (True, False):
+        for K in (23000, 24000, 25000):
+            for T in (2 / 365, 30 / 365):
+                s0 = 0.14
+                g = greeks76(24000, K, T, 0.065, s0, call)
+                h = 1.0
+                fd_d = (black76(24000 + h, K, T, 0.065, s0, call) - black76(24000 - h, K, T, 0.065, s0, call)) / (2 * h)
+                fd_g = (greeks76(24000 + h, K, T, 0.065, s0, call)["delta"] - greeks76(24000 - h, K, T, 0.065, s0, call)["delta"]) / (2 * h)
+                fd_v = (black76(24000, K, T, 0.065, s0 + 1e-4, call) - black76(24000, K, T, 0.065, s0 - 1e-4, call)) / 2e-4 * 0.01
+                fd_va = (greeks76(24000, K, T, 0.065, s0 + 1e-4, call)["delta"] - greeks76(24000, K, T, 0.065, s0 - 1e-4, call)["delta"]) / 2e-4 * 0.01
+                e = 1e-5
+                fd_ch = -(greeks76(24000, K, T + e, 0.065, s0, call)["delta"] - greeks76(24000, K, T - e, 0.065, s0, call)["delta"]) / (2 * e) / 365
+                fd_th = -(black76(24000, K, T + e, 0.065, s0, call) - black76(24000, K, T - e, 0.065, s0, call)) / (2 * e) / 365
+                for an, fd, sc in ((g["delta"], fd_d, 1), (g["gamma"], fd_g, 1e-3), (g["vega"], fd_v, 1),
+                                   (g["vanna"], fd_va, 1e-2), (g["charm"], fd_ch, 1e-2), (g["theta"], fd_th, 1)):
+                    worst = max(worst, abs(an - fd) / max(abs(fd), sc))
+    check("Greeks incl. vanna & charm vs finite differences (rel err %.1e)" % worst, worst < 1e-3)
     iv = implied_vol(black76(24000, 24100, 0.02, 0.065, 0.14, True), 24000, 24100, 0.02, 0.065, True)
     check("Implied vol round trip", iv is not None and abs(iv - 0.14) < 1e-6)
-    check("Option charges: STT 0.1% of sell + Rs40 brokerage", charges("opt", "NSE", 100000, 110000) > 150)
+    C, P = black76(24100, 24000, 0.05, 0.065, 0.15, True), black76(24100, 24000, 0.05, 0.065, 0.15, False)
+    check("Put-call parity residual = 0", abs(parity_residual(C, P, 24100, 24000, 0.05, 0.065)) < 1e-8)
+    ch26 = charges("fut", "NSE", 24000 * 65, 24100 * 65, 2026)
+    stt = 0.0005 * 24100 * 65
+    txn = 0.0000173 * (24000 + 24100) * 65
+    sebi = 0.000001 * (24000 + 24100) * 65
+    ref = 40 + stt + txn + sebi + 0.00002 * 24000 * 65 + 0.18 * (40 + txn + sebi)
+    check("Futures charges 2026 (STT 0.05%%) = Rs%.2f" % ch26, abs(ch26 - ref) < 1e-6 and ch26 > charges("fut", "NSE", 24000 * 65, 24100 * 65, 2025))
     blocked = False
     try:
         post("/orders", {})
     except ValueError:
         blocked = True
     check("Order endpoints blocked", blocked)
-    import random
-    rnd = random.Random(7)
-    px, bars, day, k = 24000.0, [], 0, 0
-    for i in range(3000):
-        if k == 75:
-            day, k = day + 1, 0
-        px *= math.exp(rnd.gauss(0, 0.0012))
-        o = bars[-1]["close"] if bars else px
-        bars.append({"ts": t0 + day * 86400 + k * 300, "open": o, "high": max(o, px) + abs(rnd.gauss(0, 8)),
-                     "low": min(o, px) - abs(rnd.gauss(0, 8)), "close": px, "volume": float(rnd.randint(1000, 50000))})
-        k += 1
-    dl = [{"ts": t0 + d * 86400 - 86400, "high": 24300, "low": 23700, "close": 24000} for d in range(60)]
-    r1 = backtest(bars, dl, 65, "NSE")
-    ok_cost = r1["status"] == "OK" and all(abs(t["net"] - (t["gross"] - t["charges"])) < 1e-9 for t in r1["trades_list"])
-    check("Backtest: trades generated, net = gross - charges", ok_cost)
-    b2 = [dict(x) for x in bars]
-    for x in b2[2000:]:
+    bars = synthetic_bars()
+    r1 = backtest(bars, 65, "NSE", PARAMS, None, "realistic")["trades"]
+    check("Engine: trades generated, net = pts*lot - charges", bool(r1) and all(abs(t["net"] - (t["pts"] * 65 - t["charges"])) < 1e-6 for t in r1))
+    b2 = [dict(q) for q in bars]
+    for q in b2[2000:]:
         for f in ("open", "high", "low", "close"):
-            x[f] *= 1.05
-    r2 = backtest(b2, dl, 65, "NSE")
+            q[f] *= 1.05
+    r2 = backtest(b2, 65, "NSE", PARAMS, None, "realistic")["trades"]
     cut = bars[1990]["ts"]
-    check("Backtest has no look-ahead (changing future bars leaves past trades unchanged)",
-          [t for t in r1["trades_list"] if t["exit_ts"] < cut] == [t for t in r2["trades_list"] if t["exit_ts"] < cut])
+    check("No look-ahead: changing future bars leaves earlier trades identical",
+          [t["id"] for t in r1 if t["exit_ts"] < cut] == [t["id"] for t in r2 if t["exit_ts"] < cut])
+    check("Unique trade ids", len({t["id"] for t in r1}) == len(r1))
+    ro = backtest(bars, 65, "NSE", PARAMS, None, "optimistic")["trades"]
+    rs = backtest(bars, 65, "NSE", PARAMS, None, "stress")["trades"]
+    check("Scenario ordering optimistic >= realistic >= stress",
+          sum(t["net"] for t in ro) >= sum(t["net"] for t in r1) >= sum(t["net"] for t in rs))
+    adj_bars = [dict(q, adj=123.0) for q in bars]
+    ra = backtest(adj_bars, 65, "NSE", PARAMS, None, "realistic")["trades"]
+    check("Back-adjustment: identical signals and points, charges on raw prices",
+          [t["id"] for t in ra] == [t["id"] for t in r1] and all(abs(a1["pts"] - b1["pts"]) < 1e-9 for a1, b1 in zip(ra, r1)))
+    day = dt.datetime(2026, 11, 9, 9, 15, tzinfo=IST).timestamp()
+    m1 = [{"ts": day + k * 60, "open": 1, "high": 2, "low": 0.5, "close": 1.5, "volume": 1} for k in range(12)]
+    cb = complete_5m(m1, day + 12 * 60)
+    check("Incomplete 5m candle excluded (2 complete of 3 started)", len(cb) == 2)
+    per = {1: [{"ts": day - 86400 + 22200, "open": 100, "high": 101, "low": 99, "close": 100, "volume": 1}],
+           2: [{"ts": day - 86400 + 22200, "open": 110, "high": 111, "low": 109, "close": 110, "volume": 1},
+               {"ts": day, "open": 110, "high": 112, "low": 109, "close": 111, "volume": 1}]}
+    st, rl = stitch_front_month(per, {1: (dt.date.fromtimestamp(day) - dt.timedelta(days=1)).isoformat(), 2: "2099-01-01"})
+    check("Roll back-adjustment = +10 on pre-roll bars", len(rl) == 1 and abs(rl[0]["diff"] - 10) < 1e-9 and st[0]["adj"] == 10 and st[-1]["adj"] == 0)
+    g1 = [{"ts": t0, "open": 100, "high": 100, "low": 100, "close": 100}]
+    check("Hurst of random walk ~0.5", 0.4 < hurst([q["close"] for q in synthetic_bars(4000, 3, vol=0.001)]) < 0.6 and g1)
+    check("t-test p-value (t=2.0, df=30) = 0.0546", abs(t_sf2(2.0, 30) - 0.0546) < 5e-4)
     log("SELF-TEST: %d/%d passed" % (sum(res), len(res)))
     return all(res)
 
@@ -1151,136 +1819,65 @@ def in_session(t):
     return t.weekday() < 5 and dt.time(9, 15) <= t.time() <= dt.time(15, 30)
 
 
-def paper_enter(paper, card, lot, exch):
-    """Queue a paper trade: fills at the open of the first 1m bar of the next 5m bar (same as the backtest)."""
-    if paper.get("pos") or card["signal"] not in ("LONG", "SHORT") or "stop_dist" not in card:
-        return
-    d = 1 if card["signal"] == "LONG" else -1
-    mr = card["setup"] == "MEAN_REVERSION"
-    paper["pos"] = {"index": card["index"], "d": d, "setup": card["setup"], "sd": card["stop_dist"], "mr": mr,
-                    "mr_target": card["targets"][0] if mr else None, "fill_ts": card["bar_ts"] + 300,
-                    "entry": None, "lot": lot, "exch": exch, "reason": card["reason"]}
-
-
-def paper_update(paper, b1, now):
-    """Advance the open paper trade on CLOSED 1m bars: fill, then stop (checked first) / target / 15:20 exit."""
-    pos = paper.get("pos")
-    if not pos:
-        return []
-    msgs = []
-    bars = [b for b in b1 if b["ts"] >= pos["fill_ts"] and b["ts"] + 60 <= now + 1]
-    for b in bars:
-        t = dt.datetime.fromtimestamp(b["ts"], IST)
-        if pos["entry"] is None:
-            if t.date() != dt.datetime.fromtimestamp(pos["fill_ts"], IST).date():
-                paper["pos"] = None
-                return msgs
-            pos["entry"] = b["open"]
-            pos["entry_ts"] = b["ts"]
-            pos["stop"] = pos["entry"] - pos["d"] * pos["sd"]
-            pos["target"] = pos["mr_target"] if pos["mr"] else pos["entry"] + pos["d"] * 2 * pos["sd"]
-            if (pos["target"] - pos["entry"]) * pos["d"] <= 0:
-                paper["pos"] = None
-                return msgs
-            msgs.append("[PAPER %s] ENTER %s %s @ %.1f | SL %.1f | T %.1f | %s" % (
-                pos["index"], "LONG" if pos["d"] > 0 else "SHORT", pos["setup"], pos["entry"], pos["stop"],
-                pos["target"], pos["reason"]))
-        if b["ts"] <= pos.get("last_ts", 0):
-            continue
-        pos["last_ts"] = b["ts"]
-        d = pos["d"]
-        exit_px = why = None
-        if (b["low"] <= pos["stop"]) if d > 0 else (b["high"] >= pos["stop"]):
-            exit_px, why = pos["stop"], "SL"
-        elif (b["high"] >= pos["target"]) if d > 0 else (b["low"] <= pos["target"]):
-            exit_px, why = pos["target"], "TARGET"
-        elif (t + dt.timedelta(minutes=1)).time() >= EOD_EXIT:
-            exit_px, why = b["close"], "EOD"
-        if exit_px is not None:
-            q = pos["lot"]
-            buy, sell = (pos["entry"], exit_px) if d > 0 else (exit_px, pos["entry"])
-            ch = charges("fut", pos["exch"], buy * q, sell * q)
-            gross = d * (exit_px - pos["entry"]) * q
-            tr = {"index": pos["index"], "date": t.date().isoformat(), "setup": pos["setup"], "dir": d,
-                  "entry": pos["entry"], "exit": exit_px, "why": why, "gross": gross, "charges": ch, "net": gross - ch}
-            paper.setdefault("trades", []).append(tr)
-            paper["pos"] = None
-            msgs.append("[PAPER %s] EXIT %s @ %.1f (%s) | points %+.1f | net Rs%.0f after charges Rs%.0f" % (
-                tr["index"], "LONG" if d > 0 else "SHORT", exit_px, why, d * (exit_px - tr["entry"]), tr["net"], ch))
-            break
-    return msgs
-
-
-def paper_summary(paper, day):
-    tl = paper.get("trades", [])
-    td = [t for t in tl if t["date"] == day]
-    def line(S):
-        if not S:
-            return "0 trades"
-        w = sum(t["net"] > 0 for t in S)
-        return "%d trades, %d wins (%.0f%%), net Rs%.0f" % (len(S), w, 100.0 * w / len(S), sum(t["net"] for t in S))
-    return "[PAPER] %s today: %s | since start: %s (in memory; resets if the strategy restarts)" % (day, line(td), line(tl))
-
-
 def cycle(state):
     now = time.time()
     today = now_ist().date()
     if state.get("day") != today:
-        futs = all_futures()
-        state["futs"] = {n: (v[0] if v else None) for n, v in futs.items()}
-        state["prev"] = {n: prev_day(daily(s["sid"], 15), today) for n, s in INDICES.items()}
+        state["futs"] = nifty_futures()
         state["day"] = today
-        log("instruments:", {n: (f["display"], f["sid"], f["lot"], f["expiry"]) for n, f in state["futs"].items() if f})
+        log("instruments:", [(f["display"], f["sid"], f["lot"], f["expiry"]) for f in state["futs"]])
+    futs = state["futs"]
+    if not futs:
+        log("no NIFTY futures found")
+        return
+    lot = futs[0]["lot"]
+    frm = min(dt.date.fromisoformat(LEDGER_START), today) - dt.timedelta(days=8)
+    b1, rolls = fetch_series(futs, frm, today, 1)
+    bars5 = complete_5m(b1, now)
+    if bars5 and now - (bars5[-1]["ts"] + 300) > 900 and in_session(now_ist()):
+        log("DATA STALE: last complete 5m bar %s" % ist(bars5[-1]["ts"]).strftime("%H:%M"))
     vix_v = vix()
-    paper = state.setdefault("paper", {})
-    for name, spec in INDICES.items():
-        if LIVE_INDICES and name not in LIVE_INDICES:
-            continue
-        fut = state["futs"].get(name)
-        if not fut:
-            continue
-        try:
-            b1 = intraday(fut["sid"], fut["segment"], "FUTIDX", today - dt.timedelta(days=6), today, 1)
-            if PAPER_TRADE:
-                for m in paper_update(paper, b1, now):
-                    log(m)
-                    telegram(m)
-            expiry, legs = option_chain(spec["sid"])
-            card, table = build_card(name, b1, state["prev"].get(name), legs, expiry or fut["expiry"], vix_v, fut["lot"],
-                                     now, PARAMS, LIVE_FILTERS.get(name))
-            msg = card_text(card, table)
-            log(msg.replace("\n", " | "))
-            key = (name, card.get("bar"), card["signal"])
-            if card["signal"] in ("LONG", "SHORT") and key not in state["sent"]:
-                state["sent"].add(key)
+    expiry, legs = option_chain(INDICES["NIFTY"]["sid"])
+    card, table = build_card(bars5, legs, expiry, futs[0]["expiry"], vix_v, lot, LIVE_FILTER)
+    log(card_text(card, table).replace("\n", " | "))
+    key = ("card", card.get("bar"), card["signal"])
+    if card["signal"] in ("LONG", "SHORT") and key not in state["sent"]:
+        state["sent"].add(key)
+        telegram(card_text(card, table))
+    if PAPER_TRADE:
+        closed_tr, open_pos, events = ledger_build(bars5, lot, LEDGER_START)
+        for ts, tid, st_, msg in events:
+            k = (tid, st_)
+            if k in state["sent"]:
+                continue
+            state["sent"].add(k)
+            if ts >= state["start_ts"] - 600:
+                log(msg)
                 telegram(msg)
-                if PAPER_TRADE:
-                    paper_enter(paper, card, fut["lot"], spec["exch"])
-        except Exception:
-            log(name, "error:", traceback.format_exc()[-500:])
+        state["ledger"] = closed_tr
+        state["open"] = open_pos
 
 
 def run():
-    log("DHAN QUANT single-file strategy starting (read-only)")
+    log("NIFTY QUANT ENGINE (Dhan Cloud, read-only) starting")
     if RUN_SELFTEST_ON_START:
         selftest()
     if not configured():
-        log("Credentials missing: Env Variables tab -> add DHAN_CLIENT_ID and DHAN_ACCESS_TOKEN "
-            "(optional TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID), then Deploy again. client_id set=%s token set=%s"
-            % (not CLIENT_ID.startswith("{{"), not ACCESS_TOKEN.startswith("{{")))
-    elif RUN_BACKTEST_ON_START:
+        log("Credentials missing: Env Variables tab -> DHAN_CLIENT_ID and DHAN_ACCESS_TOKEN (optional TELEGRAM_BOT_TOKEN,"
+            " TELEGRAM_CHAT_ID), then Deploy again.")
+    elif RUN_AUDIT_ON_START:
         try:
-            pull_and_backtest(BACKTEST_MONTHS)
+            run_audit(AUDIT_MONTHS)
         except Exception:
-            log("data pull failed:", traceback.format_exc()[-800:])
-    state = {"sent": set(), "last_bar": None}
-    log("LIVE: indices %s | filters %s | paper trading %s" % (LIVE_INDICES or "all", LIVE_FILTERS, PAPER_TRADE))
-    while True:
+            log("audit failed:", traceback.format_exc()[-1500:])
+    state = {"sent": set(), "last_bar": None, "start_ts": time.time()}
+    log("LIVE %s | filter F3+F4 %s | paper %s (%s execution, ledger from %s)" % (LIVE, LIVE_FILTER, PAPER_TRADE, EXEC_LIVE, LEDGER_START))
+    while LIVE:
         t = now_ist()
-        if PAPER_TRADE and configured() and t.weekday() < 5 and t.time() >= dt.time(15, 25) \
+        if configured() and PAPER_TRADE and t.weekday() < 5 and t.time() >= dt.time(15, 25) \
                 and state.get("summary_day") != t.date().isoformat() and state.get("day") == t.date():
             state["summary_day"] = t.date().isoformat()
-            msg = paper_summary(state.get("paper", {}), t.date().isoformat())
+            msg = ledger_summary(state.get("ledger", []), t.date().isoformat())
             log(msg)
             telegram(msg)
         bar = (t.hour * 60 + t.minute) // 5

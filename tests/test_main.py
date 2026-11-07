@@ -111,3 +111,17 @@ def test_resample_anchor():
     c1 = [{"ts": base + 60 * i, "open": 1, "high": 2, "low": 0.5, "close": 1.5, "volume": 1} for i in range(31)]
     r30 = M.resample_candles(c1, 30)
     assert len(r30) == 2 and r30[0]["ts"] == base and r30[1]["ts"] == base + 1800
+
+
+def test_vanna_charm_and_hurst_vps():
+    F, K, T, r, s = 24000.0, 24200.0, 10 / 365, 0.065, 0.14
+    for call in (True, False):
+        va, ch = M.black76_vanna_charm(F, K, T, r, s, call)
+        d = lambda sig, TT: M.black76_greeks(F, K, TT, r, sig, call).delta
+        fd_va = (d(s + 1e-4, T) - d(s - 1e-4, T)) / 2e-4 * 0.01
+        fd_ch = -(d(s, T + 1e-5) - d(s, T - 1e-5)) / 2e-5 / 365
+        assert abs(va - fd_va) < 1e-6 and abs(ch - fd_ch) < 1e-6
+    rng = np.random.default_rng(3)
+    assert 0.4 < M.hurst_exponent(24000 * np.exp(np.cumsum(rng.normal(0, 0.001, 5000)))) < 0.6
+    rank, pct = M.iv_rank_percentile(list(np.linspace(0.10, 0.20, 50)), 0.15)
+    assert abs(rank - 50) < 1e-9 and 48 <= pct <= 52
