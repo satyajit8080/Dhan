@@ -34,8 +34,18 @@ def _var(v):
     return str(v).strip().strip('"').strip("'").strip()
 
 
-CLIENT_ID = _var('{{DHAN_CLIENT_ID}}')
-ACCESS_TOKEN = _var('{{DHAN_ACCESS_TOKEN}}')
+def _first(*vals):
+    """First placeholder Dhan Cloud actually substituted (the automatic Global Variable name is not
+    published; common names are tried in order)."""
+    for v in vals:
+        v = _var(v)
+        if v and not v.startswith("{{"):
+            return v
+    return _var(vals[0])
+
+
+CLIENT_ID = _first('{{DHAN_CLIENT_ID}}', '{{CLIENT_ID}}', '{{CLIENT_CODE}}', '{{DHAN_CLIENT_CODE}}', '{{client_id}}')
+ACCESS_TOKEN = _first('{{DHAN_ACCESS_TOKEN}}', '{{ACCESS_TOKEN}}', '{{TOKEN}}', '{{DHAN_TOKEN}}', '{{access_token}}')
 TELEGRAM_TOKEN = _var('{{TELEGRAM_BOT_TOKEN}}')
 TELEGRAM_CHAT = _var('{{TELEGRAM_CHAT_ID}}')
 
