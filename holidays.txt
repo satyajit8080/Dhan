@@ -1,0 +1,9 @@
+# Exchange trading holidays: YYYY-MM-DD[,EXCH]   (EXCH = NSE | BSE | ALL; default ALL)
+# Dhan has no holiday endpoint. Keep this file in sync with the NSE/BSE holiday circulars.
+# The engine also warns when no index ticks arrive 20 minutes after the open.
+#
+# Verified from the live Dhan instrument master (expiries shifted by the exchange):
+2026-11-10,ALL   # NIFTY weekly expiry moved Tue 10-Nov -> Mon 09-Nov
+2026-11-24,ALL   # NSE monthly expiry moved Tue 24-Nov -> Mon 23-Nov
+# Standard exchange holiday (confirm against the 2026 circular):
+2026-12-25,ALL   # Christmas

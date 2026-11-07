@@ -8,3 +8,7 @@ __pycache__/
 *.pyc
 server/paper-state.json
 server/logs/
+data/
+logs/
+.venv/
+.pytest_cache/

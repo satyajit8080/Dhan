@@ -1,0 +1,6 @@
+[Unit]
+Description=Dhan Quant Engine health check (restarts the engine if the heartbeat is stale)
+
+[Service]
+Type=oneshot
+ExecStart=/opt/dhan-quant/deploy/healthcheck.sh
