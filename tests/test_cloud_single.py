@@ -64,3 +64,28 @@ def test_pull_and_backtest_with_mocked_dhan(monkeypatch):
     monkeypatch.setattr(S, "now_ist", lambda: S.dt.datetime.fromtimestamp(bars[-1]["ts"], S.IST))
     out = S.pull_and_backtest(1)
     assert set(out) == set(S.INDICES) and all(v["trades"] > 0 for v in out.values())
+
+
+def test_fixed_point_backtest():
+    b1 = []
+    t0 = S.dt.datetime(2026, 11, 2, 9, 15, tzinfo=S.IST).timestamp()
+    import random
+    r = random.Random(5)
+    px = 24000.0
+    for day in range(20):
+        for k in range(375):
+            px += r.gauss(0, 4)
+            b1.append({"ts": t0 + day * 86400 + k * 60, "open": px, "high": px + abs(r.gauss(0, 3)),
+                       "low": px - abs(r.gauss(0, 3)), "close": px, "volume": 1000.0})
+    b5 = S.resample(b1, 5)
+    dl = [{"ts": t0 + d * 86400 - 86400, "high": 24300, "low": 23700, "close": 24000} for d in range(25)]
+    tr = S.backtest_fixed(b5, b1, dl, 65, "NSE", 10, 10)
+    assert tr
+    for t in tr:
+        assert t["why"] in ("SL", "TARGET", "EOD")
+        if t["why"] == "SL":
+            assert abs(t["pts"] + 10) < 1e-9
+        if t["why"] == "TARGET":
+            assert abs(t["pts"] - 10) < 1e-9
+        assert abs(t["net"] - (t["pts"] * 65 - t["charges"])) < 1e-9
+    assert "trades" in S.summarize_fixed("x", tr, 65)

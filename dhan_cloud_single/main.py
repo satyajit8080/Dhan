@@ -52,6 +52,7 @@ TELEGRAM_CHAT = _var('{{TELEGRAM_CHAT_ID}}')
 RUN_SELFTEST_ON_START = True
 RUN_BACKTEST_ON_START = True
 BACKTEST_MONTHS = 6
+FIXED_POINT_TESTS = [(10, 10), (15, 15), (10, 20), (15, 30)]   # (stop pts, target pts) compared vs 2xATR
 PRINT_ALL_TRADES = True         # print every backtest trade as WIN / LOSS with entry + exit reason
 
 BASE = "https://api.dhan.co/v2"
@@ -719,6 +720,81 @@ def backtest(bars5, dly, lot, exch, p=PARAMS):
     return res
 
 
+def backtest_fixed(bars5, bars1, dly, lot, exch, sl_pts, tg_pts, p=PARAMS):
+    """Same entries as backtest() (signal on closed 5m bar, fill at next 5m open), but a FIXED stop and
+    target in points. Exits are walked on 1-minute bars; if stop and target fall in the same minute the
+    stop is assumed first. One position at a time; flat at 15:20."""
+    x = compute(bars5)
+    dmap = {dt.datetime.fromtimestamp(d["ts"], IST).date(): d for d in dly}
+    ddays = sorted(dmap)
+    ts1 = [b["ts"] for b in bars1]
+    trades, busy = [], 0.0
+    for i in range(1, len(bars5) - 1):
+        b, nb = bars5[i], bars5[i + 1]
+        if nb["ts"] < busy:
+            continue
+        t = dt.datetime.fromtimestamp(b["ts"], IST)
+        tn = dt.datetime.fromtimestamp(nb["ts"], IST)
+        if not (ENTRY_START <= t.time() < ENTRY_END) or tn.date() != t.date():
+            continue
+        j = bisect.bisect_left(ddays, t.date()) - 1
+        lv = pivots(dmap[ddays[j]]["high"], dmap[ddays[j]]["low"], dmap[ddays[j]]["close"]) if j >= 0 else {}
+        sig = signal_at(x, i, lv, p)
+        if sig["signal"] not in ("LONG", "SHORT"):
+            continue
+        k = bisect.bisect_left(ts1, nb["ts"])
+        if k >= len(bars1) or bars1[k]["ts"] - nb["ts"] > 120:
+            continue
+        d = 1 if sig["signal"] == "LONG" else -1
+        entry = bars1[k]["open"]
+        stop, tgt = entry - d * sl_pts, entry + d * tg_pts
+        exit_px = why = None
+        ex_ts = nb["ts"]
+        while k < len(bars1):
+            m = bars1[k]
+            mt = dt.datetime.fromtimestamp(m["ts"], IST)
+            if mt.date() != tn.date():
+                exit_px, why, ex_ts = bars1[k - 1]["close"], "EOD", bars1[k - 1]["ts"]
+                break
+            if (m["low"] <= stop) if d > 0 else (m["high"] >= stop):
+                exit_px, why, ex_ts = stop, "SL", m["ts"]
+                break
+            if (m["high"] >= tgt) if d > 0 else (m["low"] <= tgt):
+                exit_px, why, ex_ts = tgt, "TARGET", m["ts"]
+                break
+            if (mt + dt.timedelta(minutes=1)).time() >= EOD_EXIT:
+                exit_px, why, ex_ts = m["close"], "EOD", m["ts"]
+                break
+            k += 1
+        if exit_px is None:
+            break
+        buy, sell = (entry, exit_px) if d > 0 else (exit_px, entry)
+        ch = charges("fut", exch, buy * lot, sell * lot)
+        pts = d * (exit_px - entry)
+        trades.append({"ts": nb["ts"], "setup": sig["setup"], "dir": d, "pts": pts, "why": why,
+                       "gross": pts * lot, "charges": ch, "net": pts * lot - ch})
+        busy = ex_ts + 60
+    return trades
+
+
+def summarize_fixed(label, tr, lot):
+    if not tr:
+        return "%-14s no trades" % label
+    n = len(tr)
+    w = sum(1 for t in tr if t["net"] > 0)
+    pts = sum(t["pts"] for t in tr)
+    net = sum(t["net"] for t in tr)
+    ch = sum(t["charges"] for t in tr)
+    gp = sum(t["net"] for t in tr if t["net"] > 0)
+    gl = -sum(t["net"] for t in tr if t["net"] < 0)
+    ex = {}
+    for t in tr:
+        ex[t["why"]] = ex.get(t["why"], 0) + 1
+    return ("%-14s trades %3d | wins %3d (%4.1f%%) | pts/trade %+6.1f | total pts %+7.0f | charges/trade %4.1f pts | "
+            "net Rs%+8.0f | PF %4.2f | exits %s" % (label, n, w, 100.0 * w / n, pts / n, pts, ch / n / lot, net,
+                                                    gp / gl if gl > 0 else float("inf"), ex))
+
+
 def outcome_reason(t):
     """Plain-language reason a trade won or lost (from exit type, best/worst excursion in R, charges)."""
     if t["net"] > 0:
@@ -792,6 +868,9 @@ def pull_and_backtest(months):
                 per[f["sid"]] = intraday(f["sid"], f["segment"], "FUTIDX", start, today, 5, oi=True)
                 exp[f["sid"]] = f["expiry"]
             fut5 = stitch_front_month(per, exp)
+            per1 = {sid: intraday(sid, futs[name][[f["sid"] for f in futs[name]].index(sid)]["segment"], "FUTIDX",
+                                  start, today, 1) for sid in exp} if FIXED_POINT_TESTS else {}
+            fut1 = stitch_front_month(per1, exp) if per1 else []
             lot = futs[name][0]["lot"] if futs.get(name) else 1.0
             log("%s: daily %d, index 5m %d (%s..), front-month futures 5m %d (%s..), lot %s" % (
                 name, len(dly), len(idx5), _d(idx5), len(fut5), _d(fut5), lot))
@@ -802,6 +881,13 @@ def pull_and_backtest(months):
             log("%s by setup: %s" % (name, r.get("by_setup")))
             if PRINT_ALL_TRADES:
                 print_trade_lists(name, tl)
+            if FIXED_POINT_TESTS and fut1:
+                log("----- %s STOP/TARGET COMPARISON (same entries; exits on 1m bars, %d bars) -----" % (name, len(fut1)))
+                log("  " + summarize_fixed("2xATR / 4xATR", [{"pts": t["net"] / lot + t["charges"] / lot, "net": t["net"],
+                                                              "charges": t["charges"], "why": t["why"]} for t in tl], lot))
+                for slp, tgp in FIXED_POINT_TESTS:
+                    log("  " + summarize_fixed("SL %d / TGT %d" % (slp, tgp),
+                                               backtest_fixed(fut5, fut1, dly, lot, spec["exch"], slp, tgp), lot))
         except Exception:
             log(name, "backtest failed:", traceback.format_exc()[-600:])
     tot = sum(v.get("net_rupees", 0) for v in summary.values())
