@@ -95,3 +95,13 @@ def test_fixed_point_backtest():
             assert abs(t["pts"] - 10) < 1e-9
         assert abs(t["net"] - (t["pts"] * 65 - t["charges"])) < 1e-9
     assert "trades" in S.summarize_fixed("x", tr, 65)
+
+
+def test_orb_rule():
+    t0 = S.dt.datetime(2026, 11, 2, 9, 15, tzinfo=S.IST).timestamp()
+    px = [100, 102, 101, 103.5, 103.6, 104, 105, 106, 107, 108] + [108] * 65
+    bars = [{"ts": t0 + i * 300, "open": px[i - 1] if i else px[0], "high": px[i] + 0.2, "low": min(px[i], px[i - 1] if i else px[i]) - 0.2,
+             "close": px[i], "volume": 1.0} for i in range(75)]
+    tl = S.backtest_orb(bars, 65, "NSE", 15, 1.0)
+    assert len(tl) == 1 and tl[0]["dir"] == 1 and tl[0]["why"] == "TARGET"
+    assert abs(tl[0]["net"] - (tl[0]["pts"] * 65 - tl[0]["charges"])) < 1e-9

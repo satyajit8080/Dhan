@@ -824,6 +824,73 @@ def summarize_fixed(label, tr, lot):
                                                     gp / gl if gl > 0 else float("inf"), ex))
 
 
+RUN_ORB_TEST = True
+
+
+def backtest_orb(bars5, lot, exch, or_minutes=15, target_r=1.0, last_entry=dt.time(13, 0)):
+    """Opening-range breakout as in github.com/Jakeschincariol/day-trader-skill:
+    range = first `or_minutes` (09:15-09:30); entry on the first 5m CLOSE beyond the range, filled at the next
+    bar's open; stop = range midpoint; target = target_r x risk; flat by 15:20; one trade per day."""
+    days = {}
+    for b in bars5:
+        days.setdefault(dt.datetime.fromtimestamp(b["ts"], IST).date(), []).append(b)
+    trades = []
+    or_end = (dt.datetime.combine(dt.date.today(), dt.time(9, 15)) + dt.timedelta(minutes=or_minutes)).time()
+    for d, bs in sorted(days.items()):
+        rng = [b for b in bs if dt.datetime.fromtimestamp(b["ts"], IST).time() < or_end]
+        if len(rng) < or_minutes // 5:
+            continue
+        hi, lo = max(b["high"] for b in rng), min(b["low"] for b in rng)
+        mid = (hi + lo) / 2
+        rest = [b for b in bs if dt.datetime.fromtimestamp(b["ts"], IST).time() >= or_end]
+        for k in range(len(rest) - 1):
+            tt = dt.datetime.fromtimestamp(rest[k]["ts"], IST).time()
+            if tt >= last_entry:
+                break
+            c = rest[k]["close"]
+            if c > hi or c < lo:
+                dr = 1 if c > hi else -1
+                entry = rest[k + 1]["open"]
+                risk = (entry - mid) * dr
+                if risk <= 0:
+                    break
+                stop, tgt = mid, entry + dr * target_r * risk
+                exit_px = why = None
+                for m in rest[k + 1:]:
+                    mt = dt.datetime.fromtimestamp(m["ts"], IST)
+                    if (m["low"] <= stop) if dr > 0 else (m["high"] >= stop):
+                        exit_px, why = stop, "SL"
+                    elif (m["high"] >= tgt) if dr > 0 else (m["low"] <= tgt):
+                        exit_px, why = tgt, "TARGET"
+                    elif (mt + dt.timedelta(minutes=5)).time() >= EOD_EXIT:
+                        exit_px, why = m["close"], "EOD"
+                    if exit_px is not None:
+                        break
+                if exit_px is None:
+                    exit_px, why = rest[-1]["close"], "EOD"
+                buy, sell = (entry, exit_px) if dr > 0 else (exit_px, entry)
+                ch = charges("fut", exch, buy * lot, sell * lot)
+                g = dr * (exit_px - entry) * lot
+                trades.append({"entry_ts": rest[k + 1]["ts"], "dir": dr, "why": why, "gross": g, "charges": ch,
+                               "net": g - ch, "pts": dr * (exit_px - entry), "risk_pts": risk})
+                break
+    return trades
+
+
+def orb_report(name, bars, lot, exch, split_ts, label):
+    log("----- %s OPENING-RANGE BREAKOUT (day-trader-skill rule) on %s -----" % (name, label))
+    for orm, tr in ((15, 1.0), (15, 2.0), (30, 1.0), (30, 2.0)):
+        tl = backtest_orb(bars, lot, exch, orm, tr)
+        ex = {}
+        for t in tl:
+            ex[t["why"]] = ex.get(t["why"], 0) + 1
+        avg_risk = sum(t["risk_pts"] for t in tl) / len(tl) if tl else 0
+        log("  OR %2dm target %.0fR ALL    %s | exits %s | avg risk %.1f pts" % (orm, tr, period_stats(tl), ex, avg_risk))
+        if split_ts:
+            log("                        BEFORE %s" % period_stats(tl, None, split_ts))
+            log("                        AFTER  %s" % period_stats(tl, split_ts, None))
+
+
 def period_stats(tl, lo=None, hi=None):
     S = [t for t in tl if (lo is None or t["entry_ts"] >= lo) and (hi is None or t["entry_ts"] < hi)]
     if not S:
@@ -938,6 +1005,10 @@ def pull_and_backtest(months):
             log("%s by setup: %s" % (name, r.get("by_setup")))
             if PRINT_ALL_TRADES:
                 print_trade_lists(name, tl)
+            if RUN_ORB_TEST:
+                orb_report(name, fut5, lot, spec["exch"], None, "FUTURES 5m")
+                if idx5:
+                    orb_report(name, idx5, lot, spec["exch"], fut5[0]["ts"] if fut5 else None, "INDEX 5m, 6 months")
             if FILTER_SETS:
                 filter_report(name, fut5, dly, lot, spec["exch"], None, "FUTURES 5m")
                 if idx5:
