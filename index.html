@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dhan Quant Signal</title>
+<style>
+:root{
+  --bg:#0d1117;--panel:#161b22;--panel2:#1c2330;--line:#2a3340;--text:#e6edf3;--muted:#8b98a8;
+  --long:#2ea043;--short:#f85149;--wait:#d29922;--flat:#6e7681;--accent:#58a6ff;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+header{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--line);background:var(--panel)}
+h1{font-size:16px;margin:0;font-weight:600;letter-spacing:.3px}
+.controls{display:flex;gap:8px;align-items:center}
+select,button{background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:6px;padding:8px 12px;font:inherit}
+button{background:var(--accent);color:#04111f;border-color:var(--accent);font-weight:600;cursor:pointer;min-width:110px}
+button:disabled{opacity:.55;cursor:wait}
+main{max-width:1100px;margin:0 auto;padding:16px;display:grid;gap:16px;grid-template-columns:1fr}
+@media(min-width:900px){main{grid-template-columns:380px 1fr}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px}
+.card h2{font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin:0 0 10px;font-weight:600}
+.sig{font-size:30px;font-weight:700;letter-spacing:1px}
+.sig.LONG{color:var(--long)}.sig.SHORT{color:var(--short)}.sig.WAIT{color:var(--wait)}.sig.NO_TRADE{color:var(--flat)}
+.setup{color:var(--muted);font-size:12px;margin-top:2px}
+.reason{margin:10px 0 12px;padding:10px;background:var(--panel2);border-radius:6px;border-left:3px solid var(--accent)}
+table{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:13px}
+td,th{padding:6px 8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{color:var(--muted);font-weight:500;font-family:system-ui,sans-serif}
+td.v{text-align:right;word-break:break-word}
+.card,section,main>*{min-width:0}
+@media(max-width:620px){td,th{padding:5px 4px;font-size:12px}.controls{width:100%}.controls select{flex:1}}
+.ok{color:var(--long)}.bad{color:var(--short)}.mut{color:var(--muted)}
+.grid2{display:grid;grid-template-columns:1fr;gap:16px}
+@media(min-width:620px){.grid2{grid-template-columns:1fr 1fr}}
+.meta{font-size:12px;color:var(--muted);margin-top:10px}
+.err{color:var(--short);font-size:12px;margin-top:8px;white-space:pre-wrap}
+.pill{display:inline-block;padding:1px 8px;border-radius:999px;background:var(--panel2);border:1px solid var(--line);font-size:12px;margin:2px 4px 2px 0}
+</style>
+</head>
+<body>
+<header>
+  <h1>DHAN QUANT · Front-month futures signal</h1>
+  <div class="controls">
+    <select id="idx" aria-label="Index"></select>
+    <button id="refresh">REFRESH</button>
+  </div>
+</header>
+<main>
+  <section class="card" id="sigcard">
+    <h2>Signal</h2>
+    <div class="sig NO_TRADE" id="sig">—</div>
+    <div class="setup" id="setup">Press REFRESH to compute.</div>
+    <div class="reason" id="reason">No data loaded. The page never polls; each REFRESH is one fresh computation.</div>
+    <table id="trade"></table>
+    <div class="err" id="err"></div>
+    <div class="meta" id="meta"></div>
+  </section>
+  <section class="grid2">
+    <div class="card"><h2>Indicators (last closed 5m bar)</h2><table id="ind"></table></div>
+    <div class="card"><h2>Levels (previous day)</h2><table id="lvl"></table>
+      <h2 style="margin-top:16px">Context (not an entry rule)</h2><table id="ctx"></table></div>
+  </section>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const qs = new URLSearchParams(location.search);
+const token = qs.get("token");
+const n = (v, d = 2) => (v === null || v === undefined || Number.isNaN(v)) ? "n/a" :
+  (typeof v === "number" ? v.toLocaleString("en-IN", {maximumFractionDigits: d, minimumFractionDigits: Math.min(d, 2)}) : String(v));
+const row = (k, v, cls = "") => `<tr><th>${k}</th><td class="v ${cls}">${v}</td></tr>`;
+
+async function loadIndices() {
+  try {
+    const r = await fetch("api/indices" + (token ? "?token=" + encodeURIComponent(token) : ""));
+    const j = await r.json();
+    $("idx").innerHTML = (j.indices || ["NIFTY"]).map(x => `<option>${x}</option>`).join("");
+    const saved = (() => { try { return localStorage.getItem("dq_idx"); } catch (e) { return null; } })();
+    if (saved && j.indices && j.indices.includes(saved)) $("idx").value = saved;
+  } catch (e) {
+    $("idx").innerHTML = ["NIFTY", "BANKNIFTY", "FINNIFTY", "SENSEX", "BANKEX"].map(x => `<option>${x}</option>`).join("");
+  }
+}
+
+function render(j) {
+  const c = j.card || {}, i = j.indicators || {}, l = j.levels || {}, x = j.context || {};
+  $("sig").textContent = (c.signal || "NO_TRADE").replace("_", " ");
+  $("sig").className = "sig " + (c.signal || "NO_TRADE");
+  $("setup").textContent = `${j.index || ""} · ${c.setup || ""} · ${j.series || ""} · expiry ${j.expiry || "n/a"}`;
+  $("reason").textContent = c.reason || "—";
+  let t = "";
+  if (c.underlying) {
+    const u = c.underlying;
+    t += row("Fut entry (ref close)", n(u.entry)) + row("Stop (2·ATR)", n(u.stop), "bad") +
+         row("Targets", u.targets.map(v => n(v)).join(" / "), "ok") + row("Futures lots @ risk", n(c.futures_lots, 0));
+  }
+  if (c.option) {
+    const o = c.option;
+    t += row("Strike", `${n(o.strike, 0)} ${o.side}`) + row("Bid / Ask (spread)", `${n(o.bid)} / ${n(o.ask)} (${n(o.spread_pct)}%)`) +
+         row("IV / Δ", `${n(o.iv * 100)}% / ${n(o.delta, 3)}`) + row("Entry (ask)", n(o.entry)) + row("SL", n(o.sl), "bad") +
+         row("Targets", o.targets.map(v => n(v)).join(" / "), "ok") + row("Lots × lot size", `${o.lots} × ${n(o.lot_size, 0)}`) +
+         row("Risk ₹ / charges ₹", `${n(o.risk_rupees, 0)} / ${n(o.charges_at_sl)}`) +
+         row("Net ₹ at SL / T1", `${n(o.net_loss_at_sl, 0)} / ${n(o.net_gain_at_t1, 0)}`);
+  } else if (c.signal === "LONG" || c.signal === "SHORT") {
+    t += row("Option", "no liquid ATM/ITM strike passed spread check", "bad");
+  }
+  if (c.strike_notes && c.strike_notes.length) t += row("Strike checks", c.strike_notes.join("<br>"), "mut");
+  $("trade").innerHTML = t;
+  const st = i.st_dir > 0 ? `<span class="ok">LONG</span>` : (i.st_dir < 0 ? `<span class="bad">SHORT</span>` : "n/a");
+  $("ind").innerHTML =
+    row("Bar", i.bar_time || "n/a") + row("Close", n(i.close)) + row("VWAP", n(i.vwap), i.close > i.vwap ? "ok" : "bad") +
+    row("ATR(14)", n(i.atr)) + row("Supertrend(10,3)", `${n(i.st)} ${st}`) +
+    row("ADX(14)", n(i.adx), i.adx > 25 ? "ok" : (i.adx < 20 ? "mut" : "")) +
+    row("DI+ / DI−", `${n(i.di_plus)} / ${n(i.di_minus)}`) + row("RSI(14)", n(i.rsi)) +
+    row("BB(20,2) bandwidth", n(i.bw, 5)) + row("BB upper / mid / lower", `${n(i.bb_up)} / ${n(i.bb_mid)} / ${n(i.bb_lo)}`) +
+    row("Efficiency Ratio(10)", n(i.er, 3), i.er > 0.3 ? "ok" : "mut") + row("Z-score(20)", n(i.z), Math.abs(i.z) > 2 ? "bad" : "") +
+    (i["1m"] ? row("1m RSI / ADX / ST / z", `${n(i["1m"].rsi)} / ${n(i["1m"].adx)} / ${i["1m"].st_dir > 0 ? "L" : "S"} / ${n(i["1m"].z)}`, "mut") : "");
+  $("lvl").innerHTML = ["R2", "R1", "P", "S1", "S2", "PDH", "PDL", "PDC"].map(k => row(k, n(l[k]))).join("");
+  const oi = (x.oi_change_top || []).map(r => `${n(r.strike, 0)}${r.side} ${r.doi > 0 ? "+" : ""}${n(r.doi, 0)}`).join("<br>");
+  $("ctx").innerHTML = row("PCR (volume)", n(x.pcr_volume, 3)) + row("PCR (OI)", n(x.pcr_oi, 3)) +
+    row("PCR flags", (x.pcr_flags || []).join("<br>") || "none", (x.pcr_flags || []).length ? "bad" : "mut") +
+    row("India VIX", n(x.vix)) + row("Top OI change by strike", oi || "n/a");
+  $("err").textContent = (j.errors || []).join("\n");
+  $("meta").textContent = `computed ${j.ts_ist || ""} · ${j.bars_5m || 0} closed 5m bars · chain age ${j.chain_age_s ?? "n/a"}s · ${j.data_note || ""}`;
+}
+
+async function refresh() {
+  const b = $("refresh");
+  b.disabled = true; b.textContent = "Loading…";
+  try { localStorage.setItem("dq_idx", $("idx").value); } catch (e) {}
+  try {
+    const u = `api/signal?index=${encodeURIComponent($("idx").value)}` + (token ? "&token=" + encodeURIComponent(token) : "");
+    const r = await fetch(u);
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || r.status);
+    render(j);
+  } catch (e) {
+    $("err").textContent = "Refresh failed: " + e.message;
+  } finally {
+    b.disabled = false; b.textContent = "REFRESH";
+  }
+}
+$("refresh").addEventListener("click", refresh);
+loadIndices();
+</script>
+</body>
+</html>

@@ -6,7 +6,7 @@ apt-get update -y
 apt-get install -y python3 python3-venv python3-pip curl
 id dhan >/dev/null 2>&1 || useradd --system --create-home --shell /usr/sbin/nologin dhan
 mkdir -p "$APP" "$APP/data" "$APP/logs" "$APP/deploy"
-cp main.py requirements.txt holidays.txt .env.example "$APP/"
+cp main.py index.html requirements.txt holidays.txt .env.example "$APP/"
 cp deploy/* "$APP/deploy/"
 [ -f "$APP/.env" ] || cp .env.example "$APP/.env"
 chmod 600 "$APP/.env"

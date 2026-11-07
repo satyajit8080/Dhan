@@ -216,6 +216,8 @@ class Config:
     dashboard_every_s: float = 2.0
     health_port: int = 8787
     health_host: str = "127.0.0.1"
+    risk_rupees: float = 5000.0
+    max_spread_pct: float = 1.0
     alert_cooldown_s: float = 900.0
     min_samples_pattern: int = 30           # below this a pattern is "insufficient evidence"
     min_oos_for_calibration: int = 100
@@ -262,6 +264,9 @@ class Config:
         c.ws_stale_s = _env_f("WS_STALE_S", c.ws_stale_s)
         c.research_every_s = _env_f("RESEARCH_EVERY_S", c.research_every_s)
         c.health_port = _env_i("HEALTH_PORT", c.health_port)
+        c.health_host = _env("HEALTH_HOST", c.health_host)
+        c.risk_rupees = _env_f("RISK_RUPEES", c.risk_rupees)
+        c.max_spread_pct = _env_f("MAX_SPREAD_PCT", c.max_spread_pct)
         c.alert_cooldown_s = _env_f("ALERT_COOLDOWN_S", c.alert_cooldown_s)
         c.min_samples_pattern = _env_i("MIN_SAMPLES_PATTERN", c.min_samples_pattern)
         c.cost_bps_roundtrip = _env_f("COST_BPS_ROUNDTRIP", c.cost_bps_roundtrip)
@@ -4368,6 +4373,13 @@ class Engine:
             LOG.info("instruments discovered", index=name, sid=st.idx.security_id, expiry=st.expiry,
                      next_expiry=st.next_expiry, lot=st.lot, step=st.step,
                      fut=st.fut.display if st.fut else None, fut_sid=st.fut.security_id if st.fut else None)
+        for n, s_ in self.states.items():
+            for c_ in ([s_.idx] if s_.idx else []) + list(self.master.futures.get(s_.spec.symbol, [])):
+                self.db.insert("instruments", {"security_id": c_.security_id, "segment": c_.segment, "exch": s_.spec.exch,
+                                               "instrument": c_.instrument, "underlying": c_.underlying, "symbol": c_.underlying,
+                                               "display": c_.display, "expiry": c_.expiry, "strike": c_.strike,
+                                               "option_type": c_.option_type, "lot_size": c_.lot_size, "tick_size": c_.tick_size,
+                                               "loaded_on": now_ist().date().isoformat()}, mode="INSERT OR REPLACE")
         self.db.set_meta("instruments_today", {n: {"sid": s.idx.security_id if s.idx else None, "expiry": s.expiry,
                                                    "next": s.next_expiry, "lot": s.lot, "step": s.step,
                                                    "fut": s.fut.security_id if s.fut else None,
@@ -4588,6 +4600,61 @@ class Engine:
         new = self.signals.record(st, ts, pats)
         for kind, text, key in alert_candidates(st, f, sc, new, ev, self.calibrated):
             await self.alerter.send(name, kind, text, key)
+        await self._tech_on_bar_close(name, st, ts)
+
+    # ------------------------------------------------------------- technical strategy
+    def tech_params(self) -> TechParams:
+        return TechParams(risk_rupees=self.cfg.risk_rupees, max_spread_pct=self.cfg.max_spread_pct)
+
+    def _tech_inputs(self, st: IndexState, bars1: List[Dict[str, float]]) -> Dict[str, Any]:
+        bars1c = closed_bars(bars1, 1)
+        bars5 = closed_bars(resample_5m(bars1c), 5)
+        prev = [d for d in st.daily if dt.datetime.fromtimestamp(d["ts"], IST).date() < now_ist().date()]
+        f = st.last_features
+        fut = st.fut_bars.all()[-1]["close"] if st.fut_bars.all() else NAN
+        fwd = f.get("forward") if fin(f.get("forward")) else fut
+        T = year_fraction(time.time(), st.expiry) if st.expiry else 1 / 365
+        return {"bars5": bars5, "bars1": bars1c[-400:], "prev_day": prev[-1] if prev else None, "fwd": fwd, "T": T}
+
+    def tech_compute(self, name: str, bars1: Optional[List[Dict[str, float]]] = None) -> Dict[str, Any]:
+        st = self.states[name]
+        x = self._tech_inputs(st, bars1 if bars1 is not None else st.fut_bars.all())
+        out = tech_snapshot(name, x["bars5"], x["prev_day"], st.chain, self.vix_value(), x["fwd"],
+                            st.step if fin(st.step) else 50.0, st.lot, x["T"], self.cfg.risk_free, st.spec.exch,
+                            self.tech_params(), x["bars1"])
+        out["series"] = (st.fut.display if st.fut else "front-month future")
+        out["expiry"] = st.expiry
+        out["chain_age_s"] = round(time.time() - st.chain_ts) if st.chain_ts else None
+        out["data_note"] = "indicators on CLOSED 5m bars of the front-month future; context (PCR/VIX/OI) is not an entry rule"
+        return out
+
+    async def _tech_on_bar_close(self, name: str, st: IndexState, ts: float) -> None:
+        last5 = math.floor(ts / 300) * 300
+        if getattr(st, "_tech_last_bar", None) == last5:
+            return
+        st._tech_last_bar = last5  # type: ignore[attr-defined]
+        try:
+            out = await asyncio.to_thread(self.tech_compute, name)
+        except Exception:
+            LOG.exception("tech signal failed", index=name)
+            return
+        st.last_tech = out  # type: ignore[attr-defined]
+        card = out.get("card", {})
+        if card.get("signal") in ("LONG", "SHORT"):
+            p_, u_, i_ = ts_pair(ts)
+            self.db.insert("signals", {"ts": p_, "ts_utc": u_, "ts_ist": i_, "index_name": name, "kind": "TECH_" + str(card.get("setup")),
+                                       "direction": 1 if card["signal"] == "LONG" else -1, "spot": st.last_features.get("spot"),
+                                       "fut": st.last_features.get("fut"), "feature_ts": ts, "evidence": card.get("reason"),
+                                       "features": {"indicators": out.get("indicators"), "card": card}})
+            self.signals.pending.append({"index": name, "ts": ts, "dir": 1 if card["signal"] == "LONG" else -1,
+                                         "spot": st.last_features.get("spot"), "kind": "TECH_" + str(card.get("setup"))})
+            o = card.get("option") or {}
+            txt = (f"[{name}] {card['signal']} {card.get('setup')}\n{card.get('reason')}\n"
+                   f"Fut entry {_fmt(card['underlying']['entry'])} SL {_fmt(card['underlying']['stop'])} "
+                   f"T {', '.join(_fmt(t) for t in card['underlying']['targets'])}\n" +
+                   (f"Option {o.get('strike')}{o.get('side')} entry {o.get('entry')} SL {o.get('sl')} T {o.get('targets')} "
+                    f"lots {o.get('lots')} (risk Rs{o.get('risk_rupees')}, charges Rs{o.get('charges_at_sl')})" if o else "No liquid strike"))
+            await self.alerter.send(name, "TECH_" + card["signal"], txt, f"{last5}")
 
     def _rel(self, pattern: str) -> Optional[Dict[str, Any]]:
         r = self.reliability.get(pattern)
@@ -4779,9 +4846,31 @@ class Engine:
             hb = self.health()
             return web.json_response(hb, status=200 if hb["status"] != "fatal" else 503, dumps=jdump)
 
+        async def page(_req: Any) -> Any:
+            f = self.cfg.base_dir / "index.html"
+            return web.FileResponse(f) if f.exists() else web.Response(text="index.html missing", status=404)
+
+        tok = _env("DASHBOARD_TOKEN")
+
+        async def api_signal(req: Any) -> Any:
+            if tok and req.query.get("token") != tok:
+                return web.json_response({"error": "unauthorized"}, status=401)
+            name = (req.query.get("index") or "NIFTY").upper()
+            if name not in self.states:
+                return web.json_response({"error": f"unknown index {name}"}, status=400, dumps=jdump)
+            out = await self.refresh_tech(name)
+            return web.json_response(out, dumps=jdump)
+
+        async def api_indices(_req: Any) -> Any:
+            return web.json_response({"indices": list(self.states), "phase": self.cal.phase(),
+                                      "fatal": self.fatal_reason}, dumps=jdump)
+
         app = web.Application()
         app.router.add_get("/health", h)
-        app.router.add_get("/", h)
+        app.router.add_get("/", page)
+        app.router.add_get("/index.html", page)
+        app.router.add_get("/api/signal", api_signal)
+        app.router.add_get("/api/indices", api_indices)
         runner = web.AppRunner(app, access_log=None)
         await runner.setup()
         try:
@@ -4793,6 +4882,56 @@ class Engine:
             LOG.warning("health endpoint failed to bind", error=str(e))
         finally:
             await runner.cleanup()
+
+    async def refresh_tech(self, name: str) -> Dict[str, Any]:
+        """Manual REFRESH from index.html: pull the latest 1m front-month future candles (1 data-API call),
+        refresh the chain if older than 60 s (1 option-chain call), recompute everything."""
+        st = self.states[name]
+        errors: List[str] = []
+        if self.prepared_day is None and self.cfg.client_id and self.cfg.resolve_token():
+            try:
+                await self.prepare_day()
+            except Exception as e:
+                errors.append(f"instrument discovery: {e}")
+        bars1: Optional[List[Dict[str, float]]] = None
+        if st.fut and self.cfg.client_id:
+            try:
+                d = await self.rest.intraday(st.fut.security_id, st.fut.segment, "FUTIDX",
+                                             f"{(now_ist().date() - dt.timedelta(days=6)).isoformat()} 09:15:00",
+                                             f"{now_ist().date().isoformat()} 15:30:00", 1, True)
+                bars1 = candles_from_payload(d)
+                st.fut_bars.seed(bars1)
+            except DhanApiError as e:
+                errors.append(f"futures candles: {e}")
+        if st.idx and st.expiry and (time.time() - st.chain_ts > 60) and self.cfg.client_id:
+            try:
+                raw = await self.rest.option_chain(st.idx.security_id, "IDX_I", st.expiry)
+                st.chain_last_price, st.chain = normalize_chain(raw, time.time())
+                st.chain_ts = time.time()
+                F = st.last_features.get("forward")
+                if not fin(F) and st.chain:
+                    ks = sorted({k for k, _ in st.chain})
+                    pf = parity_forward(ks, [st.chain.get((k, "CE"), Leg(k, "CE")).fair for k in ks],
+                                        [st.chain.get((k, "PE"), Leg(k, "PE")).fair for k in ks],
+                                        year_fraction(time.time(), st.expiry), self.cfg.risk_free, st.chain_last_price)
+                    if pf:
+                        st.last_features["forward"] = pf[0]
+                T = year_fraction(time.time(), st.expiry)
+                compute_leg_analytics(st.chain, st.last_features.get("forward", st.chain_last_price), T,
+                                      self.cfg.risk_free, st.lot, sorted({k for k, _ in st.chain}))
+            except DhanApiError as e:
+                errors.append(f"option chain: {e}")
+        if not st.daily and st.idx and self.cfg.client_id:
+            with contextlib.suppress(DhanApiError):
+                st.daily = candles_from_payload(await self.rest.daily(st.idx.security_id, "IDX_I", "INDEX",
+                                                                      (now_ist().date() - dt.timedelta(days=15)).isoformat(),
+                                                                      now_ist().date().isoformat()))
+        out = await asyncio.to_thread(self.tech_compute, name, bars1 if bars1 else None)
+        if not self.cfg.client_id or not self.cfg.resolve_token():
+            errors.append("DHAN_CLIENT_ID / DHAN_ACCESS_TOKEN not set")
+        out["errors"] = errors
+        st.last_tech = out  # type: ignore[attr-defined]
+        return out
 
     async def dashboard_loop(self, live: bool) -> None:
         console = None
@@ -4914,6 +5053,665 @@ class Engine:
                 LOG.exception("task crashed; restarting in 5s", task=name)
                 await self._sleep(5)
                 coro = fn() if name.split(".")[-1] != "dashboard_loop" else fn(False)
+
+# ============================================================================
+# 12A. TECHNICAL INDICATOR STRATEGY  (front-month future, 1m/5m bars)
+# ============================================================================
+# Inputs : 1m/5m OHLCV of the front-month future, previous-day H/L/C, option chain
+#          (OI, volume), India VIX.
+# All indicator functions are pure, causal (value at t uses bars <= t) and return
+# numpy arrays aligned to the input bars (NaN during warm-up).
+
+def _ohlcv(bars: Sequence[Dict[str, float]]) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    o = np.array([b["open"] for b in bars], float)
+    h = np.array([b["high"] for b in bars], float)
+    l = np.array([b["low"] for b in bars], float)
+    c = np.array([b["close"] for b in bars], float)
+    v = np.array([b.get("volume") or 0.0 for b in bars], float)
+    return o, h, l, c, v
+
+
+def ind_vwap(bars: Sequence[Dict[str, float]]) -> np.ndarray:
+    """1. VWAP = sum(P*V)/sum(V), P = (H+L+C)/3, reset at each session open (IST date)."""
+    _, h, l, c, v = _ohlcv(bars)
+    out = np.full(len(bars), NAN)
+    pv = vv = 0.0
+    day = None
+    for i, b in enumerate(bars):
+        d = dt.datetime.fromtimestamp(b["ts"], IST).date()
+        if d != day:
+            pv = vv = 0.0
+            day = d
+        p = (h[i] + l[i] + c[i]) / 3.0
+        pv += p * v[i]
+        vv += v[i]
+        out[i] = pv / vv if vv > 0 else NAN
+    return out
+
+
+def ind_true_range(h: np.ndarray, l: np.ndarray, c: np.ndarray) -> np.ndarray:
+    """TR = max(H-L, |H-C_prev|, |L-C_prev|); first bar TR = H-L."""
+    tr = h - l
+    if len(c) > 1:
+        pc = c[:-1]
+        tr[1:] = np.maximum.reduce([h[1:] - l[1:], np.abs(h[1:] - pc), np.abs(l[1:] - pc)])
+    return tr
+
+
+def wilder(x: np.ndarray, n: int) -> np.ndarray:
+    """Wilder average: seed = SMA of first n valid values, then A_t = (A_{t-1}(n-1) + x_t)/n."""
+    out = np.full(len(x), NAN)
+    idx = np.where(np.isfinite(x))[0]
+    if len(idx) < n:
+        return out
+    s = idx[0]
+    if not np.all(np.isfinite(x[s:s + n])):
+        return out
+    out[s + n - 1] = float(np.mean(x[s:s + n]))
+    for i in range(s + n, len(x)):
+        out[i] = (out[i - 1] * (n - 1) + x[i]) / n if np.isfinite(x[i]) else out[i - 1]
+    return out
+
+
+def ind_atr(bars: Sequence[Dict[str, float]], n: int = 14) -> np.ndarray:
+    """2. ATR(n) = Wilder average of TR."""
+    _, h, l, c, _ = _ohlcv(bars)
+    return wilder(ind_true_range(h, l, c), n)
+
+
+def ind_supertrend(bars: Sequence[Dict[str, float]], n: int = 10, mult: float = 3.0) -> Tuple[np.ndarray, np.ndarray]:
+    """3. Supertrend(n, mult): basic bands = (H+L)/2 +/- mult*ATR(n); final bands ratchet;
+    direction flips when the close crosses the active band. Returns (line, dir) with dir +1/-1."""
+    _, h, l, c, _ = _ohlcv(bars)
+    atr = wilder(ind_true_range(h, l, c), n)
+    hl2 = (h + l) / 2
+    bu, bl = hl2 + mult * atr, hl2 - mult * atr
+    fu, fl = np.full(len(c), NAN), np.full(len(c), NAN)
+    line, d = np.full(len(c), NAN), np.full(len(c), NAN)
+    for i in range(len(c)):
+        if not np.isfinite(atr[i]):
+            continue
+        if i == 0 or not np.isfinite(fu[i - 1]):
+            fu[i], fl[i] = bu[i], bl[i]
+            d[i] = 1.0 if c[i] >= hl2[i] else -1.0
+        else:
+            fu[i] = bu[i] if (bu[i] < fu[i - 1] or c[i - 1] > fu[i - 1]) else fu[i - 1]
+            fl[i] = bl[i] if (bl[i] > fl[i - 1] or c[i - 1] < fl[i - 1]) else fl[i - 1]
+            if d[i - 1] < 0:
+                d[i] = 1.0 if c[i] > fu[i] else -1.0
+            else:
+                d[i] = -1.0 if c[i] < fl[i] else 1.0
+        line[i] = fl[i] if d[i] > 0 else fu[i]
+    return line, d
+
+
+def ind_adx(bars: Sequence[Dict[str, float]], n: int = 14) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """4. ADX(n): +DM/-DM, Wilder-smoothed with TR -> DI+ / DI-;
+    DX = 100*|DI+ - DI-|/(DI+ + DI-); ADX = Wilder avg(DX). Returns (adx, di_plus, di_minus)."""
+    _, h, l, c, _ = _ohlcv(bars)
+    m = len(c)
+    pdm, ndm = np.full(m, NAN), np.full(m, NAN)
+    tr = ind_true_range(h, l, c)
+    tr[0] = NAN
+    for i in range(1, m):
+        up, dn = h[i] - h[i - 1], l[i - 1] - l[i]
+        pdm[i] = up if (up > dn and up > 0) else 0.0
+        ndm[i] = dn if (dn > up and dn > 0) else 0.0
+    atr, sp, sn = wilder(tr, n), wilder(pdm, n), wilder(ndm, n)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        dip = 100 * sp / atr
+        dim = 100 * sn / atr
+        dx = 100 * np.abs(dip - dim) / (dip + dim)
+    dx[~np.isfinite(dx)] = NAN
+    return wilder(dx, n), dip, dim
+
+
+def ind_rsi(bars: Sequence[Dict[str, float]], n: int = 14) -> np.ndarray:
+    """5. RSI(n) = 100 - 100/(1+RS), RS = Wilder avg gain / Wilder avg loss."""
+    c = np.array([b["close"] for b in bars], float)
+    d = np.full(len(c), NAN)
+    d[1:] = np.diff(c)
+    g, ls = wilder(np.where(np.isfinite(d), np.maximum(d, 0), NAN), n), wilder(np.where(np.isfinite(d), np.maximum(-d, 0), NAN), n)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        rsi = 100 - 100 / (1 + g / ls)
+    rsi = np.where(np.isfinite(g) & (ls == 0) & (g > 0), 100.0, rsi)
+    rsi = np.where(np.isfinite(g) & (ls == 0) & (g == 0), 50.0, rsi)
+    return rsi
+
+
+def _rolling(x: np.ndarray, n: int, fn: Callable[[np.ndarray], float]) -> np.ndarray:
+    out = np.full(len(x), NAN)
+    for i in range(n - 1, len(x)):
+        w = x[i - n + 1:i + 1]
+        if np.all(np.isfinite(w)):
+            out[i] = fn(w)
+    return out
+
+
+def ind_bollinger(bars: Sequence[Dict[str, float]], n: int = 20, k: float = 2.0) -> Dict[str, np.ndarray]:
+    """6. Bollinger(n,k): mid = SMA(n), sigma = population stdev(n), upper/lower = mid +/- k*sigma,
+    Bandwidth = (Upper - Lower)/Mid."""
+    c = np.array([b["close"] for b in bars], float)
+    mid = _rolling(c, n, lambda w: float(np.mean(w)))
+    sd = _rolling(c, n, lambda w: float(np.std(w, ddof=0)))
+    up, lo = mid + k * sd, mid - k * sd
+    return {"mid": mid, "upper": up, "lower": lo, "sd": sd, "bandwidth": (up - lo) / mid}
+
+
+def ind_efficiency_ratio(bars: Sequence[Dict[str, float]], n: int = 10) -> np.ndarray:
+    """7. ER(n) = |C_t - C_{t-n}| / sum_{i=t-n+1..t} |C_i - C_{i-1}|."""
+    c = np.array([b["close"] for b in bars], float)
+    out = np.full(len(c), NAN)
+    ad = np.abs(np.diff(c, prepend=NAN))
+    for i in range(n, len(c)):
+        den = float(np.sum(ad[i - n + 1:i + 1]))
+        out[i] = abs(c[i] - c[i - n]) / den if den > 0 else 0.0
+    return out
+
+
+def ind_zscore(bars: Sequence[Dict[str, float]], n: int = 20) -> np.ndarray:
+    """8. Z(n) = (P - SMA_n) / sigma_n, P = close, sigma = population stdev."""
+    bb = ind_bollinger(bars, n, 2.0)
+    c = np.array([b["close"] for b in bars], float)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        sd = bb["sd"]
+        return np.where(np.isfinite(sd), np.where(sd > 0, (c - bb["mid"]) / sd, 0.0), NAN)
+
+
+def ind_pivots(ph: float, pl: float, pc: float) -> Dict[str, float]:
+    """9. Classic floor pivots from previous-day H/L/C."""
+    p = (ph + pl + pc) / 3
+    return {"P": p, "R1": 2 * p - pl, "S1": 2 * p - ph, "R2": p + (ph - pl), "S2": p - (ph - pl),
+            "PDH": ph, "PDL": pl, "PDC": pc}
+
+
+def ind_pcr(legs: Dict[Tuple[float, str], "Leg"]) -> Dict[str, float]:
+    """10. PCR = put volume / call volume, and put OI / call OI (whole chain)."""
+    cv = _sum(l.volume for (k, s), l in legs.items() if s == "CE")
+    pv = _sum(l.volume for (k, s), l in legs.items() if s == "PE")
+    co = _sum(l.oi for (k, s), l in legs.items() if s == "CE")
+    po = _sum(l.oi for (k, s), l in legs.items() if s == "PE")
+    return {"pcr_volume": pv / cv if cv > 0 else NAN, "pcr_oi": po / co if co > 0 else NAN}
+
+
+def oi_change_by_strike(legs: Dict[Tuple[float, str], "Leg"], top: int = 5) -> List[Dict[str, Any]]:
+    rows = [{"strike": k, "side": s, "oi": l.oi, "doi": l.oi - l.prev_oi} for (k, s), l in legs.items()
+            if fin(l.oi) and fin(l.prev_oi)]
+    return sorted(rows, key=lambda r: -abs(r["doi"]))[:top]
+
+
+# ---------------------------------------------------------------- charges --
+# Indian F&O statutory charges (approximation, editable here). Rates as of 2026 schedule:
+CHARGES = {
+    "brokerage_per_order": 20.0,
+    "fut": {"stt_sell": 0.0002, "txn_NSE": 0.0000173, "txn_BSE": 0.0, "stamp_buy": 0.00002},
+    "opt": {"stt_sell": 0.001, "txn_NSE": 0.0003503, "txn_BSE": 0.000325, "stamp_buy": 0.00003},
+    "sebi": 0.000001, "gst": 0.18,
+}
+
+
+def trade_charges(kind: str, exch: str, buy_value: float, sell_value: float) -> Dict[str, float]:
+    """Round-trip charges in Rupees: brokerage (2 orders), STT on sell, exchange txn, SEBI fee,
+    stamp duty on buy, GST 18% on (brokerage + txn + SEBI). kind = 'fut' | 'opt'."""
+    r = CHARGES[kind]
+    brk = 2 * CHARGES["brokerage_per_order"]
+    stt = r["stt_sell"] * sell_value
+    txn = r.get(f"txn_{exch}", r["txn_NSE"]) * (buy_value + sell_value)
+    sebi = CHARGES["sebi"] * (buy_value + sell_value)
+    stamp = r["stamp_buy"] * buy_value
+    gst = CHARGES["gst"] * (brk + txn + sebi)
+    tot = brk + stt + txn + sebi + stamp + gst
+    return {"brokerage": brk, "stt": stt, "txn": txn, "sebi": sebi, "stamp": stamp, "gst": gst, "total": tot}
+
+
+# ---------------------------------------------------------------- rules --
+
+@dataclass
+class TechParams:
+    adx_trend: float = 25.0
+    er_trend: float = 0.3
+    adx_mr: float = 20.0
+    z_mr: float = 2.0
+    rsi_lo: float = 40.0
+    rsi_hi: float = 55.0
+    squeeze_lookback: int = 20
+    squeeze_memory: int = 5          # bars after a squeeze in which a breakout is accepted
+    level_atr: float = 0.2
+    stop_atr: float = 2.0
+    risk_rupees: float = 5000.0
+    max_spread_pct: float = 1.0
+    pcr_low: float = 0.7
+    pcr_high: float = 1.3
+
+
+ENTRY_START, ENTRY_END = dt.time(9, 30), dt.time(15, 10)
+
+
+def compute_indicators(bars: Sequence[Dict[str, float]]) -> Dict[str, np.ndarray]:
+    atr14 = ind_atr(bars, 14)
+    st_line, st_dir = ind_supertrend(bars, 10, 3.0)
+    adx, dip, dim = ind_adx(bars, 14)
+    bb = ind_bollinger(bars, 20, 2.0)
+    return {"close": np.array([b["close"] for b in bars], float), "vwap": ind_vwap(bars), "atr": atr14,
+            "st": st_line, "st_dir": st_dir, "adx": adx, "di_plus": dip, "di_minus": dim, "rsi": ind_rsi(bars, 14),
+            "bb_mid": bb["mid"], "bb_up": bb["upper"], "bb_lo": bb["lower"], "bw": bb["bandwidth"],
+            "er": ind_efficiency_ratio(bars, 10), "z": ind_zscore(bars, 20)}
+
+
+def tech_signal_at(ind: Dict[str, np.ndarray], i: int, levels: Dict[str, float], p: TechParams) -> Dict[str, Any]:
+    """Evaluate the rule set on CLOSED bar i (uses indices <= i only).
+    Returns {signal: LONG/SHORT/NO_TRADE/WAIT, setup, reason, stop_dist, target}."""
+    g = {k: float(v[i]) if i < len(v) else NAN for k, v in ind.items()}
+    c, vw, atr = g["close"], g["vwap"], g["atr"]
+    need = ("atr", "adx", "di_plus", "di_minus", "rsi", "er", "st_dir", "bw")
+    if i < 1 or any(not fin(g[k]) for k in need):
+        return {"signal": "NO_TRADE", "setup": "WARMUP", "reason": "indicators warming up"}
+    rsi_prev = float(ind["rsi"][i - 1])
+    c_prev = float(ind["close"][i - 1])
+    trend_ok = g["adx"] > p.adx_trend and g["er"] > p.er_trend
+    out: Dict[str, Any] = {"signal": "NO_TRADE", "setup": "CHOP",
+                           "reason": f"chop: ADX {g['adx']:.1f} / ER {g['er']:.2f} below {p.adx_trend:.0f} / {p.er_trend}"}
+    # --- squeeze: bandwidth at a 20-bar low --------------------------------------------
+    bw = ind["bw"]
+    lb = p.squeeze_lookback
+    sq_now = i >= lb and np.isfinite(bw[i - lb + 1:i + 1]).all() and bw[i] <= np.min(bw[i - lb + 1:i + 1]) + 1e-12
+    sq_recent = any(j >= lb and np.isfinite(bw[j - lb + 1:j + 1]).all() and bw[j] <= np.min(bw[j - lb + 1:j + 1]) + 1e-12
+                    for j in range(max(lb, i - p.squeeze_memory), i))
+    cand: Optional[Dict[str, Any]] = None
+    if sq_recent and fin(g["bb_up"]) and c > g["bb_up"] and g["st_dir"] > 0:
+        cand = {"signal": "LONG", "setup": "SQUEEZE_BREAKOUT", "reason": f"squeeze breakout above BB upper {g['bb_up']:.1f}, Supertrend long"}
+    elif sq_recent and fin(g["bb_lo"]) and c < g["bb_lo"] and g["st_dir"] < 0:
+        cand = {"signal": "SHORT", "setup": "SQUEEZE_BREAKOUT", "reason": f"squeeze breakout below BB lower {g['bb_lo']:.1f}, Supertrend short"}
+    elif sq_now:
+        out = {"signal": "WAIT", "setup": "SQUEEZE", "reason": f"Bollinger bandwidth {g['bw']:.4f} at {lb}-bar low: wait for breakout"}
+    # --- trend continuation -----------------------------------------------------------------
+    if cand is None and trend_ok and fin(vw):
+        if c > vw and g["st_dir"] > 0 and g["di_plus"] > g["di_minus"] and p.rsi_lo <= rsi_prev <= p.rsi_hi and g["rsi"] > rsi_prev:
+            cand = {"signal": "LONG", "setup": "TREND_PULLBACK",
+                    "reason": f"ADX {g['adx']:.0f} ER {g['er']:.2f}; above VWAP, ST long, DI+>DI-, RSI {rsi_prev:.0f}->{g['rsi']:.0f} turning up"}
+        elif c < vw and g["st_dir"] < 0 and g["di_minus"] > g["di_plus"] and (100 - p.rsi_hi) <= rsi_prev <= (100 - p.rsi_lo) and g["rsi"] < rsi_prev:
+            cand = {"signal": "SHORT", "setup": "TREND_PULLBACK",
+                    "reason": f"ADX {g['adx']:.0f} ER {g['er']:.2f}; below VWAP, ST short, DI->DI+, RSI {rsi_prev:.0f}->{g['rsi']:.0f} turning down"}
+        elif out["setup"] == "CHOP":
+            out = {"signal": "NO_TRADE", "setup": "TREND_NO_TRIGGER", "reason": f"trend regime (ADX {g['adx']:.0f}) but no pullback trigger"}
+    elif cand is None and trend_ok and not fin(vw):
+        out = {"signal": "NO_TRADE", "setup": "NO_VWAP", "reason": "VWAP unavailable (series carries no volume)"}
+    # --- mean reversion (ADX < 20 only) ---------------------------------------------------------
+    if cand is None and g["adx"] < p.adx_mr and fin(g["z"]) and fin(vw):
+        if g["z"] > p.z_mr and c > vw:
+            cand = {"signal": "SHORT", "setup": "MEAN_REVERSION", "reason": f"ADX {g['adx']:.0f}<{p.adx_mr:.0f}, z {g['z']:+.2f}: fade toward VWAP {vw:.1f}"}
+        elif g["z"] < -p.z_mr and c < vw:
+            cand = {"signal": "LONG", "setup": "MEAN_REVERSION", "reason": f"ADX {g['adx']:.0f}<{p.adx_mr:.0f}, z {g['z']:+.2f}: fade toward VWAP {vw:.1f}"}
+    if cand is None:
+        return out
+    # --- level filter: skip entries within 0.2*ATR of key levels unless breaking with a close -------
+    d = 1 if cand["signal"] == "LONG" else -1
+    for name in ("R1", "R2", "S1", "S2", "PDH", "PDL"):
+        L = levels.get(name)
+        if not fin(L):
+            continue
+        if abs(c - L) < p.level_atr * atr:
+            broke = (c_prev <= L < c) if d > 0 else (c_prev >= L > c)
+            if not broke:
+                return {"signal": "NO_TRADE", "setup": "NEAR_LEVEL",
+                        "reason": f"{cand['setup']} {cand['signal']} skipped: close {c:.1f} within {p.level_atr}xATR of {name} {L:.1f}"}
+            cand["reason"] += f"; closing break of {name} {L:.1f}"
+    cand["stop_dist"] = p.stop_atr * atr
+    cand["entry_ref"] = c
+    cand["stop"] = c - d * cand["stop_dist"]
+    if cand["setup"] == "MEAN_REVERSION":
+        cand["targets"] = [vw]
+    else:
+        cand["targets"] = [c + d * cand["stop_dist"], c + d * 2 * cand["stop_dist"]]
+    return cand
+
+
+def resample_5m(bars1m: Sequence[Dict[str, float]]) -> List[Dict[str, float]]:
+    return resample_candles(list(bars1m), 5)
+
+
+def closed_bars(bars: Sequence[Dict[str, float]], minutes: int, now: Optional[float] = None) -> List[Dict[str, float]]:
+    """Drop a still-forming last bar (look-ahead guard)."""
+    now = time.time() if now is None else now
+    return [b for b in bars if b["ts"] + minutes * 60 <= now + 1]
+
+
+def pick_option_strike(legs: Dict[Tuple[float, str], "Leg"], fwd: float, step: float, direction: int,
+                       p: TechParams) -> Tuple[Optional["Leg"], List[str]]:
+    """Liquid ATM or 1-strike ITM option: CE for LONG, PE for SHORT; reject spread > max_spread_pct."""
+    side = "CE" if direction > 0 else "PE"
+    ks = sorted({k for (k, s) in legs if s == side})
+    notes: List[str] = []
+    if not ks or not fin(fwd):
+        return None, ["no chain"]
+    atm = min(ks, key=lambda k: abs(k - fwd))
+    itm = atm - step if direction > 0 else atm + step
+    best = None
+    for K in (atm, itm):
+        lg = legs.get((K, side))
+        if lg is None or not fin(lg.bid) or not fin(lg.ask) or lg.bid <= 0:
+            notes.append(f"{K:.0f}{side}: no two-sided quote")
+            continue
+        sp = spread_pct(lg.bid, lg.ask) or 99
+        if sp > p.max_spread_pct:
+            notes.append(f"{K:.0f}{side}: spread {sp:.2f}% > {p.max_spread_pct}%")
+            continue
+        score = (lg.volume if fin(lg.volume) else 0) + (lg.oi if fin(lg.oi) else 0) * 0.1
+        if best is None or score > best[0]:
+            best = (score, lg)
+    return (best[1] if best else None), notes
+
+
+def build_trade_card(name: str, sig: Dict[str, Any], st: Optional["IndexState"], fut_px: float, lot: float,
+                     legs: Dict[Tuple[float, str], "Leg"], fwd: float, step: float, T: float, r: float,
+                     p: TechParams, exch: str) -> Dict[str, Any]:
+    card: Dict[str, Any] = {"index": name, "signal": sig["signal"], "setup": sig.get("setup"), "reason": sig.get("reason")}
+    if sig["signal"] not in ("LONG", "SHORT"):
+        return card
+    d = 1 if sig["signal"] == "LONG" else -1
+    stop_pts = sig["stop_dist"]
+    card["underlying"] = {"entry": sig["entry_ref"], "stop": sig["stop"], "targets": sig["targets"], "stop_pts": stop_pts}
+    lots_fut = int(p.risk_rupees // (stop_pts * lot)) if fin(lot) and lot > 0 and stop_pts > 0 else 0
+    card["futures_lots"] = lots_fut
+    lg, notes = pick_option_strike(legs, fwd, step, d, p)
+    card["strike_notes"] = notes
+    if lg is None:
+        card["option"] = None
+        card["reason"] += " | no liquid ATM/ITM strike passed the spread check"
+        return card
+    iv = lg.iv if fin(lg.iv) else implied_vol_black76(lg.mid, fwd, lg.strike, T, r, lg.side == "CE")
+    entry = lg.ask
+    if iv:
+        g = black76_greeks(fwd, lg.strike, T, r, iv, lg.side == "CE")
+        def prem_at(F2: float) -> float:
+            return black76_price(F2, lg.strike, T, r, iv, lg.side == "CE")
+        base = prem_at(fwd)
+        adj = entry - base                        # carry the quoted ask premium over model
+        sl = max(prem_at(fwd - d * stop_pts) + adj, 0.05)
+        tg = [prem_at(fwd + (t - sig["entry_ref"])) + adj for t in sig["targets"]]
+        delta = g.delta
+    else:
+        delta = 0.5 * d
+        sl = max(entry - abs(delta) * stop_pts, 0.05)
+        tg = [entry + abs(delta) * abs(t - sig["entry_ref"]) for t in sig["targets"]]
+    opt_stop = entry - sl
+    lots = int(p.risk_rupees // (opt_stop * lot)) if opt_stop > 0 and fin(lot) and lot > 0 else 0
+    qty = max(lots, 1) * lot
+    ch_sl = trade_charges("opt", exch, entry * qty, sl * qty)
+    ch_t1 = trade_charges("opt", exch, entry * qty, tg[0] * qty) if tg else None
+    card["option"] = {"strike": lg.strike, "side": lg.side, "security_id": lg.sid, "bid": lg.bid, "ask": lg.ask,
+                      "spread_pct": spread_pct(lg.bid, lg.ask), "iv": iv, "delta": delta, "entry": round(entry, 2),
+                      "sl": round(sl, 2), "targets": [round(t, 2) for t in tg], "lots": lots, "lot_size": lot,
+                      "risk_rupees": round(opt_stop * qty, 0), "charges_at_sl": round(ch_sl["total"], 2),
+                      "net_loss_at_sl": round(-opt_stop * qty - ch_sl["total"], 0),
+                      "net_gain_at_t1": round((tg[0] - entry) * qty - ch_t1["total"], 0) if tg and ch_t1 else None}
+    if lots == 0:
+        card["reason"] += f" | risk Rs{p.risk_rupees:.0f} < 1 lot at this stop: size 0"
+    return card
+
+
+def tech_context(legs: Dict[Tuple[float, str], "Leg"], vix: float, p: TechParams) -> Dict[str, Any]:
+    pcr = ind_pcr(legs) if legs else {"pcr_volume": NAN, "pcr_oi": NAN}
+    flag = []
+    for k in ("pcr_volume", "pcr_oi"):
+        v = pcr[k]
+        if fin(v) and v < p.pcr_low:
+            flag.append(f"{k} {v:.2f} < {p.pcr_low} (call-heavy extreme)")
+        elif fin(v) and v > p.pcr_high:
+            flag.append(f"{k} {v:.2f} > {p.pcr_high} (put-heavy extreme)")
+    return {**pcr, "pcr_flags": flag, "vix": vix, "oi_change_top": oi_change_by_strike(legs) if legs else []}
+
+
+def tech_snapshot(name: str, bars5: List[Dict[str, float]], prev_day: Optional[Dict[str, float]],
+                  legs: Dict[Tuple[float, str], "Leg"], vix: float, fwd: float, step: float, lot: float, T: float,
+                  r: float, exch: str, p: Optional[TechParams] = None, bars1: Optional[List[Dict[str, float]]] = None) -> Dict[str, Any]:
+    """Everything the index.html page shows: indicator table + signal card + context."""
+    p = p or TechParams()
+    out: Dict[str, Any] = {"index": name, "ts_ist": now_ist().isoformat(timespec="seconds"), "bars_5m": len(bars5)}
+    if len(bars5) < 40:
+        out["card"] = {"index": name, "signal": "NO_TRADE", "setup": "NO_DATA", "reason": f"only {len(bars5)} closed 5m bars"}
+        out["context"] = tech_context(legs, vix, p)
+        return out
+    ind = compute_indicators(bars5)
+    i = len(bars5) - 1
+    lv = ind_pivots(prev_day["high"], prev_day["low"], prev_day["close"]) if prev_day else {}
+    sig = tech_signal_at(ind, i, lv, p)
+    bt = dt.datetime.fromtimestamp(bars5[i]["ts"], IST).time()
+    if sig["signal"] in ("LONG", "SHORT") and not (ENTRY_START <= bt < ENTRY_END):
+        sig = {"signal": "NO_TRADE", "setup": "OUTSIDE_WINDOW",
+               "reason": f"{sig['setup']} {sig['signal']} ignored: bar {bt:%H:%M} outside entry window 09:30-15:10 (same as backtest)"}
+    table = {k: (float(v[i]) if fin(v[i]) else None) for k, v in ind.items()}
+    table["bar_time"] = dt.datetime.fromtimestamp(bars5[i]["ts"], IST).strftime("%Y-%m-%d %H:%M")
+    if bars1:
+        i1 = compute_indicators(bars1)
+        table["1m"] = {k: (float(v[-1]) if fin(v[-1]) else None) for k, v in i1.items() if k in ("rsi", "adx", "st_dir", "z", "vwap")}
+    out["indicators"] = table
+    out["levels"] = lv
+    out["card"] = build_trade_card(name, sig, None, table["close"], lot, legs, fwd, step, T, r, p, exch)
+    out["context"] = tech_context(legs, vix, p)
+    return out
+
+
+# ---------------------------------------------------------------- backtest --
+
+def backtest_tech(bars5: List[Dict[str, float]], daily: List[Dict[str, float]], lot: float, exch: str = "NSE",
+                  p: Optional[TechParams] = None, eod: dt.time = dt.time(15, 20)) -> Dict[str, Any]:
+    """Futures backtest of the rule set. Signal on CLOSED bar i -> fill at OPEN of bar i+1 (no look-ahead).
+    Exits: 2*ATR stop / final target / EOD 15:20; stop assumed first if both hit in one bar.
+    P&L per trade = points * qty - full statutory charges (brokerage, STT, txn, SEBI, stamp, GST)."""
+    p = p or TechParams()
+    if len(bars5) < 60:
+        return {"status": f"INSUFFICIENT DATA ({len(bars5)} bars)"}
+    ind = compute_indicators(bars5)
+    dmap = {dt.datetime.fromtimestamp(d["ts"], IST).date(): d for d in daily}
+    ddays = sorted(dmap)
+    trades: List[Dict[str, Any]] = []
+    pos: Optional[Dict[str, Any]] = None
+    qty_lots = 1
+    for i in range(1, len(bars5) - 1):
+        b, nb = bars5[i], bars5[i + 1]
+        t = dt.datetime.fromtimestamp(b["ts"], IST)
+        tn = dt.datetime.fromtimestamp(nb["ts"], IST)
+        if pos is not None:
+            hit_sl = (b["low"] <= pos["stop"]) if pos["d"] > 0 else (b["high"] >= pos["stop"])
+            hit_tg = (b["high"] >= pos["target"]) if pos["d"] > 0 else (b["low"] <= pos["target"])
+            exit_px, why = None, None
+            if hit_sl:
+                exit_px, why = pos["stop"], "SL"
+            elif hit_tg:
+                exit_px, why = pos["target"], "TARGET"
+            elif (t + dt.timedelta(minutes=5)).time() >= eod or tn.date() != t.date():
+                exit_px, why = b["close"], "EOD"
+            if exit_px is not None:
+                q = pos["qty"]
+                buy, sell = (pos["entry"], exit_px) if pos["d"] > 0 else (exit_px, pos["entry"])
+                ch = trade_charges("fut", exch, buy * q, sell * q)
+                gross = pos["d"] * (exit_px - pos["entry"]) * q
+                trades.append({"entry_ts": pos["ts"], "exit_ts": b["ts"], "setup": pos["setup"], "dir": pos["d"],
+                               "entry": pos["entry"], "exit": exit_px, "why": why, "gross": gross,
+                               "charges": ch["total"], "net": gross - ch["total"], "r": pos["d"] * (exit_px - pos["entry"]) / pos["sd"]})
+                pos = None
+            continue
+        if not (ENTRY_START <= t.time() < ENTRY_END) or tn.date() != t.date():
+            continue
+        j = bisect.bisect_left(ddays, t.date()) - 1
+        lv = ind_pivots(dmap[ddays[j]]["high"], dmap[ddays[j]]["low"], dmap[ddays[j]]["close"]) if j >= 0 else {}
+        sig = tech_signal_at(ind, i, lv, p)
+        if sig["signal"] in ("LONG", "SHORT"):
+            d = 1 if sig["signal"] == "LONG" else -1
+            entry = nb["open"]
+            sd = sig["stop_dist"]
+            tgt = sig["targets"][-1] if sig["setup"] != "MEAN_REVERSION" else sig["targets"][0]
+            if (tgt - entry) * d <= 0:
+                continue
+            pos = {"ts": nb["ts"], "d": d, "entry": entry, "stop": entry - d * sd, "target": tgt if sig["setup"] == "MEAN_REVERSION" else entry + d * 2 * sd,
+                   "sd": sd, "setup": sig["setup"], "qty": qty_lots * lot}
+    res: Dict[str, Any] = {"status": "OK", "bars": len(bars5), "trades": len(trades), "lot": lot,
+                           "from": dt.datetime.fromtimestamp(bars5[0]["ts"], IST).isoformat(),
+                           "to": dt.datetime.fromtimestamp(bars5[-1]["ts"], IST).isoformat()}
+    if not trades:
+        res["status"] = "NO TRADES"
+        return res
+    net = np.array([x["net"] for x in trades])
+    gross = np.array([x["gross"] for x in trades])
+    wins = int((net > 0).sum())
+    wr = wilson_interval(wins, len(net))
+    eq = np.cumsum(net)
+    by_day: Dict[str, float] = collections.defaultdict(float)
+    for x in trades:
+        by_day[dt.datetime.fromtimestamp(x["exit_ts"], IST).date().isoformat()] += x["net"]
+    dr = np.array(list(by_day.values()))
+    res.update({"gross_rupees": float(gross.sum()), "charges_rupees": float(sum(x["charges"] for x in trades)),
+                "net_rupees": float(net.sum()), "win_rate": wr[0], "win_rate_ci95": [wr[1], wr[2]],
+                "avg_net": float(net.mean()), "avg_r": float(np.mean([x["r"] for x in trades])),
+                "profit_factor": float(net[net > 0].sum() / -net[net < 0].sum()) if (net < 0).any() else float("inf"),
+                "max_drawdown_rupees": max_drawdown(eq)[0], "daily_sharpe_ann": sharpe_ratio(dr, 0, 252) if len(dr) > 5 else NAN,
+                "t_test_p_mean_net": one_sample_t_pvalue(net),
+                "by_setup": {s: {"n": len(v), "net": float(sum(x["net"] for x in v)),
+                                 "win": float(np.mean([x["net"] > 0 for x in v]))}
+                             for s, v in _group(trades, "setup").items()},
+                "exits": dict(collections.Counter(x["why"] for x in trades)),
+                "sample_status": "OK" if len(trades) >= 30 else "INSUFFICIENT (<30 trades): not evidence"})
+    res["trades_list"] = trades
+    return res
+
+
+def _group(rows: List[Dict[str, Any]], key: str) -> Dict[str, List[Dict[str, Any]]]:
+    g: Dict[str, List[Dict[str, Any]]] = collections.defaultdict(list)
+    for r in rows:
+        g[r[key]].append(r)
+    return g
+
+
+# ---------------------------------------------------------------- 6-month download --
+
+def stitch_front_month(per_contract: Dict[str, List[Dict[str, float]]], expiries: Dict[str, str]) -> List[Dict[str, float]]:
+    """Continuous front-month series: on each date use the contract with the nearest expiry >= that date."""
+    by_date: Dict[dt.date, List[Tuple[str, str]]] = collections.defaultdict(list)
+    for sid, bars in per_contract.items():
+        for b in bars:
+            by_date[dt.datetime.fromtimestamp(b["ts"], IST).date()].append((expiries[sid], sid))
+    out: List[Dict[str, float]] = []
+    for d in sorted(by_date):
+        cands = sorted({(e, s) for e, s in by_date[d] if e >= d.isoformat()})
+        if not cands:
+            continue
+        sid = cands[0][1]
+        out += [dict(b, contract=int(sid)) for b in per_contract[sid] if dt.datetime.fromtimestamp(b["ts"], IST).date() == d]
+    return out
+
+
+def write_csv(path: Path, rows: List[Dict[str, Any]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if not rows:
+        path.write_text("")
+        return
+    keys = list(rows[0].keys())
+    with open(path, "w", newline="") as fh:
+        w = csv.DictWriter(fh, fieldnames=keys + ["ts_ist"], extrasaction="ignore")
+        w.writeheader()
+        for r in rows:
+            w.writerow({**r, "ts_ist": dt.datetime.fromtimestamp(r["ts"], IST).strftime("%Y-%m-%d %H:%M")})
+
+
+def read_csv_bars(path: Path) -> List[Dict[str, float]]:
+    if not path.exists() or path.stat().st_size == 0:
+        return []
+    out = []
+    with open(path) as fh:
+        for r in csv.DictReader(fh):
+            out.append({k: float(v) for k, v in r.items() if k != "ts_ist" and v not in ("", None)})
+    return out
+
+
+async def download_history(eng: "Engine", months: int, names: List[str], out_dir: Path) -> Dict[str, Any]:
+    """Download `months` of 1m + 5m candles: index, every listed future (stitched front month, OI incl.),
+    India VIX, and daily bars (prev-day H/L/C). 90-day chunks per Dhan's intraday limit.
+    Expired futures are NOT in today's instrument master; contract ids seen by the engine on earlier
+    days are read back from the `instruments` table so the stitched series grows over time."""
+    today = now_ist().date()
+    start = today - dt.timedelta(days=int(months * 30.5))
+    summary: Dict[str, Any] = {}
+
+    async def intraday_range(sid: int, seg: str, instr: str, interval: int, oi: bool) -> List[Dict[str, float]]:
+        bars: List[Dict[str, float]] = []
+        a = start
+        while a <= today:
+            b = min(a + dt.timedelta(days=89), today + dt.timedelta(days=1))
+            try:
+                d = await eng.rest.intraday(sid, seg, instr, f"{a.isoformat()} 09:15:00", f"{b.isoformat()} 15:30:00", interval, oi)
+                bars += candles_from_payload(d)
+            except DhanApiError as e:
+                LOG.warning("download chunk failed", sid=sid, frm=a.isoformat(), error=str(e)[:160])
+                if not e.retryable:
+                    raise
+            a = b + dt.timedelta(days=1)
+        seen, uniq = set(), []
+        for x in sorted(bars, key=lambda x: x["ts"]):
+            if x["ts"] not in seen:
+                seen.add(x["ts"])
+                uniq.append(x)
+        return uniq
+    known = {}
+    for r in eng.db.query("SELECT security_id, segment, underlying, expiry FROM instruments WHERE instrument='FUTIDX'"):
+        known[(r["segment"], r["security_id"])] = (r["underlying"], r["expiry"])
+    for name in names:
+        st = eng.states.get(name)
+        idx = eng.master.index(name)
+        if not idx:
+            continue
+        s: Dict[str, Any] = {}
+        for iv in (1, 5):
+            bars = await intraday_range(idx.security_id, "IDX_I", "INDEX", iv, False)
+            write_csv(out_dir / f"{name}_index_{iv}m.csv", bars)
+            eng._store_candles(idx.security_id, "IDX_I", f"{iv}m", bars, name)
+            s[f"index_{iv}m"] = len(bars)
+        daily = candles_from_payload(await eng.rest.daily(idx.security_id, "IDX_I", "INDEX",
+                                                          (start - dt.timedelta(days=10)).isoformat(), today.isoformat()))
+        write_csv(out_dir / f"{name}_daily.csv", daily)
+        eng._store_candles(idx.security_id, "IDX_I", "1d", daily, name)
+        s["daily"] = len(daily)
+        futs = {c.security_id: c for c in eng.master.futures.get(DEFAULT_INDICES[name].symbol, [])}
+        exp = {str(sid): c.expiry for sid, c in futs.items()}
+        seg = futs[next(iter(futs))].segment if futs else DEFAULT_INDICES[name].fno_segment
+        for (sg, sid), (u, e) in known.items():
+            if u == DEFAULT_INDICES[name].symbol and e >= start.isoformat():
+                exp.setdefault(str(sid), e)
+        for iv in (1, 5):
+            per: Dict[str, List[Dict[str, float]]] = {}
+            for sid in exp:
+                per[sid] = await intraday_range(int(sid), seg, "FUTIDX", iv, True)
+            front = stitch_front_month(per, exp)
+            write_csv(out_dir / f"{name}_fut_{iv}m.csv", front)
+            eng._store_candles(idx.security_id, seg, f"front_{iv}m", front, name + "_FUT")
+            s[f"fut_front_{iv}m"] = len(front)
+            s[f"fut_first_bar_{iv}m"] = dt.datetime.fromtimestamp(front[0]["ts"], IST).isoformat() if front else None
+        s["contracts"] = exp
+        summary[name] = s
+        if st:
+            st.daily = daily
+    vix = eng.master.index("INDIAVIX")
+    if vix:
+        vb = await intraday_range(vix.security_id, "IDX_I", "INDEX", 5, False)
+        write_csv(out_dir / "INDIAVIX_5m.csv", vb)
+        summary["INDIAVIX_5m"] = len(vb)
+    (out_dir / "download_summary.json").write_text(jdump(summary))
+    return summary
+
+
+def run_tech_backtest_files(cfg: Config, names: List[str], in_dir: Path, lots: Dict[str, float]) -> Dict[str, Any]:
+    out: Dict[str, Any] = {}
+    for n in names:
+        b5 = read_csv_bars(in_dir / f"{n}_fut_5m.csv")
+        dly = read_csv_bars(in_dir / f"{n}_daily.csv")
+        exch = DEFAULT_INDICES[n].exch
+        r = backtest_tech(b5, dly, lots.get(n) or 1.0, exch)
+        tl = r.pop("trades_list", [])
+        write_csv(in_dir / f"{n}_tech_trades.csv", tl) if tl else None
+        out[n] = r
+    (in_dir / "tech_backtest.json").write_text(jdump(out))
+    return out
+
 
 # ============================================================================
 # 13. SELF-TESTS (offline) AND LIVE VERIFICATION
@@ -5452,6 +6250,13 @@ def main(argv: Optional[List[str]] = None) -> int:
     sub.add_parser("initdb")
     sub.add_parser("research")
     sub.add_parser("report")
+    dl = sub.add_parser("download", help="download N months of 1m/5m index + front-month futures + VIX + daily")
+    dl.add_argument("--months", type=float, default=6)
+    dl.add_argument("--indices", default="")
+    dl.add_argument("--out", default="")
+    tb = sub.add_parser("techbacktest", help="backtest the indicator rule set on downloaded 5m front-month futures")
+    tb.add_argument("--indices", default="")
+    tb.add_argument("--in", dest="inp", default="")
     b = sub.add_parser("backfill")
     b.add_argument("--days", type=int, default=30)
     a = ap.parse_args(argv)
@@ -5480,6 +6285,43 @@ def main(argv: Optional[List[str]] = None) -> int:
         return 0
     if cmd == "watch":
         cmd_watch(cfg)
+        return 0
+    if cmd in ("download", "techbacktest"):
+        names = [x.strip().upper() for x in (a.indices or ",".join(cfg.indices)).split(",") if x.strip()]
+        hist = Path(getattr(a, "out", "") or getattr(a, "inp", "") or (cfg.data_dir / "history"))
+        if cmd == "download":
+            if not cfg.client_id or not cfg.resolve_token():
+                print("DHAN_CLIENT_ID / DHAN_ACCESS_TOKEN not set", file=sys.stderr)
+                return 1
+            async def _dl() -> Dict[str, Any]:
+                eng = Engine(cfg)
+                eng.db.start()
+                await asyncio.to_thread(eng.master.load, False)
+                for n_, s_ in eng.states.items():
+                    for c_ in ([eng.master.index(n_)] if eng.master.index(n_) else []) + list(eng.master.futures.get(s_.spec.symbol, [])):
+                        eng.db.insert("instruments", {"security_id": c_.security_id, "segment": c_.segment, "exch": s_.spec.exch,
+                                                      "instrument": c_.instrument, "underlying": c_.underlying, "display": c_.display,
+                                                      "expiry": c_.expiry, "lot_size": c_.lot_size,
+                                                      "loaded_on": now_ist().date().isoformat()}, mode="INSERT OR REPLACE")
+                eng.db.flush_sync()
+                try:
+                    return await download_history(eng, a.months, names, hist)
+                finally:
+                    eng.db.stop()
+            print(json.dumps(asyncio.run(_dl()), indent=1, default=str))
+            print(f"files in {hist}")
+            return 0
+        im = InstrumentMaster(cfg)
+        lots: Dict[str, float] = {}
+        try:
+            im.load(False)
+            for n_ in names:
+                f_ = im.near_future(n_)
+                lots[n_] = f_.lot_size if f_ else 1.0
+        except Exception as e:
+            print(f"lot sizes unavailable ({e}); using 1", file=sys.stderr)
+        res = run_tech_backtest_files(cfg, names, hist, lots)
+        print(json.dumps(res, indent=1, default=str))
         return 0
     if cmd == "backfill":
         asyncio.run(cmd_backfill(cfg, a.days))

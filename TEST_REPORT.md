@@ -29,3 +29,23 @@ on the VPS once `.env` holds credentials (writes `data/verify_report.md`).
 Not implemented / limited by data: market breadth (needs `BREADTH_CONSTITUENTS`), Fama-French
 (no reliable Indian factor feed), index volume (indices have none — futures used), calibrated
 probabilities (shown only after OOS validation passes), XGBoost (enabled at ≥3000 labelled rows).
+
+## Indicator strategy (added)
+
+| Item | Status | Evidence |
+|---|---|---|
+| VWAP (typical price, session reset) | PASS | hand-computed values; on real NIFTY NOV-26 futures equals Σ(TP·V)/ΣV for 06-Nov |
+| ATR(14) Wilder, TR definition | PASS | exact TR and Wilder recursion test |
+| Supertrend(10,3) flips on a close crossing the band | PASS | trend-reversal series |
+| ADX(14) / DI± | PASS | monotonic series → DI− 0, ADX 100 |
+| RSI(14) Wilder | PASS | closed-form recomputation; 100 / 50 edge cases |
+| Bollinger BW, ER(10), Z(20), pivots | PASS | exact formulas |
+| main.py ≡ dhan_cloud (indicators, rules, charges) | PASS | 4 random series × 700 bars + real bars, tolerance 1e-7 |
+| Level filter, MR target = VWAP, stop = 2·ATR, lot sizing | PASS | rule tests |
+| Spread-checked ATM/ITM strike, option SL/targets | PASS | synthetic chain; strikes rejected when the spread is too wide |
+| Backtest: next-bar fill, costs deducted, no look-ahead | PASS | changing later bars leaves earlier trades unchanged; net = gross − charges |
+| index.html (dark, manual REFRESH, table, card) | PASS | served by the engine and screenshotted; no horizontal scroll at 390 px |
+| Real-data smoke test | PASS | 225 real 5m bars of NIFTY NOV-26 futures (04–06 Nov), matching Dhan sid 61471 closes |
+| 6-month download | NOT RUN | needs Dhan credentials on the VPS: `main.py download --months 6` |
+| 6-month backtest result | NOT RUN | runs after the download: `main.py techbacktest` |
+| Dhan Cloud deployment | NOT DONE | needs your cloud.dhanhq.co login; bundle in `dhan_cloud/` passes the RULES.md checks |

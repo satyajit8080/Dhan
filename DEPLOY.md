@@ -42,6 +42,29 @@ re-read on every call, so no restart is needed.
 | Health | `curl -s 127.0.0.1:8787/health` |
 | Logs | `journalctl -u dhan-quant-engine -f` and `/opt/dhan-quant/logs/engine.jsonl` |
 
+## 3a. Indicator strategy, index.html and 6-month data
+
+| Task | Command |
+|---|---|
+| Download 6 months of 1m + 5m index, front-month futures (stitched, with OI), India VIX and daily bars | `... main.py download --months 6` |
+| Backtest the indicator rules on the downloaded 5m front-month futures (with full charges) | `... main.py techbacktest` |
+| Signal page (dark UI, manual REFRESH only) | open `http://127.0.0.1:8787/` through an SSH tunnel: `ssh -L 8787:127.0.0.1:8787 user@vps` |
+
+Files are written to `data/history/`: `<INDEX>_index_{1m,5m}.csv`, `<INDEX>_fut_{1m,5m}.csv`, `<INDEX>_daily.csv`,
+`INDIAVIX_5m.csv`, `download_summary.json`, `tech_backtest.json` and `<INDEX>_tech_trades.csv`.
+
+**Data limit:** Dhan's instrument master lists only *live* futures contracts, so intraday futures data
+reaches back only to the listing date of the contracts trading today (about 3 months). The index series
+covers the full 6 months, but it has no volume, so VWAP-based rules cannot fire on it. Each day the
+engine stores the contract ids it sees in the `instruments` table. Later downloads use those ids, so the
+stitched futures history grows over time. Option-chain history (PCR, OI) is not available from Dhan for
+past dates. In backtests these are context only and are not part of the rules.
+
+## 3b. Dhan Cloud
+
+See `dhan_cloud/README.md`. The full engine cannot run on Dhan Cloud, which allows no files, ports or
+WebSocket. The `dhan_cloud/` bundle runs the same indicator rules there.
+
 ## 4. Behaviour
 
 * **Sessions**: active 20 min before 09:15 IST to 35 min after 15:30 IST on trading days; idle
