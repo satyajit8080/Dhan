@@ -52,6 +52,8 @@ TELEGRAM_CHAT = _var('{{TELEGRAM_CHAT_ID}}')
 RUN_SELFTEST_ON_START = True
 RUN_BACKTEST_ON_START = True
 BACKTEST_MONTHS = 6
+BACKTEST_INDICES = ["BANKEX"]   # [] = all indices
+INDEX_PROXY_BACKTEST = True     # also backtest on 6 months of INDEX 5m bars (no volume -> only squeeze can fire)
 FIXED_POINT_TESTS = [(10, 10), (15, 15), (10, 20), (15, 30)]   # (stop pts, target pts) compared vs 2xATR
 PRINT_ALL_TRADES = True         # print every backtest trade as WIN / LOSS with entry + exit reason
 
@@ -860,6 +862,8 @@ def pull_and_backtest(months):
     start = today - dt.timedelta(days=int(months * 30.5))
     summary = {}
     for name, spec in INDICES.items():
+        if BACKTEST_INDICES and name not in BACKTEST_INDICES:
+            continue
         try:
             dly = daily(spec["sid"], int(months * 31) + 15)
             idx5 = intraday(spec["sid"], "IDX_I", "INDEX", start, today, 5)
@@ -881,6 +885,25 @@ def pull_and_backtest(months):
             log("%s by setup: %s" % (name, r.get("by_setup")))
             if PRINT_ALL_TRADES:
                 print_trade_lists(name, tl)
+            if INDEX_PROXY_BACKTEST and idx5:
+                ib = [dict(b, volume=0.0) for b in idx5]
+                ri = backtest(ib, dly, lot, spec["exch"])
+                til = ri.pop("trades_list", [])
+                summary[name + "-INDEX"] = ri
+                log("%s-INDEX PROXY (index 5m bars %s..%s, futures lot %s & charges; VWAP n/a so only SQUEEZE fires): %s" % (
+                    name, _d(idx5), ri.get("to"), lot,
+                    {k: (round(v, 2) if isinstance(v, float) else v) for k, v in ri.items() if k != "by_setup"}))
+                log("%s-INDEX by setup: %s" % (name, ri.get("by_setup")))
+                if PRINT_ALL_TRADES and til:
+                    print_trade_lists(name + "-INDEX", til)
+                    months = {}
+                    for t in til:
+                        mk = dt.datetime.fromtimestamp(t["entry_ts"], IST).strftime("%Y-%m")
+                        e = months.setdefault(mk, [0, 0, 0.0])
+                        e[0] += 1
+                        e[1] += t["net"] > 0
+                        e[2] += t["net"]
+                    log("  %s-INDEX by month: %s" % (name, "  ".join("%s n=%d w=%d Rs%.0f" % (m, *months[m]) for m in sorted(months))))
             if FIXED_POINT_TESTS and fut1:
                 log("----- %s STOP/TARGET COMPARISON (same entries; exits on 1m bars, %d bars) -----" % (name, len(fut1)))
                 log("  " + summarize_fixed("2xATR / 4xATR", [{"pts": t["net"] / lot + t["charges"] / lot, "net": t["net"],
@@ -890,7 +913,7 @@ def pull_and_backtest(months):
                                                backtest_fixed(fut5, fut1, dly, lot, spec["exch"], slp, tgp), lot))
         except Exception:
             log(name, "backtest failed:", traceback.format_exc()[-600:])
-    tot = sum(v.get("net_rupees", 0) for v in summary.values())
+    tot = sum(v.get("net_rupees", 0) for k, v in summary.items() if not k.endswith("-INDEX"))
     log("=== TOTAL net across indices: Rs%.0f ===" % tot)
     log("NOTE: Dhan lists only live futures contracts, so futures history starts at the oldest live contract's listing "
         "(~3 months). Index bars carry no volume (no VWAP), so they are reported but not traded.")

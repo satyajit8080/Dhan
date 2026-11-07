@@ -62,8 +62,14 @@ def test_pull_and_backtest_with_mocked_dhan(monkeypatch):
     monkeypatch.setattr(S, "all_futures", lambda: {n: [{"sid": 1, "expiry": "2099-01-01", "lot": 65.0, "segment": "NSE_FNO",
                                                         "display": "X"}] for n in S.INDICES})
     monkeypatch.setattr(S, "now_ist", lambda: S.dt.datetime.fromtimestamp(bars[-1]["ts"], S.IST))
+    monkeypatch.setattr(S, "BACKTEST_INDICES", [])
     out = S.pull_and_backtest(1)
-    assert set(out) == set(S.INDICES) and all(v["trades"] > 0 for v in out.values())
+    assert {k for k in out if not k.endswith("-INDEX")} == set(S.INDICES)
+    assert all(v["trades"] > 0 for k, v in out.items() if not k.endswith("-INDEX"))
+    monkeypatch.setattr(S, "BACKTEST_INDICES", ["BANKEX"])
+    out = S.pull_and_backtest(1)
+    assert set(out) == {"BANKEX", "BANKEX-INDEX"}
+    assert all(t["setup"] == "SQUEEZE_BREAKOUT" for t in out["BANKEX-INDEX"].get("by_setup", {}) and [{"setup": k} for k in out["BANKEX-INDEX"]["by_setup"]])
 
 
 def test_fixed_point_backtest():
