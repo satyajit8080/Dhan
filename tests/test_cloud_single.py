@@ -105,3 +105,64 @@ def test_orb_rule():
     tl = S.backtest_orb(bars, 65, "NSE", 15, 1.0)
     assert len(tl) == 1 and tl[0]["dir"] == 1 and tl[0]["why"] == "TARGET"
     assert abs(tl[0]["net"] - (tl[0]["pts"] * 65 - tl[0]["charges"])) < 1e-9
+
+
+def _mk1(t0, closes, spread=1.0):
+    out = []
+    for i, c in enumerate(closes):
+        o = closes[i - 1] if i else c
+        out.append({"ts": t0 + i * 60, "open": o, "high": max(o, c) + spread, "low": min(o, c) - spread, "close": c, "volume": 1000.0})
+    return out
+
+
+def test_live_filters_f3_f4():
+    b = TI.load_fixture()
+    now = b[-1]["ts"] + 300
+    prev = {"high": 24641.6, "low": 24330, "close": 24580.2}
+    flt = S.LIVE_FILTERS["NIFTY"]
+    assert flt == {"entry_end": S.dt.time(13, 0), "min_break_bps": 2.0}
+    x = S.compute(b)
+    lv = S.pivots(prev["high"], prev["low"], prev["close"])
+    seen = {"F3": 0, "F4": 0, "PASS": 0}
+    for i in range(60, len(b)):
+        sig = S.signal_at(x, i, lv)
+        if sig["signal"] not in ("LONG", "SHORT"):
+            continue
+        card, _ = S.build_card("NIFTY", b[:i + 1], prev, {}, "2026-11-09", 14.0, 65, b[i]["ts"] + 300, S.PARAMS, flt)
+        bt = S.dt.datetime.fromtimestamp(b[i]["ts"], S.IST).time()
+        if not (S.ENTRY_START <= bt < S.ENTRY_END):
+            continue
+        if bt >= S.dt.time(13, 0):
+            assert card["setup"] == "FILTER_F3_TIME"
+            seen["F3"] += 1
+        elif sig["setup"] == "SQUEEZE_BREAKOUT":
+            band = x["bb_up"][i] if sig["signal"] == "LONG" else x["bb_lo"][i]
+            brk = abs(x["close"][i] - band) / x["close"][i] * 1e4
+            if brk < 2:
+                assert card["setup"] == "FILTER_F4_WEAK_BREAK"
+                seen["F4"] += 1
+            else:
+                assert card["signal"] == sig["signal"]
+                seen["PASS"] += 1
+    assert sum(seen.values()) > 0
+    assert now
+
+
+def test_paper_trade_flow():
+    t0 = S.dt.datetime(2026, 11, 9, 10, 0, tzinfo=S.IST).timestamp()
+    paper = {}
+    card = {"index": "NIFTY", "signal": "LONG", "setup": "SQUEEZE_BREAKOUT", "stop_dist": 20.0, "targets": [24020, 24040],
+            "bar_ts": t0 - 300, "reason": "test"}
+    S.paper_enter(paper, card, 65, "NSE")
+    assert paper["pos"]["entry"] is None
+    b1 = _mk1(t0, [24000, 24005, 24010, 24020, 24030, 24045, 24050], spread=0.5)
+    msgs = S.paper_update(paper, b1, b1[-1]["ts"] + 60)
+    assert any("ENTER" in m for m in msgs) and any("EXIT" in m and "TARGET" in m for m in msgs)
+    tr = paper["trades"][0]
+    assert tr["entry"] == 24000 and tr["exit"] == 24040 and abs(tr["net"] - (40 * 65 - tr["charges"])) < 1e-9
+    assert paper["pos"] is None
+    S.paper_enter(paper, dict(card, signal="SHORT", bar_ts=t0 + 600), 65, "NSE")
+    b2 = _mk1(t0 + 900, [24050, 24060, 24075], spread=0.5)
+    msgs = S.paper_update(paper, b2, b2[-1]["ts"] + 60)
+    assert any("SL" in m for m in msgs) and paper["trades"][-1]["why"] == "SL"
+    assert "2 trades" in S.paper_summary(paper, "2026-11-09")

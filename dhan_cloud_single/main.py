@@ -50,8 +50,14 @@ TELEGRAM_TOKEN = _var('{{TELEGRAM_BOT_TOKEN}}')
 TELEGRAM_CHAT = _var('{{TELEGRAM_CHAT_ID}}')
 
 RUN_SELFTEST_ON_START = True
-RUN_BACKTEST_ON_START = True
+RUN_BACKTEST_ON_START = False  # set True to rerun the 6-month NIFTY backtest + filter tests on start
 BACKTEST_MONTHS = 6
+# ---- LIVE ----
+LIVE_INDICES = ["NIFTY"]        # indices the live loop signals (others lost money in the 6-month tests)
+LIVE_FILTERS = {                # F3 + F4, validated on unseen May-Aug NIFTY data
+    "NIFTY": {"entry_end": dt.time(13, 0), "min_break_bps": 2.0},
+}
+PAPER_TRADE = True              # simulate every live signal on 1 futures lot (no orders), Telegram entry/exit + daily summary
 BACKTEST_INDICES = ["NIFTY"]   # [] = all indices
 INDEX_PROXY_BACKTEST = True     # also backtest on 6 months of INDEX 5m bars (no volume -> only squeeze can fire)
 FIXED_POINT_TESTS = []   # (stop pts, target pts) compared vs 2xATR
@@ -574,7 +580,7 @@ def pick_strike(legs, fwd, step, d, max_spread):
     return best, notes
 
 
-def build_card(name, b1, prev, legs, expiry, vix_v, lot, now, p=PARAMS):
+def build_card(name, b1, prev, legs, expiry, vix_v, lot, now, p=PARAMS, flt=None):
     bars5 = closed(resample(closed(b1, 1, now)), 5, now)
     card = {"index": name, "signal": "NO_TRADE", "setup": "NO_DATA", "reason": "only %d closed 5m bars" % len(bars5)}
     if len(bars5) < 40:
@@ -587,7 +593,19 @@ def build_card(name, b1, prev, legs, expiry, vix_v, lot, now, p=PARAMS):
     if sig["signal"] in ("LONG", "SHORT") and not (ENTRY_START <= bt < ENTRY_END):
         sig = {"signal": "NO_TRADE", "setup": "OUTSIDE_WINDOW",
                "reason": "%s %s ignored: bar %s outside entry window 09:30-15:10" % (sig["setup"], sig["signal"], bt.strftime("%H:%M"))}
-    card = {"index": name, "signal": sig["signal"], "setup": sig["setup"], "reason": sig["reason"], "bar": bt.strftime("%H:%M")}
+    flt = flt or {}
+    if sig["signal"] in ("LONG", "SHORT") and flt.get("entry_end") and bt >= flt["entry_end"]:
+        sig = {"signal": "NO_TRADE", "setup": "FILTER_F3_TIME",
+               "reason": "%s %s filtered (F3): no entries at/after %s" % (sig["setup"], sig["signal"], flt["entry_end"].strftime("%H:%M"))}
+    if sig["signal"] in ("LONG", "SHORT") and flt.get("min_break_bps") and sig["setup"] == "SQUEEZE_BREAKOUT":
+        band = x["bb_up"][i] if sig["signal"] == "LONG" else x["bb_lo"][i]
+        brk = abs(x["close"][i] - band) / x["close"][i] * 1e4
+        if brk < flt["min_break_bps"]:
+            sig = {"signal": "NO_TRADE", "setup": "FILTER_F4_WEAK_BREAK",
+                   "reason": "squeeze %s filtered (F4): close only %.1f bps beyond band (< %.1f)" % (
+                       sig["signal"], brk, flt["min_break_bps"])}
+    card = {"index": name, "signal": sig["signal"], "setup": sig["setup"], "reason": sig["reason"], "bar": bt.strftime("%H:%M"),
+            "bar_ts": bars5[i]["ts"]}
     table = {k: v[i] for k, v in x.items()}
     pv, po = pcr(legs)
     flags = [lab for lab, v in (("PCR vol", pv), ("PCR oi", po)) if ok(v) and (v < p["pcr_low"] or v > p["pcr_high"])]
@@ -598,7 +616,7 @@ def build_card(name, b1, prev, legs, expiry, vix_v, lot, now, p=PARAMS):
     if sig["signal"] not in ("LONG", "SHORT"):
         return card, table
     d = 1 if sig["signal"] == "LONG" else -1
-    card.update({"entry": sig["entry_ref"], "sl": sig["stop"], "targets": sig["targets"],
+    card.update({"entry": sig["entry_ref"], "sl": sig["stop"], "targets": sig["targets"], "stop_dist": sig["stop_dist"],
                  "fut_lots": lots_for(p["risk_rupees"], sig["stop_dist"], lot)})
     best, notes = pick_strike(legs, sig["entry_ref"], INDICES[name]["step"], d, p["max_spread_pct"])
     card["strike_notes"] = notes
@@ -1133,6 +1151,77 @@ def in_session(t):
     return t.weekday() < 5 and dt.time(9, 15) <= t.time() <= dt.time(15, 30)
 
 
+def paper_enter(paper, card, lot, exch):
+    """Queue a paper trade: fills at the open of the first 1m bar of the next 5m bar (same as the backtest)."""
+    if paper.get("pos") or card["signal"] not in ("LONG", "SHORT") or "stop_dist" not in card:
+        return
+    d = 1 if card["signal"] == "LONG" else -1
+    mr = card["setup"] == "MEAN_REVERSION"
+    paper["pos"] = {"index": card["index"], "d": d, "setup": card["setup"], "sd": card["stop_dist"], "mr": mr,
+                    "mr_target": card["targets"][0] if mr else None, "fill_ts": card["bar_ts"] + 300,
+                    "entry": None, "lot": lot, "exch": exch, "reason": card["reason"]}
+
+
+def paper_update(paper, b1, now):
+    """Advance the open paper trade on CLOSED 1m bars: fill, then stop (checked first) / target / 15:20 exit."""
+    pos = paper.get("pos")
+    if not pos:
+        return []
+    msgs = []
+    bars = [b for b in b1 if b["ts"] >= pos["fill_ts"] and b["ts"] + 60 <= now + 1]
+    for b in bars:
+        t = dt.datetime.fromtimestamp(b["ts"], IST)
+        if pos["entry"] is None:
+            if t.date() != dt.datetime.fromtimestamp(pos["fill_ts"], IST).date():
+                paper["pos"] = None
+                return msgs
+            pos["entry"] = b["open"]
+            pos["entry_ts"] = b["ts"]
+            pos["stop"] = pos["entry"] - pos["d"] * pos["sd"]
+            pos["target"] = pos["mr_target"] if pos["mr"] else pos["entry"] + pos["d"] * 2 * pos["sd"]
+            if (pos["target"] - pos["entry"]) * pos["d"] <= 0:
+                paper["pos"] = None
+                return msgs
+            msgs.append("[PAPER %s] ENTER %s %s @ %.1f | SL %.1f | T %.1f | %s" % (
+                pos["index"], "LONG" if pos["d"] > 0 else "SHORT", pos["setup"], pos["entry"], pos["stop"],
+                pos["target"], pos["reason"]))
+        if b["ts"] <= pos.get("last_ts", 0):
+            continue
+        pos["last_ts"] = b["ts"]
+        d = pos["d"]
+        exit_px = why = None
+        if (b["low"] <= pos["stop"]) if d > 0 else (b["high"] >= pos["stop"]):
+            exit_px, why = pos["stop"], "SL"
+        elif (b["high"] >= pos["target"]) if d > 0 else (b["low"] <= pos["target"]):
+            exit_px, why = pos["target"], "TARGET"
+        elif (t + dt.timedelta(minutes=1)).time() >= EOD_EXIT:
+            exit_px, why = b["close"], "EOD"
+        if exit_px is not None:
+            q = pos["lot"]
+            buy, sell = (pos["entry"], exit_px) if d > 0 else (exit_px, pos["entry"])
+            ch = charges("fut", pos["exch"], buy * q, sell * q)
+            gross = d * (exit_px - pos["entry"]) * q
+            tr = {"index": pos["index"], "date": t.date().isoformat(), "setup": pos["setup"], "dir": d,
+                  "entry": pos["entry"], "exit": exit_px, "why": why, "gross": gross, "charges": ch, "net": gross - ch}
+            paper.setdefault("trades", []).append(tr)
+            paper["pos"] = None
+            msgs.append("[PAPER %s] EXIT %s @ %.1f (%s) | points %+.1f | net Rs%.0f after charges Rs%.0f" % (
+                tr["index"], "LONG" if d > 0 else "SHORT", exit_px, why, d * (exit_px - tr["entry"]), tr["net"], ch))
+            break
+    return msgs
+
+
+def paper_summary(paper, day):
+    tl = paper.get("trades", [])
+    td = [t for t in tl if t["date"] == day]
+    def line(S):
+        if not S:
+            return "0 trades"
+        w = sum(t["net"] > 0 for t in S)
+        return "%d trades, %d wins (%.0f%%), net Rs%.0f" % (len(S), w, 100.0 * w / len(S), sum(t["net"] for t in S))
+    return "[PAPER] %s today: %s | since start: %s (in memory; resets if the strategy restarts)" % (day, line(td), line(tl))
+
+
 def cycle(state):
     now = time.time()
     today = now_ist().date()
@@ -1143,20 +1232,30 @@ def cycle(state):
         state["day"] = today
         log("instruments:", {n: (f["display"], f["sid"], f["lot"], f["expiry"]) for n, f in state["futs"].items() if f})
     vix_v = vix()
+    paper = state.setdefault("paper", {})
     for name, spec in INDICES.items():
+        if LIVE_INDICES and name not in LIVE_INDICES:
+            continue
         fut = state["futs"].get(name)
         if not fut:
             continue
         try:
             b1 = intraday(fut["sid"], fut["segment"], "FUTIDX", today - dt.timedelta(days=6), today, 1)
+            if PAPER_TRADE:
+                for m in paper_update(paper, b1, now):
+                    log(m)
+                    telegram(m)
             expiry, legs = option_chain(spec["sid"])
-            card, table = build_card(name, b1, state["prev"].get(name), legs, expiry or fut["expiry"], vix_v, fut["lot"], now)
+            card, table = build_card(name, b1, state["prev"].get(name), legs, expiry or fut["expiry"], vix_v, fut["lot"],
+                                     now, PARAMS, LIVE_FILTERS.get(name))
             msg = card_text(card, table)
             log(msg.replace("\n", " | "))
             key = (name, card.get("bar"), card["signal"])
             if card["signal"] in ("LONG", "SHORT") and key not in state["sent"]:
                 state["sent"].add(key)
                 telegram(msg)
+                if PAPER_TRADE:
+                    paper_enter(paper, card, fut["lot"], spec["exch"])
         except Exception:
             log(name, "error:", traceback.format_exc()[-500:])
 
@@ -1175,8 +1274,15 @@ def run():
         except Exception:
             log("data pull failed:", traceback.format_exc()[-800:])
     state = {"sent": set(), "last_bar": None}
+    log("LIVE: indices %s | filters %s | paper trading %s" % (LIVE_INDICES or "all", LIVE_FILTERS, PAPER_TRADE))
     while True:
         t = now_ist()
+        if PAPER_TRADE and configured() and t.weekday() < 5 and t.time() >= dt.time(15, 25) \
+                and state.get("summary_day") != t.date().isoformat() and state.get("day") == t.date():
+            state["summary_day"] = t.date().isoformat()
+            msg = paper_summary(state.get("paper", {}), t.date().isoformat())
+            log(msg)
+            telegram(msg)
         bar = (t.hour * 60 + t.minute) // 5
         if configured() and in_session(t) and bar != state["last_bar"] and t.second >= 5:
             state["last_bar"] = bar
