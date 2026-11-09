@@ -2366,6 +2366,11 @@ def run():
         except Exception:
             log("audit failed:", traceback.format_exc()[-1500:])
     state = {"sent": set(), "last_bar": None, "start_ts": time.time()}
+    if TELEGRAM_TOKEN.startswith("{{") or TELEGRAM_CHAT.startswith("{{"):
+        log("Telegram: NOT SET (Env Variables: TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID) - alerts only in this log")
+    else:
+        log("Telegram: test message %s" % ("SENT" if telegram("NIFTY engine started (read-only, paper only)") else
+                                          "FAILED - check bot token, chat id, and that you pressed Start in the bot chat"))
     log("LIVE %s | filter F3+F4 %s | paper %s (%s execution, ledger from %s)" % (LIVE, LIVE_FILTER, PAPER_TRADE, EXEC_LIVE, LEDGER_START))
     while LIVE:
         t = now_ist()
