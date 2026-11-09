@@ -496,6 +496,16 @@ def now_ist():
     return dt.datetime.now(IST)
 
 
+class AuthError(RuntimeError):
+    """Dhan rejected the client id / access token (expired or wrong)."""
+
+
+TOKEN_HELP = ("DHAN TOKEN INVALID OR EXPIRED (DH-901 / 808). Dhan access tokens last 24 hours: generate a new one at "
+              "web.dhan.co -> My Profile -> Access DhanHQ APIs, paste it into the Env Variables tab (DHAN_ACCESS_TOKEN), "
+              "then Deploy again. The engine keeps running and retries every %d minutes.")
+AUTH_RETRY_MIN = 15
+
+
 def post(path, payload, retries=3):
     """Read-only market data only; any other endpoint is refused."""
     if path not in ALLOWED:
@@ -513,7 +523,9 @@ def post(path, payload, retries=3):
             if r.status_code == 200:
                 return r.json()
             err = "HTTP %s %s" % (r.status_code, r.text[:200])
-            if r.status_code in (400, 401, 403):
+            if r.status_code in (401, 403) or "DH-901" in r.text or '"808"' in r.text:
+                raise AuthError(path + ": " + err)
+            if r.status_code == 400:
                 break
         except requests.RequestException as e:
             err = str(e)[:200]
@@ -618,6 +630,8 @@ def intraday(sid, seg, instrument, frm, to, interval=5, oi=False):
             out += candles(post("/charts/intraday", {"securityId": str(sid), "exchangeSegment": seg, "instrument": instrument,
                                                      "interval": interval, "oi": oi, "fromDate": a.isoformat() + " 09:15:00",
                                                      "toDate": b.isoformat() + " 15:30:00"}))
+        except AuthError:
+            raise
         except RuntimeError as e:
             log("  chunk", a, "->", b, "failed:", str(e)[:120])
         a = b + dt.timedelta(days=1)
@@ -2347,6 +2361,8 @@ def run():
     elif RUN_AUDIT_ON_START:
         try:
             run_audit(AUDIT_MONTHS)
+        except AuthError:
+            log("audit skipped: " + TOKEN_HELP % AUTH_RETRY_MIN)
         except Exception:
             log("audit failed:", traceback.format_exc()[-1500:])
     state = {"sent": set(), "last_bar": None, "start_ts": time.time()}
@@ -2360,10 +2376,22 @@ def run():
             log(msg)
             telegram(msg)
         bar = (t.hour * 60 + t.minute) // 5
-        if configured() and in_session(t) and bar != state["last_bar"] and t.second >= 5:
+        if configured() and in_session(t) and bar != state["last_bar"] and t.second >= 5 \
+                and time.time() >= state.get("auth_retry_at", 0):
             state["last_bar"] = bar
             try:
                 cycle(state)
+                if state.pop("auth_bad", None):
+                    log("Dhan token accepted again - live cycle resumed")
+                    telegram("NIFTY engine: Dhan token OK again, live cycle resumed")
+            except AuthError:
+                state["auth_retry_at"] = time.time() + AUTH_RETRY_MIN * 60
+                if not state.get("auth_bad"):
+                    state["auth_bad"] = True
+                    log(TOKEN_HELP % AUTH_RETRY_MIN)
+                    telegram("NIFTY engine paused: " + TOKEN_HELP % AUTH_RETRY_MIN)
+                else:
+                    log("Dhan token still invalid - next retry in %d min" % AUTH_RETRY_MIN)
             except Exception:
                 log("cycle error:", traceback.format_exc()[-800:])
         time.sleep(LOOP_SLEEP_S)

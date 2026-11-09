@@ -217,3 +217,23 @@ def test_dhan_cloud_restrictions():
         assert bad not in src, bad
     assert "{{DHAN_ACCESS_TOKEN}}" in src
     assert "place_order" not in src and "/orders" in src     # /orders only appears in the blocked-endpoint self-test
+
+
+def test_expired_token_raises_auth_error_without_retry_storm(monkeypatch):
+    calls = []
+
+    class R:
+        status_code = 401
+        text = '{"errorType":"Invalid_Authentication","errorCode":"DH-901"}'
+
+    monkeypatch.setattr(S.requests, "post", lambda *a, **k: calls.append(1) or R())
+    monkeypatch.setattr(S.time, "sleep", lambda s: None)
+    for fn in (lambda: S.post("/charts/intraday", {}),
+               lambda: S.intraday(13, "NSE_FNO", "FUTIDX", dt.date(2026, 11, 1), dt.date(2026, 11, 9), 1)):
+        try:
+            fn()
+            raise AssertionError("no AuthError")
+        except S.AuthError:
+            pass
+    assert len(calls) == 2  # one request each, no retries on a bad token
+    assert "web.dhan.co" in S.TOKEN_HELP
