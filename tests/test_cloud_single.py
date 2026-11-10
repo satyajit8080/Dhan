@@ -123,8 +123,9 @@ def _patch_live(monkeypatch, m1, now_dt):
     m1 = [b for b in m1 if b["ts"] < now_dt.timestamp() - 30]
     monkeypatch.setattr(S, "nifty_futures", lambda: [{"sid": 1, "expiry": "2026-11-24", "lot": 65.0, "segment": "NSE_FNO",
                                                       "display": "NIFTY NOV FUT"}])
-    monkeypatch.setattr(S, "intraday", lambda sid, seg, ins, frm, to, interval=5, oi=False:
+    monkeypatch.setattr(S, "intraday", lambda sid, seg, ins, frm, to, interval=5, oi=False, strict=False:
                         [b for b in m1 if frm <= S.ist(b["ts"]).date() <= to])
+    monkeypatch.setattr(S, "KNOWN_FUTURES", [])
     monkeypatch.setattr(S, "option_chain", lambda sid: (None, {}))
     monkeypatch.setattr(S, "vix", lambda: 12.0)
     sent = []
@@ -237,3 +238,75 @@ def test_expired_token_raises_auth_error_without_retry_storm(monkeypatch):
             pass
     assert len(calls) == 2  # one request each, no retries on a bad token
     assert "web.dhan.co" in S.TOKEN_HELP
+
+
+# ------------------------------------------------------------------ audit fixes (10-Nov-2026)
+def _day(d, h=9, m=15, n=3, px=25000.0, mon=11):
+    t0 = dt.datetime(2026, mon, d, h, m, tzinfo=S.IST).timestamp()
+    return [{"ts": t0 + 300 * k, "open": px, "high": px + 1, "low": px - 1, "close": px, "volume": 1.0} for k in range(n)]
+
+
+def test_regular_session_drops_muhurat_and_levels_use_last_full_day():
+    fri, sun, mon = _day(6, px=25000), _day(8, 18, 15, px=25500), _day(9, px=25100)
+    clean = S.regular_session(fri + sun + mon)
+    assert len(clean) == 6 and all(S.ist(b["ts"]).day != 8 for b in clean)
+    lv = S.prior_session_levels(clean)[dt.date(2026, 11, 9)]
+    assert lv == S.pivots(25001, 24999, 25000)          # Friday, not the one-hour Sunday session
+    late = [{"ts": dt.datetime(2026, 11, 6, 15, 30, tzinfo=S.IST).timestamp(), "open": 1, "high": 1, "low": 1, "close": 1}]
+    assert S.regular_session(late) == []
+
+
+def test_front_month_flag_and_no_silent_substitution():
+    assert S.last_tuesday(2026, 10) == dt.date(2026, 10, 27)
+    assert S.is_front_month(dt.date(2026, 11, 9), "2026-11-23") and not S.is_front_month(dt.date(2026, 9, 1), "2026-11-23")
+    assert not S.is_front_month(dt.date(2026, 11, 20), "2026-12-29") and S.is_front_month(dt.date(2026, 11, 24), "2026-12-29")
+    dec = _day(20, px=25100) + _day(23, px=25100) + _day(24, px=25100)
+    b, _ = S.stitch_front_month({2: dec}, {2: "2026-12-29"})      # NOV expired and gone from the master
+    assert [x["front"] for x in b[::3]] == [False, False, True]
+
+
+def test_ledger_skips_far_month_days_and_locks_closed_trades():
+    bars = S.synthetic_bars(1500, seed=21)
+    for x in bars:
+        x["front"] = True
+    locked = {}
+    a, _, _ = S.ledger_build(bars, 65.0, "2026-05-01", None, locked)
+    assert a and all(t["id"] in locked for t in a)
+    snap = {k: (v["entry"], v["exit"], v["net"]) for k, v in locked.items()}
+    far = [dict(x, front=False, close=x["close"] + 100, open=x["open"] + 100, high=x["high"] + 100, low=x["low"] + 100)
+           for x in bars]                                          # same days rebuilt from another contract
+    with redirect_stdout(io.StringIO()) as out:
+        b, _, _ = S.ledger_build(far, 65.0, "2026-05-01", None, locked)
+    assert {k: (v["entry"], v["exit"], v["net"]) for k, v in locked.items()} == snap
+    assert [t["id"] for t in b] == [t["id"] for t in a] and "locked record is kept" in out.getvalue()
+    c, _, _ = S.ledger_build(far, 65.0, "2026-05-01")            # fresh process: far-month days are not counted
+    assert c == []
+
+
+def test_live_cycle_skips_when_listed_contract_fetch_fails(monkeypatch):
+    now_dt = dt.datetime(2026, 11, 10, 12, 7, 30, tzinfo=S.IST)
+    sent = _patch_live(monkeypatch, _mock_market(), now_dt)
+
+    def boom(*a, **k):
+        raise RuntimeError("/charts/intraday: HTTP 429")
+    monkeypatch.setattr(S, "intraday", boom)
+    st = {"sent": set(), "last_bar": None, "start_ts": now_dt.timestamp()}
+    with redirect_stdout(io.StringIO()) as out:
+        S.cycle(st)
+    assert "cycle skipped" in out.getvalue() and "ledger" not in st and not sent
+
+
+def test_parity_forward_recovers_the_option_markets_forward():
+    F, T, r = 24972.0, 0.4 / 365, S.RISK_FREE
+    legs = {}
+    for k in range(24700, 25300, 50):
+        for side in ("CE", "PE"):
+            px = S.black76(F, k, T, r, 0.20, side == "CE")
+            legs[(float(k), side)] = {"top_bid_price": px * 0.999, "top_ask_price": px * 1.001, "last_price": px}
+    assert abs(S.parity_forward(legs, T, 24990.0) - F) < 0.5
+    assert S.parity_forward({}, T, 24990.0) is None
+    bars = S.synthetic_bars(400, seed=3)
+    now = dt.datetime.fromtimestamp(bars[-1]["ts"] + 300, S.IST)
+    exp = now.date().isoformat()
+    card, _ = S.build_card(bars, legs, exp, (now.date() + dt.timedelta(days=14)).isoformat(), 15.0, 65.0, None, S.PARAMS, now)
+    assert card["forward"]["source"] == "parity" and abs(card["analytics"]["parity_residual"]) < 1.0

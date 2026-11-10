@@ -59,6 +59,15 @@ EXEC_LIVE = "realistic"            # execution scenario used for the paper ledge
 # research-history bookkeeping: every rule/filter variant evaluated on this data so far (for Deflated Sharpe)
 VARIANTS_TESTED = 27               # 3 setups x baseline + 7 single filters + 3 combos + 4 ORB + 4 fixed-point + 5 indices + F3+F4+order flow
 
+# NIFTY futures seen so far (Dhan's instrument master drops a contract once it expires, and Dhan Cloud cannot store
+# files). The engine keeps asking Dhan for these after expiry so the paper ledger of past days is rebuilt from the
+# contract that was really the front month. ADD EACH NEW MONTH when the start-up log asks for it.
+KNOWN_FUTURES = [
+    {"sid": 61471, "expiry": "2026-11-23", "lot": 65.0, "segment": "NSE_FNO", "display": "NIFTY NOV FUT"},
+    {"sid": 58875, "expiry": "2026-12-29", "lot": 65.0, "segment": "NSE_FNO", "display": "NIFTY DEC FUT"},
+    {"sid": 54749, "expiry": "2027-01-25", "lot": 65.0, "segment": "NSE_FNO", "display": "NIFTY JAN FUT"},
+]
+
 BASE = "https://api.dhan.co/v2"
 SCRIP_MASTER = "https://images.dhan.co/api-data/api-scrip-master-detailed.csv"
 INDICES = {"NIFTY": {"sid": 13, "exch": "NSE", "step": 50}}   # NIFTY 50, IDX_I security id 13 (Dhan instrument master)
@@ -415,6 +424,28 @@ def option_forward(fut_px, fut_expiry, opt_expiry, r=RISK_FREE, now=None):
     return fut_px * math.exp(-r * (year_frac(fut_expiry, now) - year_frac(opt_expiry, now)))
 
 
+def parity_forward(legs, T, guess, r=RISK_FREE, n=5, max_spread=0.10):
+    """Forward implied by the option market itself: F = K + e^(rT) (C - P), median over the strikes nearest the
+    guess that have a two-sided quote on both legs. None when no strike qualifies. This is the forward the
+    options are actually priced on (the listed future can sit at a basis that plain carry does not explain)."""
+    if not legs or not ok(T) or not ok(guess):
+        return None
+
+    def mid(o):
+        b, a = float((o or {}).get("top_bid_price") or 0), float((o or {}).get("top_ask_price") or 0)
+        return (a + b) / 2 if a > 0 and b > 0 and (a - b) <= max_spread * (a + b) / 2 else None
+    vals = []
+    for k in sorted({k for k, _ in legs}, key=lambda k: abs(k - guess))[:n]:
+        c, p_ = mid(legs.get((k, "CE"))), mid(legs.get((k, "PE")))
+        if c is not None and p_ is not None:
+            vals.append(k + math.exp(r * T) * (c - p_))
+    if not vals:
+        return None
+    vals.sort()
+    m = len(vals) // 2
+    return vals[m] if len(vals) % 2 else (vals[m - 1] + vals[m]) / 2
+
+
 def max_pain(legs):
     ks = sorted({k for k, _ in legs})
     best, bk = None, None
@@ -621,8 +652,9 @@ def quotes_snapshot(fut_sid=None):
     return breadth_from_quotes(qs), book_from_quote(fq), len(eq)
 
 
-def intraday(sid, seg, instrument, frm, to, interval=5, oi=False):
-    """Any length: split into 89-day chunks (Dhan limit 90 days per request)."""
+def intraday(sid, seg, instrument, frm, to, interval=5, oi=False, strict=False):
+    """Any length: split into 89-day chunks (Dhan limit 90 days per request).
+    strict=True: a failed chunk raises (live cycle: never continue on partial data)."""
     out, a = [], frm
     while a <= to:
         b = min(a + dt.timedelta(days=89), to)
@@ -633,6 +665,8 @@ def intraday(sid, seg, instrument, frm, to, interval=5, oi=False):
         except AuthError:
             raise
         except RuntimeError as e:
+            if strict:
+                raise
             log("  chunk", a, "->", b, "failed:", str(e)[:120])
         a = b + dt.timedelta(days=1)
     seen, uniq = set(), []
@@ -697,6 +731,35 @@ def telegram(text):
 
 
 # ================================================ FUTURES STITCH + DATA QUALITY ==
+def regular_session(bars):
+    """Bars of the regular session only (start 09:15 ... before 15:30 IST). Muhurat / special evening sessions and
+    stray out-of-hours bars are dropped: they would feed VWAP, indicators and the next day's pivots."""
+    return [b for b in bars if dt.time(9, 15) <= ist(b["ts"]).time() < dt.time(15, 30)]
+
+
+def last_tuesday(y, m):
+    d = dt.date(y + (m == 12), m % 12 + 1, 1) - dt.timedelta(days=1)
+    return d - dt.timedelta(days=(d.weekday() - 1) % 7)
+
+
+def is_front_month(day, expiry):
+    """True when the contract expiring on `expiry` was the nearest NIFTY monthly future on `day`: day is after the
+    previous month's expiry. That expiry is taken from KNOWN_FUTURES when listed there (exact, holiday shifts
+    included), else assumed to be the last Tuesday of the previous month."""
+    e = dt.date.fromisoformat(expiry[:10])
+    py, pm = (e.year, e.month - 1) if e.month > 1 else (e.year - 1, 12)
+    known = [dt.date.fromisoformat(k["expiry"]) for k in KNOWN_FUTURES]
+    prev = [k for k in known if (k.year, k.month) == (py, pm)]
+    return (prev[0] if prev else last_tuesday(py, pm)) < day <= e
+
+
+def with_known_futures(futs, since):
+    """Listed contracts + known contracts that expired on/after `since` (asked from Dhan by their old security id)."""
+    have = {f["sid"] for f in futs}
+    extra = [dict(k, expired=True) for k in KNOWN_FUTURES if k["sid"] not in have and k["expiry"] >= since.isoformat()]
+    return sorted(extra + list(futs), key=lambda f: f["expiry"])
+
+
 def stitch_front_month(per, expiries, adjust=True):
     """Continuous front-month NIFTY futures. Each date uses the contract with the nearest expiry >= date
     (the expiring contract is traded on its expiry day; positions are intraday so nothing is carried).
@@ -731,7 +794,8 @@ def stitch_front_month(per, expiries, adjust=True):
         adj = 0.0
         if adjust:
             adj = sum(r["diff"] for r in rolls if r["date"] > d.isoformat())
-        out += [dict(b, contract=sid, adj=adj) for b in day_bars[d][sid]]
+        front = is_front_month(d, expiries[sid])
+        out += [dict(b, contract=sid, adj=adj, front=front) for b in day_bars[d][sid]]
     return out, rolls
 
 
@@ -762,13 +826,19 @@ def dq_report(bars, label, minutes=5, expect_volume=True):
             g = (v[i]["ts"] - v[i - 1]["ts"]) / 60
             if g > minutes:
                 gaps.append(g)
-    outside = sum(1 for b in bars if not (dt.time(9, 15) <= ist(b["ts"]).time() <= dt.time(15, 30)))
+    out_t = {}
+    for b in bars:
+        tt = ist(b["ts"]).time()
+        if not (dt.time(9, 15) <= tt < dt.time(15, 30)):
+            out_t[tt.strftime("%H:%M")] = out_t.get(tt.strftime("%H:%M"), 0) + 1
+    outside = sum(out_t.values())
     zero_vol = sum(1 for b in bars if expect_volume and not b.get("volume")) if expect_volume else 0
     bad_ohlc = sum(1 for b in bars if not (b["low"] <= min(b["open"], b["close"]) <= max(b["open"], b["close"]) <= b["high"]))
     log("  DATA %-34s days %3d bars %6d | expected/day %d | short days %d %s | missing bars %d | dup ts %d | "
-        "out-of-order %d | bars outside session %d | max intraday gap %.0f min | zero-volume %d | bad OHLC %d" % (
+        "out-of-order %d | bars outside session %d %s | max intraday gap %.0f min | zero-volume %d | bad OHLC %d" % (
             label, len(days), len(bars), exp, len(short), (list(short.items())[:6] if short else ""),
-            sum(max(exp - len(v), 0) for v in days.values()), dup, unordered, outside, max(gaps) if gaps else 0,
+            sum(max(exp - len(v), 0) for v in days.values()), dup, unordered, outside,
+            sorted(out_t.items(), key=lambda kv: -kv[1])[:4] if out_t else "", max(gaps) if gaps else 0,
             zero_vol, bad_ohlc))
     return {"days": len(days), "short_days": short, "dup": dup, "unordered": unordered, "bad_ohlc": bad_ohlc}
 
@@ -898,13 +968,18 @@ def build_card(bars5, legs, opt_expiry, fut_expiry, vix_v, lot, flt=None, p=PARA
     table = {k: v[i] for k, v in x.items()}
     fut_px = bars5[i]["close"]
     T = year_frac(opt_expiry, now) if opt_expiry else NAN
-    F = option_forward(fut_px, fut_expiry, opt_expiry, RISK_FREE, now) if opt_expiry and fut_expiry else fut_px
+    F_carry = option_forward(fut_px, fut_expiry, opt_expiry, RISK_FREE, now) if opt_expiry and fut_expiry else fut_px
+    F_par = parity_forward(legs, T, F_carry) if legs and ok(T) else None
+    if F_par is not None:
+        F_par = parity_forward(legs, T, F_par) or F_par      # re-centre on the strikes nearest the result
+    F, fwd_src = (F_par, "parity") if F_par is not None else (F_carry, "carry")
+    card["forward"] = {"used": F, "source": fwd_src, "carry_model": F_carry}
     ca = chain_analytics(legs, F, T, INDICES["NIFTY"]["step"]) if legs and ok(T) else {}
     pv, po = pcr(legs)
     flags = [lab for lab, v in (("PCR vol", pv), ("PCR oi", po)) if ok(v) and (v < p["pcr_low"] or v > p["pcr_high"])]
-    card["context"] = ("fut %.1f fwd(%s) %.1f | ATM IV %.2f%% (vendor %.2f%%) skew2 %.2f%% | straddle %.1f | parity res %.2f | "
+    card["context"] = ("fut %.1f fwd(%s,%s) %.1f [carry %.1f] | ATM IV %.2f%% (vendor %.2f%%) skew2 %.2f%% | straddle %.1f | parity res %.2f | "
                        "maxpain %s | GEX(sign conv) %.3g peak %s conc %.2f | PCR vol %.2f oi %.2f%s | VIX %.2f | OI chg %s" % (
-                           fut_px, opt_expiry, F, 100 * ca.get("atm_iv", NAN), 100 * ca.get("atm_iv_vendor", NAN),
+                           fut_px, opt_expiry, fwd_src, F, F_carry, 100 * ca.get("atm_iv", NAN), 100 * ca.get("atm_iv_vendor", NAN),
                            100 * ca.get("skew_2strike", NAN), ca.get("straddle", NAN), ca.get("parity_residual", NAN),
                            ca.get("max_pain"), ca.get("gex_sign_conv", NAN), ca.get("gamma_peak"), ca.get("gamma_conc", NAN),
                            pv, po, (" EXTREME:" + ",".join(flags)) if flags else "", vix_v,
@@ -1062,7 +1137,7 @@ def backtest(bars5, lot, exch="NSE", p=PARAMS, flt=None, ex="realistic", levels=
                 "f_di": (x["di_plus"][i] - x["di_minus"][i]) * d, "f_dir": d,
                 "of_agree": of_agree if of_st else None,
                 "of_score": of_st["score"] if of_st and ok(of_st.get("score", NAN)) else None,
-                "of_side": of_st["side"] if of_st else None}
+                "of_side": of_st["side"] if of_st else None, "front": nb.get("front")}
         pos = {"ts": nb["ts"], "entry_bar_ts": nb["ts"], "signal_ts": b["ts"], "d": d, "entry": entry,
                "stop": entry - d * sd, "target": tgt, "sd": sd, "setup": sig["setup"], "qty": lot, "mfe": 0.0, "mae": 0.0,
                "reason": sig["reason"], "adj": nb.get("adj", 0.0) or 0.0, "feat": feat}
@@ -1859,6 +1934,12 @@ def of_audit(fut_adj, per, lot, f34_fut):
         log("    %-18s %s" % (lab, fmt_sum(summarize(S)) if S else "n=0"))
     v = backtest(fut_adj, lot, "NSE", PARAMS, dict(VARIANTS["F3+F4"], of_confirm=True), "realistic", of_ctx=ctx)["trades"]
     log("    F3+F4 + order-flow confirmation (F7, rule fixed before testing): %s" % (fmt_sum(summarize(v)) if v else "n=0"))
+    ff = [t for t in f34_fut if t.get("front")]
+    log("  front-month days only: OF agrees %s | does not agree %s" % (
+        fmt_sum(summarize([t for t in ff if t.get("of_agree") is True])) if any(t.get("of_agree") is True for t in ff) else "n=0",
+        fmt_sum(summarize([t for t in ff if t.get("of_agree") is False])) if any(t.get("of_agree") is False for t in ff) else "n=0"))
+    log("  CAVEAT: expired contracts are not available, so before the front-month start date the 'all-months' OI is "
+        "missing the months that then held most of the open interest; build-up readings there are on far-month OI.")
     log("  CAVEAT: one 2.5-month futures period only (the period F3/F4 were chosen on); no out-of-sample order-flow test "
         "is possible until more futures history is collected. Delta/CVD are ESTIMATES (no trade-side data from Dhan).")
 
@@ -1879,10 +1960,22 @@ def run_audit(months=AUDIT_MONTHS):
     for f in futs:
         per[f["sid"]] = intraday(f["sid"], f["segment"], "FUTIDX", start, today, 5, oi=True)
         exp[f["sid"]] = f["expiry"]
+    ib_legacy = [dict(b, volume=0.0) for b in idx5]                 # as the old engine saw it (all bars)
+    fut_legacy, _ = stitch_front_month(per, exp, adjust=False)
+    dq_report(fut_legacy, "RAW futures 5m (before session filter)")
+    dq_report(idx5, "RAW index 5m (before session filter)", expect_volume=False)
+    idx5 = regular_session(idx5)
+    per = {k: regular_session(v) for k, v in per.items()}
     fut_adj, rolls = stitch_front_month(per, exp, adjust=True)
     fut_raw, _ = stitch_front_month(per, exp, adjust=False)
     ib = [dict(b, volume=0.0) for b in idx5]
     split = fut_raw[0]["ts"] if fut_raw else None
+    fd = sorted({ist(b["ts"]).date() for b in fut_raw if b.get("front")})
+    nd = len({ist(b["ts"]).date() for b in fut_raw})
+    log("  FRONT-MONTH CHECK: Dhan lists only unexpired contracts %s -> %d of %d futures days use the contract that was "
+        "really the front month (%s). The other %d days are a FAR-month contract (thin volume, wider spread): "
+        "futures results for those days are NOT representative of front-month trading." % (
+            [f["expiry"] for f in futs], len(fd), nd, ("from %s" % fd[0]) if fd else "none", nd - len(fd)))
     log("PHASE 1  DATA: lot %s | contracts %s | futures from %s | index from %s | rolls %s" % (
         lot, [(f["display"], f["expiry"]) for f in futs], ist(fut_raw[0]["ts"]).date() if fut_raw else None,
         ist(idx5[0]["ts"]).date() if idx5 else None, [(r["date"], round(r["diff"], 1), r["method"]) for r in rolls]))
@@ -1898,12 +1991,12 @@ def run_audit(months=AUDIT_MONTHS):
     log("-" * 100)
     log("PHASE 3a REPRODUCTION of reported numbers (legacy engine: index-daily pivots, no gaps/slippage, 2025 STT)")
     for name, flt in VARIANTS.items():
-        tr = backtest(ib, lot, "NSE", PARAMS, flt, "legacy", "index_daily", dly, 2025)["trades"]
+        tr = backtest(ib_legacy, lot, "NSE", PARAMS, flt, "legacy", "index_daily", dly, 2025)["trades"]
         s = summarize(tr)
         rep = REPORTED.get(name)
         log("  %-16s INDEX %s | reported Rs%s -> %s" % (name, fmt_sum(s), rep,
                                                        "MATCH" if rep is not None and abs(s.get("net", 0) - rep) < 2 else "DIFFERENT"))
-    trl = backtest(fut_raw, lot, "NSE", PARAMS, None, "legacy", "index_daily", dly, 2025)["trades"]
+    trl = backtest(fut_legacy, lot, "NSE", PARAMS, None, "legacy", "index_daily", dly, 2025)["trades"]
     log("  %-16s FUT   %s | reported Rs46912" % ("BASELINE", fmt_sum(summarize(trl))))
 
     log("-" * 100)
@@ -1913,11 +2006,13 @@ def run_audit(months=AUDIT_MONTHS):
         ("legacy", dict(ex="legacy", levels="index_daily", charge_year=2025)),
         ("+2026 STT (0.05% fut)", dict(ex="legacy", levels="index_daily", charge_year=2026)),
         ("+pivots from same series", dict(ex="legacy", levels="series", charge_year=2026)),
-        ("+realistic execution", dict(ex="realistic", levels="series", charge_year=2026)),
+        ("+regular session bars only", dict(ex="legacy", levels="series", charge_year=2026, clean=True)),
+        ("+realistic execution", dict(ex="realistic", levels="series", charge_year=2026, clean=True)),
     ]
     for lab, kw in steps:
-        si = summarize(backtest(ib, lot, "NSE", PARAMS, f34, kw["ex"], kw["levels"], dly, kw["charge_year"])["trades"])
-        fr = fut_raw if lab != "+realistic execution" else fut_adj
+        ii = ib if kw.get("clean") else ib_legacy
+        si = summarize(backtest(ii, lot, "NSE", PARAMS, f34, kw["ex"], kw["levels"], dly, kw["charge_year"])["trades"])
+        fr = fut_adj if lab == "+realistic execution" else (fut_raw if kw.get("clean") else fut_legacy)
         sf = summarize(backtest(fr, lot, "NSE", PARAMS, f34, kw["ex"], kw["levels"], dly, kw["charge_year"])["trades"])
         log("  %-26s INDEX net Rs%+8.0f PF %.2f n=%d | FUT net Rs%+8.0f PF %.2f n=%d" % (
             lab, si.get("net", 0), si.get("pf", 0), si.get("n", 0), sf.get("net", 0), sf.get("pf", 0), sf.get("n", 0)))
@@ -1934,6 +2029,10 @@ def run_audit(months=AUDIT_MONTHS):
         log("  %-16s OOS   May-Aug INDEX %s" % (name, fmt_sum(summarize([t for t in ti if t["entry_ts"] < split], oos_days))))
         log("  %-16s IS    Aug-Nov INDEX %s" % ("", fmt_sum(summarize([t for t in ti if t["entry_ts"] >= split]))))
         log("  %-16s IS    Aug-Nov FUT   %s" % ("", fmt_sum(summarize(tf))))
+        log("  %-16s        FUT true front-month days only: %s" % ("", fmt_sum(summarize([t for t in tf if t.get("front")]))
+                                                                  if any(t.get("front") for t in tf) else "n=0"))
+        log("  %-16s        FUT far-month days (not representative): %s" % (
+            "", fmt_sum(summarize([t for t in tf if not t.get("front")])) if any(not t.get("front") for t in tf) else "n=0"))
     ti, tf = res["F3+F4"]
     oos = [t for t in ti if t["entry_ts"] < split]
 
@@ -2080,10 +2179,29 @@ def run_audit(months=AUDIT_MONTHS):
 #   * events are notified once per process; events older than the process start are not re-sent
 #   * every execution line is logged with id, timestamps, prices, reason, charges and net P&L (audit trail)
 
-def fetch_series(futs, frm, to, interval=1):
+def fetch_series(futs, frm, to, interval=1, strict=False, dead=None):
+    """1m/5m bars of every contract (regular session only), stitched. strict: a failed request for a LISTED contract
+    raises, so the live cycle never runs on a series silently built from another month. Contracts marked
+    expired (KNOWN_FUTURES) are optional: when Dhan no longer serves one it is remembered in `dead`."""
     per, exp = {}, {}
     for f in futs:
-        per[f["sid"]] = intraday(f["sid"], f["segment"], "FUTIDX", frm, to, interval, oi=True)
+        if dead is not None and f["sid"] in dead:
+            continue
+        try:
+            v = intraday(f["sid"], f["segment"], "FUTIDX", frm, to, interval, oi=True, strict=strict)
+        except AuthError:
+            raise
+        except RuntimeError as e:
+            if not f.get("expired"):
+                raise
+            v = []
+            log("expired contract %s: Dhan request failed (%s)" % (f["display"], str(e)[:100]))
+        if f.get("expired") and not v and dead is not None:
+            dead.add(f["sid"])
+            log("EXPIRED CONTRACT NOT SERVED BY DHAN: %s (sid %s). Paper-ledger days it was the front month can no "
+                "longer be rebuilt after a restart; trades already closed in this run stay locked." % (f["display"], f["sid"]))
+            continue
+        per[f["sid"]] = regular_session(v)
         exp[f["sid"]] = f["expiry"]
     bars, rolls = stitch_front_month(per, exp, adjust=True)
     return bars, rolls, per
@@ -2104,9 +2222,23 @@ def oi_all_months(stitched, per, bar_minutes=5):
     return out
 
 
-def ledger_build(bars5, lot, start_date, of_ctx=None):
+def ledger_build(bars5, lot, start_date, of_ctx=None, locked=None):
+    """Replay of the frozen rules. Only days on the TRUE front-month contract count (a day rebuilt from a later
+    month after the real contract expired is skipped, never substituted). `locked` (id -> trade) keeps every trade
+    once it has closed: a later replay can add trades but never change or remove a locked one."""
     res = backtest(bars5, lot, "NSE", PARAMS, LIVE_FILTER, EXEC_LIVE, with_open=True, of_ctx=of_ctx)
-    closed_tr = [t for t in res["trades"] if t["date"] >= start_date]
+    closed_tr = [t for t in res["trades"] if t["date"] >= start_date and t.get("front") is not False]
+    if locked is not None:
+        now_ids = {t["id"] for t in closed_tr}
+        for tid, t in locked.items():
+            if tid not in now_ids and not t.get("_diverged"):
+                t["_diverged"] = True
+                log("LEDGER: replay no longer reproduces locked trade %s (%s) - the locked record is kept" % (tid, t["date"]))
+        fresh = [t for t in closed_tr if t["id"] not in locked and not any(
+            l["date"] == t["date"] and l.get("_diverged") for l in locked.values())]
+        for t in fresh:
+            locked[t["id"]] = t
+        closed_tr = sorted(locked.values(), key=lambda t: t["entry_ts"])
     events = []
     for t in closed_tr:
         events.append((t["entry_ts"], t["id"], "OPEN", "[PAPER %s] OPEN %s %s @ %.1f (stop dist %.1f) | %s | order flow %s" % (
@@ -2294,13 +2426,28 @@ def cycle(state):
         state["futs"] = nifty_futures()
         state["day"] = today
         log("instruments:", [(f["display"], f["sid"], f["lot"], f["expiry"]) for f in state["futs"]])
+        new = [f for f in state["futs"] if f["sid"] not in {k["sid"] for k in KNOWN_FUTURES}]
+        if new:
+            log("ADD TO KNOWN_FUTURES in main.py (needed to rebuild the ledger after these expire):",
+                [{"sid": f["sid"], "expiry": f["expiry"], "lot": f["lot"], "segment": f["segment"], "display": f["display"]} for f in new])
     futs = state["futs"]
     if not futs:
         log("no NIFTY futures found")
         return
     lot = futs[0]["lot"]
     frm = min(dt.date.fromisoformat(LEDGER_START), today) - dt.timedelta(days=8)
-    b1, rolls, per = fetch_series(futs, frm, today, 1)
+    try:
+        b1, rolls, per = fetch_series(with_known_futures(futs, frm), frm, today, 1, strict=True,
+                                      dead=state.setdefault("dead", set()))
+    except AuthError:
+        raise
+    except RuntimeError as e:
+        log("DATA FETCH FAILED - cycle skipped (no card, ledger untouched):", str(e)[:160])
+        return
+    near = per.get(futs[0]["sid"]) or []
+    if in_session(now_ist()) and now_ist().time() > dt.time(9, 22) and not (near and ist(near[-1]["ts"]).date() == today):
+        log("NEAR CONTRACT %s HAS NO BARS TODAY - cycle skipped (no card, ledger untouched)" % futs[0]["display"])
+        return
     bars5 = complete_5m(b1, now)
     of_ctx = of_prepare(adjusted(bars5), oi_all_months(bars5, per, 5)) if bars5 else None
     if bars5 and now - (bars5[-1]["ts"] + 300) > 900 and in_session(now_ist()):
@@ -2338,7 +2485,7 @@ def cycle(state):
             telegram("[NIFTY] %s (research signal, not a trade) @%s\n%s" % (of_st["signal"], card.get("bar"), of_text(of_st)))
     state["last_of_signal"] = of_st["signal"] if of_st else None
     if PAPER_TRADE:
-        closed_tr, open_pos, events = ledger_build(bars5, lot, LEDGER_START, of_ctx)
+        closed_tr, open_pos, events = ledger_build(bars5, lot, LEDGER_START, of_ctx, state.setdefault("locked", {}))
         for ts, tid, st_, msg in events:
             k = (tid, st_)
             if k in state["sent"]:

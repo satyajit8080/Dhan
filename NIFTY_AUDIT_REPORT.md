@@ -180,3 +180,23 @@ No data pipeline was duplicated: the cloud reuses `intraday()` / `post()`; the V
 5. VPS all-months OI starts at engine start (earlier minutes: near month only).
 6. The "F3+F4 + order-flow confirmation" variant is reported but **not enabled** for paper or live; enabling it would be
    parameter selection on the same data. Mock-data run of PHASE OF showed no edge for order-flow signals alone.
+
+---
+
+## 10. Code audit of 10-Nov-2026: findings and fixes
+
+| # | Finding | Evidence | Fix | Test |
+|---|---|---|---|---|
+| 1 | **"Front-month" futures series was mostly a far-month contract.** Dhan's instrument master lists only unexpired contracts, so Aug/Sep/Oct futures were absent and the Nov contract was used back to 26-Aug | Audit log: `rolls []`, `contract NIFTY NOV FUT days 50` | Every bar carries `front` (true front month or not). The audit prints a FRONT-MONTH CHECK line and reports futures results separately for front-month and far-month days; order-flow split likewise | `test_front_month_flag_and_no_silent_substitution` |
+| 2 | **Paper ledger would rewrite past days after each expiry** (rebuilt from the next month's contract) | Reproduced with a 3-day example | `KNOWN_FUTURES` registry keeps asking Dhan for expired contracts; days not on the true front month are skipped, never substituted; closed trades are locked for the life of the process | `test_ledger_skips_far_month_days_and_locks_closed_trades` |
+| 3 | **Special sessions fed indicators and pivots** (Monday 9-Nov pivots came from Sunday's Muhurat hour) | Reproduced | `regular_session()` keeps 09:15–15:30 bars only, in the audit and live; shown as its own step in PHASE 3b; data-quality line lists the times of dropped bars | `test_regular_session_drops_muhurat_and_levels_use_last_full_day` |
+| 4 | **A failed request for the near contract silently switched the series to another month** | Code path | Live fetch is strict: any failure, or no bars today on the near contract, skips the cycle | `test_live_cycle_skips_when_listed_contract_fetch_fails` |
+| 5 | **Option forward from futures-minus-carry was wrong** (own IV 35–38 % vs vendor 18–22 %, parity gap 37–67 pts on expiry day) | Live log 9-Nov | Forward from put-call parity (median of the 5 strikes nearest ATM with two-sided quotes), carry model as fallback; card shows which was used | `test_parity_forward_recovers_the_option_markets_forward` |
+
+**Still open**
+- Whether Dhan serves an expired futures contract by its old security id is unknown until 24-Nov. If it does not, the
+  log prints `EXPIRED CONTRACT NOT SERVED BY DHAN` and ledger days before the restart cannot be rebuilt; the Telegram
+  messages and daily summaries are then the only record. A durable ledger needs storage (the VPS engine).
+- `KNOWN_FUTURES` must be extended by hand each month; the start-up log prints the line to add.
+- True front-month futures history starts only at the previous expiry, so the front-month sample is a few weeks.
+- Target limit orders still count as filled on a touch in the realistic scenario (trade-through only in stress).
